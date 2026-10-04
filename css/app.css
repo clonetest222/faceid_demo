@@ -183,4 +183,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 .pair-code{font-family:var(--mono);font-size:1.6rem;font-weight:700;letter-spacing:.2em;text-align:center}
 .toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:11px 16px;border-radius:10px;z-index:60;font-weight:600;max-width:calc(100% - 32px);box-shadow:0 6px 24px rgba(0,0,0,.4)}
+.net{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;font-weight:600;color:var(--muted);white-space:nowrap}
+.net i{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.net.online i{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)} .net.online{color:var(--ok)}
+.net.connecting i,.net.reconnecting i{background:var(--warn)}
+.net.error i{background:var(--accent)}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
