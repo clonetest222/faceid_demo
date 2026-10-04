@@ -12,7 +12,8 @@ const rid = (p, n = 6) => p + Array.from({ length: n }, () => "ABCDEFGHJKLMNPQRS
 const ageAt = (dob, when) => { const b = new Date(dob), w = new Date(when); let a = w.getFullYear() - b.getFullYear(); if (w.getMonth() < b.getMonth() || (w.getMonth() === b.getMonth() && w.getDate() < b.getDate())) a--; return a; };
 const ICON_FACE = '<svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>';
 const ICON_OK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
-const ICON_NO = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+const ICON_LOCK = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const ICON_NO ='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
 function qrSvg(text, cell = 3) {
   try { const q = qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag(cell, 0); }

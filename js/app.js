@@ -137,7 +137,9 @@ setInterval(() => {
 const ROLES = [["kh", "Khách hàng"], ["gv", "Giáo viên · vé đoàn"], ["pos", "Quầy vé"], ["gate", "Soát vé"], ["ql", "Quản lý"]];
 function go(view) { S.view = view; save(); render(); window.scrollTo({ top: 0 }); }
 function setRole(r) { S.role = r; S.view = { name: r === "kh" ? "home" : "main" }; save(); render(); history.replaceState(null, "", "#" + r); }
+let PHONE_MODE = false;   // trang ?pair=… trên điện thoại: không vẽ app chính
 function render() {
+  if (PHONE_MODE) return;
   $("#roles").innerHTML = ROLES.map(([k, l]) => `<button class="role" aria-pressed="${S.role === k}" data-role="${k}">${l}</button>`).join("");
   try { $("#app").innerHTML = ({ kh: viewKH, gv: viewGV, pos: viewPOS, gate: viewGate, ql: viewQL })[S.role](); }
   catch (e) { console.error(e); $("#app").innerHTML = `<div class="note bad">Lỗi hiển thị: ${esc(e.message)}. <button class="btn sm" data-act="reset">Đặt lại dữ liệu demo</button></div>`; }
@@ -222,10 +224,14 @@ function khPay() {
   <div class="grid g2"><div class="panel" style="justify-items:center"><h3>Quét mã để thanh toán</h3><div class="qr">${qrSvg("PAY|" + d.id + "|" + d.total, 4)}</div><b style="font-family:var(--display);font-size:1.5rem">${vnd(d.total)}</b><p class="small muted">Mã đơn ${d.id}</p></div>
   <div class="panel"><h3>Kết quả từ cổng thanh toán</h3><button class="btn primary" data-act="pay-ok">Giả lập: thanh toán thành công</button><button class="btn" data-act="pay-fail">Giả lập: khách huỷ</button><p class="small muted">Hệ thống kiểm tra chữ ký, số tiền và hạn giữ ghế trước khi chuyển ghế sang “đã bán”.</p></div></div>`;
 }
+/* Vé có giới hạn tuổi đã xác thực: QR bị che, mở bằng Face ID (passkey) trong 60 giây */
+const REVEAL = {};
+const needsUnlock = t => t.status === "valid" && t.verified && RATINGS[film(show(t.showId).filmId).rating] > 0 && S.user.passkey && !(REVEAL[t.code] > Date.now());
 function ticketCard(t) {
   const sh = show(t.showId), f = film(sh.filmId);
   const st = t.status === "valid" ? (t.needDoc ? `<span class="chip warn">Cần kiểm tra giấy tờ</span>` : `<span class="chip ok">Vào thẳng</span>`) : t.status === "used" ? `<span class="chip info">Đã sử dụng</span>` : `<span class="chip bad">Đã hoàn</span>`;
-  return `<div class="panel ticket"><div class="qr">${qrSvg(t.code, 3)}</div><div class="stack" style="gap:4px;min-width:0"><div class="row"><b>${esc(f.title)}</b>${ratingBadge(f.rating)}</div>
+  const qr = needsUnlock(t) ? `<button class="qr-lock" data-act="pk-reveal" data-code="${t.code}" aria-label="Mở mã QR bằng ${esc(Passkey.label())}">${ICON_LOCK}<span>Mở bằng ${esc(Passkey.label())}</span></button>` : `<div class="qr">${qrSvg(t.code, 3)}</div>`;
+  return `<div class="panel ticket">${qr}<div class="stack" style="gap:4px;min-width:0"><div class="row"><b>${esc(f.title)}</b>${ratingBadge(f.rating)}</div>
   <span class="mono">${ddmm(sh.start)} ${hhmm(sh.start)} · ${room(sh.roomId).name} · Ghế ${t.seat}</span><span class="small muted">${esc(t.viewerName)} · ${esc(t.aud)} · ${vnd(t.price)}</span>
   <div class="row">${st}<span class="mono small faint">${t.code}</span>${t.status === "valid" && t.channel === "Online" ? `<button class="btn sm right" data-act="refund" data-code="${t.code}">Hoàn vé</button>` : ""}</div></div></div>`;
 }
@@ -243,13 +249,50 @@ function khAccount() {
     : `<div class="note warn">Chưa xác thực. Vé tính giá người lớn và phim từ T13 phải xuất trình giấy tờ tại cửa.</div><button class="btn primary" data-act="vneid-self">Liên kết VNeID + FaceID</button>`;
   const deps = S.dependents.map(d => `<tr><td data-label="Họ tên">${esc(d.name)}</td><td data-label="Ngày sinh" class="mono">${dmy(d.dob)}</td><td data-label="Tuổi">${ageAt(d.dob, new Date())}</td><td data-label="Xác nhận">${d.level === "VNeID" ? `<span class="chip ok">VNeID</span>` : `<span class="chip warn">Cam kết</span>`}</td><td data-label="Định danh" class="mono small">${esc(d.idMasked)}</td><td data-label=""><button class="btn sm" data-act="del-dep" data-id="${d.id}">Xoá</button></td></tr>`).join("");
   const refs = IDENTITIES.filter(i => FaceKit.getRef(i.key));
+  const pkPanel = `<section class="panel"><div class="row"><h2>${esc(Passkey.label())} cho tài khoản</h2>${u.passkey ? `<span class="chip ok right">${ICON_OK}Đang bật</span>` : ""}</div>
+  <p class="small muted">Sau khi xác thực VNeID, bật passkey để mỗi lần mua vé T13–T18 hoặc mở mã QR vé, thiết bị xác nhận đúng chủ tài khoản bằng ${esc(Passkey.label())}. Rạp chỉ nhận chữ ký số và lưu khoá công khai – không có dữ liệu khuôn mặt hay vân tay.</p>
+  ${!u.linked ? `<div class="note warn">Liên kết VNeID trước.</div>` : u.passkey ? `<p class="small">Tạo lúc ${new Date(u.passkey.createdAt).toLocaleString("vi-VN")} · thuật toán ${u.passkey.alg === -7 ? "ES256" : "RS256"} · tên miền ${esc(u.passkey.rpId)}</p><div class="row"><button class="btn primary" data-act="pk-test">Thử xác thực</button><button class="btn ghost" data-act="pk-del">Tắt</button></div>`
+    : PK.avail ? `<button class="btn primary" data-act="pk-create">Bật ${esc(Passkey.label())}</button>` : `<div class="note warn">Thiết bị/trình duyệt này không có trình xác thực sinh trắc tích hợp, hoặc trang không chạy HTTPS. Vé phim có giới hạn tuổi sẽ phải kiểm tra giấy tờ tại cửa.</div>`}</section>`;
   return `<section class="grid g2"><div class="panel"><h2>Định danh</h2>${id}</div>
   <div class="panel"><h2>Thành viên</h2><div class="kpis"><div class="kpi"><span class="small muted">Hạng</span><b>${tier()}</b></div><div class="kpi"><span class="small muted">Điểm</span><b>${u.points}</b></div></div><p class="small muted">Hạng U22 xét tự động theo ngày sinh đã xác thực, hết hạn khi đủ 23 tuổi.</p></div></section>
+  ${pkPanel}
   <section class="panel"><div class="row"><h2>Người phụ thuộc</h2><button class="btn primary right" data-act="add-dep" ${u.linked ? "" : "disabled"}>Thêm trẻ</button></div>
   <p class="small muted">Trẻ dưới 14 tuổi thường chưa có thẻ căn cước. Cha mẹ đã xác thực VNeID khai báo con; con có tài khoản định danh thì xác nhận qua VNeID, chưa có thì cam kết theo giấy khai sinh.</p>
   ${u.linked ? "" : `<div class="note warn">Cần liên kết VNeID trước.</div>`}${deps ? `<div class="tbl"><table class="cards"><thead><tr><th>Họ tên</th><th>Ngày sinh</th><th>Tuổi</th><th>Xác nhận</th><th>Định danh</th><th></th></tr></thead><tbody>${deps}</tbody></table></div>` : ""}</section>
   <section class="panel"><h3>Ảnh gốc mô phỏng CSDL dân cư (trên thiết bị này)</h3><p class="small muted">Thực tế ảnh gốc nằm trong CSDL quốc gia, rạp không giữ. Bản demo lưu vector đặc trưng 128 số (không phải ảnh) của lần quét đầu tiên trên máy này để so khớp các lần sau.</p>
   ${refs.length ? `<div class="row">${refs.map(i => `<span class="chip info">${esc(i.name)}</span><button class="btn sm ghost" data-act="clear-ref" data-key="${i.key}">Xoá</button>`).join("")}</div>` : `<p class="small faint">Chưa có ảnh gốc nào.</p>`}${hasRef ? "" : ""}</section>`;
+}
+
+/* ============================ Passkey (Face ID của thiết bị) ============================ */
+const PK = { avail: false };
+Passkey.available().then(v => { PK.avail = v; scheduleRender(); });
+async function setupPasskey() {
+  if (!S.user.linked) { toast("Liên kết VNeID trước để gắn Face ID với danh tính đã xác thực"); return false; }
+  try {
+    const pk = await Passkey.register({ userKey: S.user.key || "user", name: S.user.name });
+    S.user.passkey = pk; log("passkey", `Bật ${pk.label} cho tài khoản ${S.user.name}`); save(); toast(`Đã bật ${pk.label}`); return true;
+  } catch (e) { toast(e.name === "NotAllowedError" ? "Đã huỷ tạo passkey" : "Không tạo được passkey: " + e.message); return false; }
+}
+/** Bắt buộc chủ tài khoản xác nhận bằng Face ID. Trả về "ok" | "fallback" (thiết bị không hỗ trợ / bỏ qua) | "cancel" */
+async function requirePasskey(reason) {
+  if (S.user.passkey) {
+    const r = await Passkey.verify(S.user.passkey); log("passkey", `${reason}: ${r.ok ? "đạt" : r.message}`, r.ok);
+    if (r.ok) { toast(`${S.user.passkey.label}: đúng chủ tài khoản`); return "ok"; }
+    toast(r.message); return "cancel";
+  }
+  if (!PK.avail) return "fallback";
+  return new Promise(res => {
+    let done = false; const fin = v => { if (!done) { done = true; res(v); } };
+    const sh = openSheet(`<header><h2>Xác nhận chính chủ</h2><button class="btn ghost sm" data-m="close" aria-label="Đóng">${ICON_NO}</button></header>
+      <p>${esc(reason)}. Bật <b>${esc(Passkey.label())}</b> một lần để mỗi lần mua vé có giới hạn tuổi, máy xác nhận đúng chủ tài khoản đã xác thực VNeID.</p>
+      <p class="small muted">Rạp không nhận khuôn mặt hay vân tay – thiết bị chỉ gửi chữ ký số.</p>
+      <button class="btn primary block" data-m="on">Bật ${esc(Passkey.label())} và tiếp tục</button>
+      <button class="btn block" data-m="skip">Bỏ qua – kiểm tra giấy tờ tại cửa</button>`, { label: "Xác nhận chính chủ", onClose: () => fin("cancel") });
+    sh.el.onclick = async e => { const m = e.target.closest("[data-m]")?.dataset.m; if (!m) return;
+      if (m === "close") sh.close();
+      if (m === "skip") { fin("fallback"); sh.close(); }
+      if (m === "on") { if (await setupPasskey()) { fin("ok"); sh.close(); } } };
+  });
 }
 
 /* ============================ VNeID + FaceID ============================ */
@@ -286,7 +329,9 @@ function verifyFace({ who, title, fixedKey, onDone }) {
     const how = r.enrolled ? "đã lưu ảnh gốc cho hồ sơ demo" : `độ tương đồng ${r.score}% (khoảng cách ${String(r.dist).replace(".", ",")} ≤ ngưỡng ${String(FaceKit.THRESHOLD).replace(".", ",")})`;
     const method = (r.via === "phone" ? "điện thoại" : r.method === "ảnh" ? "ảnh chụp" : "camera") + (r.live ? " + kiểm tra người thật" : "");
     sh.set(`${head("Xác thực thành công")}<div class="note ok stack" style="gap:4px"><span class="chip ok" style="justify-self:start">${ICON_OK}ĐÃ XÁC THỰC</span><b style="font-size:1.1rem">${esc(chosen.name)}</b><span>Sinh ${dmy(chosen.dob)} · ${ageAt(chosen.dob, new Date())} tuổi</span><span class="small muted">Khuôn mặt: ${esc(how)} · qua ${esc(method)}</span></div>
-      <p class="small muted">Rạp nhận: họ tên, ngày sinh, mức xác thực, thời điểm. Không nhận ảnh.</p><button class="btn primary block" data-m="close">Xong</button>`);
+      <p class="small muted">Rạp nhận: họ tên, ngày sinh, mức xác thực, thời điểm. Không nhận ảnh.</p>
+      ${who === "self" && PK.avail && !S.user.passkey ? `<div class="panel"><b>Bật ${esc(Passkey.label())} cho tài khoản?</b><span class="small muted">Lần sau mua vé phim có giới hạn tuổi chỉ cần quét ${esc(Passkey.label())} – khoảng 1 giây.</span><button class="btn primary block" data-m="pk">Bật ${esc(Passkey.label())}</button></div>` : ""}
+      <button class="btn ${who === "self" && PK.avail && !S.user.passkey ? "" : "primary "}block" data-m="close">Xong</button>`);
     onDone(chosen, { score: r.enrolled ? null : r.score, method, live: r.live });
     save();
   };
@@ -306,13 +351,14 @@ function verifyFace({ who, title, fixedKey, onDone }) {
       onResult(r) { pairH = null; if (r.ok && r.enrolled && r.descriptor) FaceKit.setRef(chosen.key, new Float32Array(r.descriptor)); done({ ...r, via: "phone" }); },
     });
   };
-  sh.el.onclick = e => {
+  sh.el.onclick = async e => {
     const a = e.target.closest("[data-m]"); if (!a || a.getAttribute("aria-disabled") === "true") return;
     const m = a.dataset.m;
     if (m === "close") { stopCam && stopCam(); pairH && pairH.close(); $("#modal-root").innerHTML = ""; render(); }
     if (m === "methods") { stopCam && stopCam(); stopCam = null; pairH && pairH.close(); pairH = null; methods(); }
     if (m === "cam") runCam();
     if (m === "phone") runPhone();
+    if (m === "pk") { if (await setupPasskey()) { $("#modal-root").innerHTML = ""; render(); } }
   };
   sh.el.onchange = e => { if (e.target.id === "fk-file" && e.target.files[0]) { sh.set(`${head("Phân tích ảnh")}<div id="fk-host" class="stack"></div>`); FaceKit.runImage($("#fk-host", sh.el), e.target.files[0], { refKey: chosen.key, ref: FaceKit.getRef(chosen.key), onResult: done }); } };
   if (fixedKey && who === "gate-teacher") { consent(); } else consent();
@@ -320,6 +366,7 @@ function verifyFace({ who, title, fixedKey, onDone }) {
 
 /* Trang trên điện thoại khi mở link ?pair=MÃ */
 function phonePage(code) {
+  PHONE_MODE = true;
   document.body.classList.add("phone");
   $("#roles").innerHTML = "";
   const app = $("#app");
@@ -540,7 +587,7 @@ const A = {
     S = Store.reset(); render(); if (ON()) await Remote.init(S, buildSchedule(), scheduleRender); render(); toast("Đã đặt lại dữ liệu demo");
   },
   "vneid-self"() { verifyFace({ who: "self", title: "Liên kết VNeID", onDone(id, r) { Object.assign(S.user, { linked: true, key: id.key, name: id.name, dob: id.dob, verifiedAt: new Date().toISOString(), faceScore: r.score, method: r.method }); log("vneid", `Liên kết VNeID: ${id.name}, ${ageAt(id.dob, new Date())} tuổi, qua ${r.method}`); } }); },
-  unlink() { Object.assign(S.user, { linked: false, dob: null, key: null, name: "Khách" }); S.dependents = []; save(); render(); },
+  unlink() { Object.assign(S.user, { linked: false, dob: null, key: null, name: "Khách", passkey: null }); S.dependents = []; save(); render(); },
   "clear-ref"(el) { FaceKit.clearRef(el.dataset.key); render(); toast("Đã xoá ảnh gốc trên thiết bị"); },
   "add-dep"() { openAddDep(); },
   "del-dep"(el) { S.dependents = S.dependents.filter(x => x.id !== el.dataset.id); save(); render(); },
@@ -559,12 +606,21 @@ const A = {
   "cancel-draft"() { releaseDraft(); go({ name: "home" }); },
   "to-checkout"() { go({ name: "checkout" }); },
   "back-seats"() { go({ name: "seats" }); },
-  "to-pay"() { const d = S.draft, sh = show(d.showId); checkOrder(sh, d.assign).res.forEach((r, i) => log("age", `Đơn ${d.id} ghế ${d.seats[i]} – ${film(sh.filmId).rating} – ${r.name}: ${r.block ? r.reason : r.needDoc ? "cần kiểm tra giấy tờ" : "đạt"}`, !r.block)); go({ name: "pay" }); },
+  async "to-pay"() { const d = S.draft, sh = show(d.showId), f = film(sh.filmId);
+    // Vé phim có giới hạn tuổi dùng tuổi đã xác thực của tài khoản → chủ tài khoản phải xác nhận bằng Face ID/vân tay
+    const selfAge = RATINGS[f.rating] > 0 && d.assign.some(a => a.viewer.kind !== "other" && S.user.linked);
+    d.pkFallback = false;
+    if (selfAge) { const r = await requirePasskey(`Mua vé phim ${f.rating} bằng tuổi đã xác thực`); if (r === "cancel") return; if (r === "fallback") d.pkFallback = true; }
+    checkOrder(sh, d.assign).res.forEach((r, i) => log("age", `Đơn ${d.id} ghế ${d.seats[i]} – ${f.rating} – ${r.name}: ${r.block ? r.reason : r.needDoc || (d.pkFallback && r.verified) ? "cần kiểm tra giấy tờ" : "đạt"}`, !r.block)); go({ name: "pay" }); },
+  async "pk-create"() { await setupPasskey(); render(); },
+  async "pk-test"() { const r = await Passkey.verify(S.user.passkey); toast(r.ok ? `Xác thực ${S.user.passkey.label} thành công – chữ ký hợp lệ` : r.message); log("passkey", `Thử passkey: ${r.ok ? "đạt" : r.message}`, r.ok); },
+  "pk-del"() { S.user.passkey = null; save(); render(); toast("Đã tắt passkey trên tài khoản (khoá trên thiết bị xoá trong Cài đặt → Mật khẩu)"); },
+  async "pk-reveal"(el) { const r = await Passkey.verify(S.user.passkey); if (!r.ok) return toast(r.message); REVEAL[el.dataset.code] = Date.now() + 60000; log("passkey", `Mở vé ${el.dataset.code} bằng ${S.user.passkey.label}`); render(); setTimeout(() => scheduleRender(), 60500); },
   async "pay-ok"(el) { const d = S.draft;
     if (!d || new Date(d.until) < new Date()) { releaseDraft("Ghế đã hết hạn giữ – giao dịch tự hoàn tiền"); return go({ name: "home" }); }
     const sh = show(d.showId), chk = checkOrder(sh, d.assign); let pts = 0;
     const tks = d.seats.map((sid, i) => { const r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid) * (1 - aud.disc); pts += Math.round(price * 0.05 / 1000);
-      return { code: rid("V"), orderId: d.id, owner: "user", showId: d.showId, seat: sid, viewerName: r.name, aud: aud.label, verified: r.verified, needDoc: r.needDoc, reason: r.reason, price, status: "valid", channel: "Online" }; });
+      return { code: rid("V"), orderId: d.id, owner: "user", showId: d.showId, seat: sid, viewerName: r.name, aud: aud.label, verified: r.verified, needDoc: r.needDoc || (d.pkFallback && r.verified && RATINGS[film(sh.filmId).rating] > 0), reason: d.pkFallback && r.verified && !r.needDoc ? "Thiết bị không xác nhận chính chủ bằng sinh trắc – kiểm tra giấy tờ tại cửa" : r.reason, price, status: "valid", channel: "Online" }; });
     el.disabled = true;
     const ok = await call("sell_order", { p_show: d.showId, p_hold: d.id, p_tickets: tks.map(t => ({ code: t.code, order_id: t.orderId, device_id: Remote.DEVICE, seat: t.seat, viewer_name: t.viewerName, aud: t.aud, verified: t.verified, need_doc: t.needDoc, reason: t.reason, price: t.price, channel: t.channel })) });
     if (!ok) { releaseDraft(); return go({ name: "home" }); }

@@ -132,6 +132,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 @media (max-width:480px){.ticket{grid-template-columns:1fr}.ticket .qr{justify-self:center}}
 .qr{background:#fff;padding:8px;border-radius:8px;line-height:0;width:max-content}
 .qr svg{display:block}
+.qr-lock{width:150px;height:150px;border:1px dashed var(--line-2);border-radius:10px;background:var(--surface-2);color:var(--fg-2);display:grid;place-content:center;justify-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:.8rem;text-align:center;padding:10px}
+.qr-lock:hover{border-color:var(--accent);color:var(--fg)}
+@media (max-width:480px){.qr-lock{justify-self:center}}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .scard{border:1px dashed var(--line-2);border-radius:10px;padding:8px;display:grid;gap:4px;justify-items:center;text-align:center;font-size:.76rem;background:var(--surface)}
 .scard.in{border-style:solid;border-color:var(--ok);background:var(--ok-soft)}
