@@ -16,12 +16,15 @@ Demo đồ án PTTKHTTT – Nhóm 05, ĐH Vinh.
 | Máy không có camera | Máy tính hiện QR, điện thoại quét → xác thực trên điện thoại → kết quả về máy tính **theo thời gian thực** (WebRTC/PeerJS) |
 | Soát vé | Quét QR vé / thẻ học sinh bằng camera sau (BarcodeDetector hoặc jsQR) |
 | Đồng bộ | Mở nhiều tab (Khách hàng, Soát vé…) trên cùng máy: dữ liệu cập nhật ngay |
+| Face ID của máy (passkey) | Sau khi liên kết VNeID, bật Face ID (iPhone) / vân tay (Android) / Windows Hello. Mua vé T13–T18 và mở QR vé phải quét lại; web chỉ nhận chữ ký số, kiểm tra bằng WebCrypto |
+| Dữ liệu dùng chung | Supabase Postgres + Realtime: vé bán ở điện thoại hiện ngay ở máy soát vé; giữ ghế, bán vé, soát vé là hàm nguyên tử phía máy chủ |
 | Responsive | Dùng được trên điện thoại 360px trở lên |
 
 **Mô phỏng:** dữ liệu dân cư VNeID (4 hồ sơ mẫu), cổng thanh toán. "Ảnh gốc" thay cho ảnh trong CSDL quốc gia là vector đặc trưng 128 số lưu trên chính thiết bị (xoá được ở trang Tài khoản).
 
 ## Chạy
-- Online: bật GitHub Pages (Settings → Pages → Deploy from branch `main`, thư mục `/`), mở `https://<chủ-repo>.github.io/faceid_demo/`.
+- Online: https://clonetest222.github.io/faceid_demo/
+- Supabase: chạy `supabase/schema.sql` một lần trong SQL Editor; web dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Mở thẳng vai trò: `#kh`, `#gv`, `#pos`, `#gate`, `#ql`. Ghép nối điện thoại: `?pair=MÃ`.
 
@@ -32,5 +35,17 @@ Demo đồ án PTTKHTTT – Nhóm 05, ĐH Vinh.
 4. Giáo viên → vé đoàn lớp 8A phim T13 → phát hiện 1 em 12 tuổi → phụ huynh xác nhận → QR đoàn + thẻ từng em.
 5. Điện thoại mở `#gate` → quét thẻ bằng camera, thử quét lại (bị chặn) → kiểm tra ngẫu nhiên → hoàn tất.
 
-## Tiếp theo
-Supabase (Postgres + Realtime) để dữ liệu dùng chung giữa các máy; lớp `Store` trong `js/app.js` là điểm thay thế.
+## Kiểm thử tải (Supabase gói miễn phí)
+`node tools/loadtest.mjs 1000 100` – 1000 khách ảo, 100 đồng thời, tranh 420 ghế:
+
+| Chỉ số | Kết quả |
+|---|---|
+| Thời gian | 4,6 giây |
+| Vé bán / ghế có | 414 / 420 |
+| Ghế bị bán trùng | 0 |
+| Lỗi máy chủ | 0 |
+| Giữ ghế p50 / p95 | 158 ms / 356 ms |
+
+## Giới hạn
+- VNeID, cổng thanh toán là mô phỏng; chữ ký passkey kiểm tra ở trình duyệt (bản thật: kiểm tra ở máy chủ).
+- Chưa có đăng nhập nhân viên – ai mở web cũng vào được vai trò quầy/soát vé/quản lý.
