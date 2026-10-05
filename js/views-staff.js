@@ -101,7 +101,7 @@ function gateRecent() {
 }
 function gateInput() {
   const m = GATE.method;
-  if (m === "cam") return `<div id="gate-stage" class="cam-stage aspect-[4/3] max-h-[340px] w-full"><div class="frame"></div><p class="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-3 py-1 text-xs text-white" id="gate-cam-msg">Đang mở camera…</p></div>`;
+  if (m === "cam") return `<div id="gate-stage" data-keep class="cam-stage aspect-[4/3] max-h-[340px] w-full"><div class="frame"></div><p class="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-3 py-1 text-xs text-white" id="gate-cam-msg">Đang mở camera…</p></div>`;
   if (m === "anh") return `<label class="drop grid cursor-pointer place-items-center gap-3 rounded-xl border border-dashed border-border-strong bg-surface px-4 py-10 text-center hover:bg-surface-hover" data-drop="gate">
       <span class="grid size-11 place-items-center rounded-xl bg-secondary text-muted">${ic("image-up", "size-5")}</span>
       <span><span class="block text-sm font-medium">Kéo ảnh QR vào đây hoặc <span class="text-primary underline underline-offset-2">chọn ảnh</span></span><span class="mt-1 block text-xs text-muted">PNG, JPG · ảnh chụp màn hình vé, ảnh in</span></span>

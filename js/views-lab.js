@@ -61,7 +61,7 @@ function vKiemThu() {
   const haar = labCard("haar", "Theo bài OpenCV: ảnh xám → face_cascade.detectMultiScale → tìm mắt trong vùng mặt. Haar chỉ tìm khuôn mặt (không biết là ai) – dùng để so tốc độ, đếm chớp mắt chống ảnh tĩnh.",
     `<div class="mt-4 flex flex-wrap gap-2">${LAB.haar.stop ? `<button type="button" class="${B.outline}" data-act="haar-stop">${ic("square")}Dừng camera</button>` : `<button type="button" class="${B.primary}" data-act="haar-cam" ${LAB.cam ? "" : "disabled"}>${ic("camera")}Mở camera</button>`}<label class="${B.outline}">${ic("image")}Chọn ảnh<input type="file" accept="image/*" id="haar-file" class="sr-only"></label></div>
      ${LAB.haar.err ? `<div class="mt-3">${banner("bad", "", esc(LAB.haar.err))}</div>` : ""}
-     ${LAB.haar.stop ? `<div id="haar-stage" class="cam-stage mirror mt-3 aspect-[4/3] w-full max-w-[420px]"></div>` : LAB.haar.img ? `<img src="${LAB.haar.img}" alt="Kết quả Haar" class="mt-3 w-full max-w-[420px] rounded-xl">` : ""}
+     ${LAB.haar.stop ? `<div id="haar-stage" data-keep class="cam-stage mirror mt-3 aspect-[4/3] w-full max-w-[420px]"></div>` : LAB.haar.img ? `<img src="${LAB.haar.img}" alt="Kết quả Haar" class="mt-3 w-full max-w-[420px] rounded-xl">` : ""}
      <div class="mt-3 grid grid-cols-3 gap-2 text-center sm:grid-cols-6" id="haar-stats">${haarStats(hs)}</div>`);
 
   // QR

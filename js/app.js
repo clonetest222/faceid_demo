@@ -37,10 +37,10 @@ function render() {
   const keep = {}; $$("#app [data-keep]").forEach(el => keep[el.id] = el);
   try { app.innerHTML = ROUTES[r].roles.includes(user.role) ? ROUTES[r].view() : v403(); }
   catch (e) { console.error(e); app.innerHTML = `<div class="p-6">${banner("bad", "Lỗi hiển thị", esc(e.message), `<button class="${B.outline}" data-act="reset-local">Đặt lại dữ liệu trên máy</button>`)}</div>`; }
-  for (const id in keep) { const n = $("#" + id); if (n && n.dataset.keep !== undefined) n.replaceWith(keep[id]); }
+  // gỡ khỏi trang thì trình duyệt tự dừng video → gắn lại khung cũ rồi phát tiếp, camera không bị đen
+  for (const id in keep) { const n = $("#" + id); if (n && n.dataset.keep !== undefined) { n.replaceWith(keep[id]); keep[id].querySelectorAll("video").forEach(v => v.play().catch(() => {})); } }
   document.title = ({ lich: "Lịch chiếu", ghe: "Chọn ghế", thanhtoan: "Thanh toán", ve: "Vé của tôi", doan: "Vé đoàn", taikhoan: "Tài khoản", tongquan: "Tổng quan", suat: "Suất chiếu", soat: "Soát vé", quay: "Bán tại quầy", kiemthu: "Kiểm thử", quyen: "Tài khoản & quyền" }[r] || "CineVin") + " – CineVin";
   if (r === "soat") gateCamStart();
-  if (r === "kiemthu" && LAB.haar.stop) { const h = $("#haar-stage"); if (h) h.setAttribute("data-keep", ""); }
 }
 function stopMedia(next) {
   if (GATE.stop && next !== "soat") { GATE.stop(); GATE.stop = null; }
@@ -311,6 +311,13 @@ function openScanner(title, onCode) {
   sh.el.onclick = e => { if (e.target.closest('[data-m="close"]')) sh.close(); };
 }
 
+/** Vẽ lại riêng danh sách ca + huy hiệu của một thẻ kiểm thử (camera trong thẻ vẫn chạy) */
+function refreshLabCard(group) {
+  const el = $("#lab-" + group); if (!el) return;
+  const tmp = document.createElement("div"); tmp.innerHTML = caseList(group);
+  const old = el.querySelector("ul:last-of-type"); if (old) old.replaceWith(tmp.firstElementChild);
+  const [n, t, bad] = caseCount(group), b = el.querySelector("h2 + span"); if (b) b.outerHTML = tone(`${n}/${t} ca đạt`, n === t ? "ok" : bad ? "bad" : "neutral");
+}
 /* ============================ kiểm thử QR ============================ */
 async function labQrVerify(payload, via) {
   const sm = LAB.qr.samples || {};
@@ -535,10 +542,12 @@ const A = {
     FaceKit.preload();
     LAB.haar.stop = Haar.runLive(host, {
       onStats(s) { LAB.haar.stats = s; const el = $("#haar-stats"); if (el) el.innerHTML = haarStats(s);
-        if (s.faces > 0 && !labCases()["h-face"]) { setCase("h-face", true, "Camera: thấy khuôn mặt"); scheduleRender(); }
-        if (s.eyes === 2 && !labCases()["h-eyes"]) { setCase("h-eyes", true, "Camera: 2 mắt trong vùng mặt"); scheduleRender(); }
-        if (s.blinks > 0 && !(labCases()["h-blink"] && labCases()["h-blink"].ok)) { setCase("h-blink", true, `Đếm được ${s.blinks} lần chớp mắt`); scheduleRender(); }
-        if (s.tinyMs != null && !labCases()["h-speed"]) { setCase("h-speed", true, `Haar ${s.ms} ms · TinyFace ${s.tinyMs} ms mỗi khung 320px`); scheduleRender(); } },
+        const c = labCases(); let changed = false;
+        if (s.faces > 0 && !(c["h-face"] && c["h-face"].ok)) { setCase("h-face", true, "Camera: thấy khuôn mặt"); changed = true; }
+        if (s.eyes === 2 && !(c["h-eyes"] && c["h-eyes"].ok)) { setCase("h-eyes", true, "Camera: 2 mắt trong vùng mặt"); changed = true; }
+        if (s.blinks > 0 && (!c["h-blink"] || !c["h-blink"].ok || c["h-blink"].n !== s.blinks)) { setCase("h-blink", true, `Đếm được ${s.blinks} lần chớp mắt`); labCases()["h-blink"].n = s.blinks; changed = true; }
+        if (s.tinyMs != null && !(c["h-speed"] && c["h-speed"].live)) { setCase("h-speed", true, `Haar ${s.ms} ms · TinyFace ${s.tinyMs} ms mỗi khung 320px`); labCases()["h-speed"].live = true; changed = true; }
+        if (changed) refreshLabCard("haar"); },
       onError(m) { LAB.haar.err = m; LAB.haar.stop = null; render(); },
     }); },
   "haar-stop"() { LAB.haar.stop && LAB.haar.stop(); LAB.haar.stop = null; render(); },
