@@ -227,7 +227,7 @@ $$;
 -- Dọn dữ liệu demo (chỉ dùng khi muốn làm lại từ đầu)
 create or replace function public.reset_demo()
 returns void language sql security definer set search_path = public as $$
-  delete from audit_logs; delete from group_members; delete from groups; delete from tickets; delete from seat_locks; delete from shows;
+  delete from audit_logs where true; delete from group_members where true; delete from groups where true; delete from tickets where true; delete from seat_locks where true; delete from shows where true;
 $$;
 
 revoke all on all functions in schema public from public;

@@ -4,12 +4,12 @@
 "use strict";
 const Remote = (() => {
   const cfg = window.CINEVIN_CONFIG || {};
-  let sb = null, online = false, status = "offline", listeners = [];
+  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null;
   const DEVICE = (() => { try { let d = localStorage.getItem("cinevin-device"); if (!d) { d = rid("DV", 8); localStorage.setItem("cinevin-device", d); } return d; } catch (e) { return rid("DV", 8); } })();
   const emit = () => listeners.forEach(f => f(status));
 
   const mapShow = r => ({ id: r.id, filmId: r.film_id, roomId: r.room_id, start: r.start_at, end: r.end_at });
-  const mapTicket = r => ({ code: r.code, orderId: r.order_id, owner: r.device_id === DEVICE && r.channel === "Online" ? "user" : "other", showId: r.show_id, seat: r.seat, viewerName: r.viewer_name, aud: r.aud, verified: r.verified, needDoc: r.need_doc, reason: r.reason, price: Number(r.price), status: r.status, channel: r.channel });
+  const mapTicket = r => ({ code: r.code, orderId: r.order_id, ownerUser: r.owner_user || null, device: r.device_id, owner: r.device_id === DEVICE && r.channel === "Online" ? "user" : "other", showId: r.show_id, seat: r.seat, viewerName: r.viewer_name, aud: r.aud, verified: r.verified, needDoc: r.need_doc, reason: r.reason, price: Number(r.price), status: r.status, channel: r.channel });
   const mapMember = m => ({ id: m.card, card: m.card, idx: m.idx, name: m.name, dob: m.dob, cls: m.cls, entered: m.entered, spot: m.spot });
   const mapGroup = (g, members) => ({ id: g.code, code: g.code, showId: g.show_id, seats: g.seats, teacher: g.teacher, teacherKey: g.teacher_key, org: g.org, total: Number(g.total), status: g.status, counted: g.counted, enteredCount: g.entered_count, faceOk: g.face_ok, faceScore: g.face_score, students: members.map(mapMember).sort((a, b) => a.idx - b.idx) });
   const mapLog = l => ({ t: l.t, type: l.type, msg: l.msg, ok: l.ok });
@@ -41,6 +41,10 @@ const Remote = (() => {
       S.tickets = tk.data.map(mapTicket);
       S.groups = gr.data.map(g => mapGroup(g, g.group_members || []));
       S.logs = lg.data.map(mapLog);
+      // bảng nhật ký xác thực (migration 002) – có thì tải, chưa có thì bỏ qua
+      const vf = await sb.from("verifications").select("*").order("id", { ascending: false }).limit(60);
+      v2 = !vf.error; S.verifs = v2 ? vf.data : [];
+      await hasV4();
       subscribe(S, onChange);
       online = true; status = "online"; emit();
       return true;
@@ -59,6 +63,23 @@ const Remote = (() => {
     on("group_members", p => { if (p.eventType === "DELETE") return; const m = mapMember(p.new), g = S.groups.find(x => x.code === p.new.group_code); if (!g) return; const i = g.students.findIndex(x => x.card === m.card); i >= 0 ? Object.assign(g.students[i], m) : (g.students.push(m), g.students.sort((a, b) => a.idx - b.idx)); });
     on("audit_logs", p => { if (p.eventType === "INSERT") { S.logs.unshift(mapLog(p.new)); S.logs = S.logs.slice(0, 400); } });
     ch.subscribe(st => { status = st === "SUBSCRIBED" ? "online" : (st === "CLOSED" || st === "CHANNEL_ERROR" || st === "TIMED_OUT") ? "reconnecting" : status; emit(); });
+    if (v2) sb.channel("cinevin-verif").on("postgres_changes", { event: "INSERT", schema: "public", table: "verifications" }, p => {
+      S.verifs = [p.new, ...(S.verifs || []).filter(v => v.id !== p.new.id)].slice(0, 100); onChange("verifications");
+    }).subscribe();
+  }
+  /** Đã chạy migration 004 (đăng nhập + QR ký) chưa: gọi thử session_info với token rỗng */
+  async function hasV4() {
+    if (v4 !== null) return v4;
+    if (!ensureClient()) return (v4 = false);
+    try { await rpc("session_info", { p_token: "00000000-0000-0000-0000-000000000000" }); v4 = true; }
+    catch (e) { v4 = null; return false; }   // chưa có hàm (PGRST202) hoặc mất mạng: thử lại lần sau
+    return v4;
+  }
+  /** Chỉ tạo client (trang điện thoại ghép nối không cần tải toàn bộ dữ liệu) */
+  function ensureClient() {
+    if (sb) return true;
+    if (!cfg.supabaseUrl || !cfg.supabaseKey || !window.supabase) return false;
+    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } }); return true;
   }
 
   /** Tìm một vé chưa có trong bộ nhớ (ví dụ vừa bán ở máy khác, realtime chưa kịp tới). */
@@ -66,8 +87,8 @@ const Remote = (() => {
   async function fetchGroup(code) { const { data } = await sb.from("groups").select("*, group_members(*)").eq("code", code).maybeSingle(); return data ? mapGroup(data, data.group_members || []) : null; }
 
   return {
-    init, rpc, fetchTicket, fetchGroup, DEVICE,
-    get online() { return online; }, get status() { return status; },
+    init, rpc, fetchTicket, fetchGroup, ensureClient, hasV4, DEVICE,
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();
