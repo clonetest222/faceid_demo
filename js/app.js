@@ -422,6 +422,12 @@ const A = {
     try { const v = await Remote.rpc("voucher_check", { p_token: Auth.token, p_code: code }); d.voucher = v; toast(`Áp dụng ${v.kind === "gift" ? "thẻ quà tặng " + vnd(v.amount) : "giảm " + v.percent + "%"}`); }
     catch (e) { d.voucher = null; toast(Auth.message(e), "bad"); }
     save(); render(); },
+  async "friend-check"(el) {
+    const i = +el.dataset.i, d = S.draft, idv = ($("#friend-" + i).value || "").trim(); if (!idv) return toast("Nhập email, SĐT hoặc tên đăng nhập của bạn đi cùng");
+    try { const f = await Remote.rpc("companion_check", { p_token: Auth.token, p_id: idv, p_show: d.showId }); d.assign[i] = { viewer: { kind: "friend", user: f.username, name: f.name, verified: !!f.verified, age: f.age } }; }
+    catch (e) { return toast(Auth.message(e), "bad"); }
+    save(); render(); },
+  "friend-clear"(el) { S.draft.assign[+el.dataset.i] = { viewer: { kind: "friend" } }; save(); render(); },
   "voucher-clear"() { S.draft.voucher = null; save(); render(); },
   "points-use"(el) { const d = S.draft, max = Math.min(S.user.points || 0, Math.floor(Math.max(0, (d.gross || 0) - (d.discount || 0)) / 1000)); d.points = el.dataset.v === "max" ? max : 0; save(); render(); },
   async "gate-noticket"() {
@@ -468,11 +474,13 @@ const A = {
     chk.res.forEach((r, i) => log("age", `Đơn ${d.id} ghế ${d.seats[i]} – ${f.rating} – ${r.name}: ${r.block ? r.reason : r.needDoc || (pkFallback && r.verified) ? "cần kiểm tra giấy tờ" : "đạt"}`, !r.block));
     const tks = d.seats.map((sid, i) => { const r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid) * (1 - aud.disc); pts += Math.round(price * 0.05 / 1000);
       const nd = r.needDoc || (pkFallback && r.verified && RATINGS[f.rating] > 0);
-      return { code: rid("V"), orderId: d.id, owner: "user", ownerUser: Auth.user.username, showId: d.showId, seat: sid, viewerName: r.name, aud: aud.label, verified: r.verified, needDoc: nd, reason: pkFallback && r.verified && !r.needDoc ? "Thiết bị không xác nhận chính chủ bằng sinh trắc – kiểm tra giấy tờ tại cửa" : r.reason, price, status: "valid", channel: "Online" }; });
+      return { code: rid("V"), orderId: d.id, owner: "user", ownerUser: Auth.user.username, viewerUser: r.user || null, showId: d.showId, seat: sid, viewerName: r.name, aud: aud.label, verified: r.verified, needDoc: nd, reason: pkFallback && r.verified && !r.needDoc ? "Thiết bị không xác nhận chính chủ bằng sinh trắc – kiểm tra giấy tờ tại cửa" : r.reason, price, status: "valid", channel: "Online" }; });
     el.disabled = true;
-    const args = { p_show: d.showId, p_hold: d.id, p_tickets: tks.map(t => ({ code: t.code, order_id: t.orderId, device_id: Remote.DEVICE, seat: t.seat, viewer_name: t.viewerName, aud: t.aud, verified: t.verified, need_doc: t.needDoc, reason: t.reason, price: t.price, channel: t.channel })) };
+    const args = { p_show: d.showId, p_hold: d.id, p_tickets: tks.map(t => ({ code: t.code, order_id: t.orderId, device_id: Remote.DEVICE, seat: t.seat, viewer_name: t.viewerName, viewer_user: t.viewerUser, aud: t.aud, verified: t.verified, need_doc: t.needDoc, reason: t.reason, price: t.price, channel: t.channel })) };
     if (Remote.v5) { args.p_voucher = d.voucher ? d.voucher.code : null; args.p_points = d.points || 0; }
-    const ok = await call("sell_order", args);
+    let ok;
+    if (ON()) { try { ok = await rpcAuth("sell_order", args); } catch (e) { el.disabled = false; if (/companion_/.test(e.message)) return toast(Auth.message(e), "bad"); if (/hold_expired/.test(e.message)) { releaseDraft("Ghế đã hết hạn giữ"); save(); return go("lich"); } return toast(Auth.message(e), "bad"); } }
+    else ok = true;
     if (!ok) { releaseDraft(); save(); return go("lich"); }
     tks.forEach(t => { S.seats[d.showId][t.seat] = { st: "sold" }; const ex = S.tickets.find(x => x.code === t.code); ex ? Object.assign(ex, { ownerUser: t.ownerUser }) : S.tickets.push(t); });
     if (ok && typeof ok === "object" && ok.points != null) { pts = ok.points_earned; S.user.points = ok.points; Auth.setPoints(ok.points); } else S.user.points += pts;
@@ -718,7 +726,7 @@ const A = {
 };
 /* ô chọn tuỳ biến đổi giá trị */
 const SEL = {
-  assign(box, v) { const d = S.draft, i = +box.dataset.i; d.assign[i] = { viewer: v.startsWith("dep:") ? { kind: "dep", depId: v.slice(4) } : { kind: v } }; save(); render(); },
+  assign(box, v) { const d = S.draft, i = +box.dataset.i; d.assign[i] = { viewer: v.startsWith("dep:") ? { kind: "dep", depId: v.slice(4) } : { kind: v } }; save(); render(); if (v === "friend") { const x = $("#friend-" + i); x && x.focus(); } },
   ns(box, v) { const f = S.view.ns; f[box.dataset.select.slice(3)] = v; if (box.dataset.select === "ns-day") S.view.sday = v; save(); render(); },
   "pos-show"(box, v) { const p = S.view.pos; p.seats.forEach(sid => { delete S.seats[p.showId]?.[sid]; call("release_seat", { p_show: p.showId, p_seat: sid, p_hold: "POS-" + Remote.DEVICE }); }); S.view.pos = { showId: v || null, seats: [], types: {}, docs: {} }; save(); render(); },
   "pos-type"(box, v) { S.view.pos.types[box.dataset.seat] = v; delete S.view.pos.docs[box.dataset.seat]; save(); render(); },

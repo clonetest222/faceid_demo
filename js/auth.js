@@ -29,6 +29,7 @@ const Auth = (() => {
     face_mismatch: "Khuôn mặt không khớp với chủ tài khoản.",
     vneid_not_linked: "Hồ sơ VNeID này chưa gắn với tài khoản nào – đăng ký rồi liên kết VNeID ở Tài khoản.",
     voucher_unknown: "Không có mã này.", voucher_used: "Mã đã dùng rồi.", voucher_expired: "Mã đã hết hạn.", voucher_not_yours: "Thẻ quà tặng này của tài khoản khác.", voucher_invalid: "Mã giảm giá không còn hợp lệ.",
+    companion_unknown: "Không tìm thấy tài khoản khách hàng này.", companion_self: "Đó là tài khoản của bạn – chọn “Tôi”.", companion_underage: "Bạn đi cùng chưa đủ tuổi xem phim này (theo hồ sơ VNeID của họ).",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
   };

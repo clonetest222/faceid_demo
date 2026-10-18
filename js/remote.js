@@ -9,7 +9,7 @@ const Remote = (() => {
   const emit = () => listeners.forEach(f => f(status));
 
   const mapShow = r => ({ id: r.id, filmId: r.film_id, roomId: r.room_id, start: r.start_at, end: r.end_at });
-  const mapTicket = r => ({ code: r.code, orderId: r.order_id, ownerUser: r.owner_user || null, device: r.device_id, owner: r.device_id === DEVICE && r.channel === "Online" ? "user" : "other", showId: r.show_id, seat: r.seat, viewerName: r.viewer_name, aud: r.aud, verified: r.verified, needDoc: r.need_doc, reason: r.reason, price: Number(r.price), status: r.status, channel: r.channel });
+  const mapTicket = r => ({ code: r.code, orderId: r.order_id, ownerUser: r.owner_user || null, viewerUser: r.viewer_user || null, device: r.device_id, owner: r.device_id === DEVICE && r.channel === "Online" ? "user" : "other", showId: r.show_id, seat: r.seat, viewerName: r.viewer_name, aud: r.aud, verified: r.verified, needDoc: r.need_doc, reason: r.reason, price: Number(r.price), status: r.status, channel: r.channel });
   const mapMember = m => ({ id: m.card, card: m.card, idx: m.idx, name: m.name, dob: m.dob, cls: m.cls, entered: m.entered, spot: m.spot });
   const mapGroup = (g, members) => ({ id: g.code, code: g.code, showId: g.show_id, seats: g.seats, teacher: g.teacher, teacherKey: g.teacher_key, org: g.org, total: Number(g.total), status: g.status, counted: g.counted, enteredCount: g.entered_count, faceOk: g.face_ok, faceScore: g.face_score, students: members.map(mapMember).sort((a, b) => a.idx - b.idx) });
   const mapLog = l => ({ t: l.t, type: l.type, msg: l.msg, ok: l.ok });

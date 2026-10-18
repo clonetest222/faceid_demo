@@ -113,14 +113,18 @@ function vThanhToan() {
   const sh = show(d.showId), f = film(sh.filmId);
   if (!d.assign || d.assign.length !== d.seats.length) d.assign = d.seats.map((_, i) => ({ viewer: { kind: S.user.linked && i === 0 ? "self" : "other" } }));
   const chk = checkOrder(sh, d.assign); let total = 0;
-  const opts = [["other", "Người đi cùng (chưa xác thực)"], ["self", `Tôi – ${S.user.name}${S.user.linked ? "" : " (chưa xác thực)"}`], ...S.dependents.map(x => ["dep:" + x.id, `Con – ${x.name} (${ageAt(x.dob, sh.start)} tuổi)`])];
+  const friendPending = d.assign.some(a => a.viewer.kind === "friend" && !a.viewer.user);
+  const opts = [["other", "Người đi cùng (chưa xác thực)"], ["self", `Tôi – ${S.user.name}${S.user.linked ? "" : " (chưa xác thực)"}`], ...S.dependents.map(x => ["dep:" + x.id, `Con – ${x.name} (${ageAt(x.dob, sh.start)} tuổi)`]), ...(Remote.v5 ? [["friend", "Bạn đi cùng có tài khoản CineVin…"]] : [])];
   const rows = d.seats.map((sid, i) => {
     const a = d.assign[i], r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid) * (1 - aud.disc);
     if (!r.block) total += price;
     const val = a.viewer.kind === "dep" ? "dep:" + a.viewer.depId : a.viewer.kind;
+    const fr = a.viewer.kind === "friend" ? (a.viewer.user
+        ? `<div class="mt-2 flex items-center gap-2 rounded-xl border border-border p-2 text-sm">${avatar(a.viewer.name)}<span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(a.viewer.name)} <span class="font-mono text-xs text-muted">@${esc(a.viewer.user)}</span></span><span class="block text-xs text-muted">${a.viewer.verified ? `Đã xác thực VNeID · ${a.viewer.age} tuổi tại ngày chiếu · vé vào thẳng` : "Chưa xác thực VNeID – kiểm tra giấy tờ tại cửa"}</span></span>${a.viewer.verified ? tone("VNeID", "ok") : tone("Chưa xác thực", "warn")}<button type="button" class="${B.icon} size-8" data-act="friend-clear" data-i="${i}" aria-label="Bỏ">${ic("x")}</button></div>`
+        : `<div class="mt-2 flex gap-2"><input id="friend-${i}" placeholder="Email, SĐT hoặc tên đăng nhập của bạn" autocapitalize="none" class="${INPUT}"><button type="button" class="${B.outline} min-h-11 md:min-h-10 shrink-0" data-act="friend-check" data-i="${i}">Kiểm tra</button></div><p class="mt-1 text-xs text-muted">Vé sẽ hiện trong “Vé của tôi” của bạn ấy; đã xác thực VNeID thì ở cửa không cần giấy tờ.</p>`) : "";
     return `<div class="grid gap-2 border-b border-border py-3 last:border-0 sm:grid-cols-[56px_minmax(0,1fr)_auto] sm:items-center sm:gap-3">
       <span class="font-mono text-sm font-medium">${sid}</span>
-      <div class="min-w-0">${selectBox("viewer-" + i, opts, val, { act: "assign", extra: `data-i="${i}"` })}<p class="mt-1 text-xs ${r.block ? "text-[var(--error-text)]" : "text-muted"}">${r.block ? esc(r.reason) : r.needDoc ? esc(r.reason) : r.verified ? `Đã xác thực · ${aud.label}` : aud.label}</p></div>
+      <div class="min-w-0">${selectBox("viewer-" + i, opts, val, { act: "assign", extra: `data-i="${i}"` })}${fr}<p class="mt-1 text-xs ${r.block ? "text-[var(--error-text)]" : "text-muted"}">${a.viewer.kind === "friend" && !a.viewer.user ? "Nhập tài khoản của bạn đi cùng rồi bấm Kiểm tra." : r.block ? esc(r.reason) : r.needDoc ? esc(r.reason) : r.verified ? `Đã xác thực · ${aud.label}` : aud.label}</p></div>
       <span class="text-right text-sm tabular-nums ${r.block ? "text-muted line-through" : ""}">${vnd(price)}</span></div>`;
   }).join("");
   d.gross = total;
@@ -149,7 +153,7 @@ function vThanhToan() {
           ${promo}
           <div class="mt-4 grid gap-1 border-t border-border pt-4">${disc || usePts ? `<div class="flex items-center justify-between text-sm text-muted"><span>Giá vé</span><span class="tabular-nums">${vnd(total)}</span></div>` : ""}<div class="flex items-center justify-between"><span class="font-medium">Tổng thanh toán</span><span class="text-lg font-semibold tabular-nums">${vnd(d.total)}</span></div></div>
           ${S.user.confirmEvery && S.user.passkey ? `<p class="mt-2 flex items-center gap-1.5 text-xs text-muted">${ic("fingerprint", "size-3.5")}Sẽ xác nhận bằng ${esc(Passkey.label())} khi bấm thanh toán.</p>` : ""}
-          <button type="button" class="${B.primary} mt-3 w-full min-h-11 md:min-h-10" data-act="pay-ok" ${chk.ok ? "" : "disabled"}>Thanh toán ${vnd(d.total)}</button>
+          <button type="button" class="${B.primary} mt-3 w-full min-h-11 md:min-h-10" data-act="pay-ok" ${chk.ok && !friendPending ? "" : "disabled"}>Thanh toán ${vnd(d.total)}</button>
           <p class="mt-2 text-center text-xs text-muted">Cổng thanh toán mô phỏng – không trừ tiền thật.</p>`)}
       </aside>
     </div>`;
@@ -202,13 +206,14 @@ function vVe() {
   const upcoming = ts.filter(t => t.status === "valid" && endOf(show(t.showId)) > new Date());
   const t = ts.find(x => x.code === S.view.tk) || upcoming[0] || ts[ts.length - 1], sh = show(t.showId), f = film(sh.filmId);
   // nhiều vé cùng suất (mua cho bạn bè)
-  const sameShow = ts.filter(x => x.showId === t.showId && x.status === t.status);
+  const sameShow = ts.filter(x => x.showId === t.showId && x.status === t.status && x.ownerUser === t.ownerUser);
   // mặc định: MỘT QR cho cả đơn (quét vé nào cũng ra cả đơn ở cửa); "Tách từng vé" để gửi riêng cho bạn bè đến lẻ
   const split = !!S.view.splitQr, grp = sameShow.length > 1;
   const seatTabs = !grp ? "" : split
     ? `<div class="mb-3 -mx-1 overflow-x-auto px-1 scrollbar-clean"><div class="flex w-max items-center gap-1.5"><span class="mr-1 text-xs text-muted">${sameShow.length} vé · ghế</span>${sameShow.map(x => `<button type="button" data-act="ticket-pick" data-code="${x.code}" aria-pressed="${x === t}" class="h-8 cursor-pointer rounded-full px-3 text-sm tabular-nums ${x === t ? "bg-foreground text-surface" : "bg-secondary hover:bg-secondary-hover"}">${esc(x.seat)}</button>`).join("")}<button type="button" data-act="qr-split" class="ml-1 h-8 cursor-pointer rounded-full border border-border-strong px-3 text-xs hover:bg-button-hover">Gộp lại</button></div></div>`
     : `<div class="mb-3 flex items-start gap-3 rounded-xl bg-background p-3"><span class="grid size-9 shrink-0 place-items-center rounded-lg bg-surface text-foreground">${ic("users")}</span><span class="min-w-0 flex-1"><span class="block text-sm font-medium">1 QR cho cả đơn · ${sameShow.length} vé</span><span class="block text-xs text-muted">Ghế ${esc(sameShow.map(x => x.seat).join(", "))}. Nhân viên quét một lần, cả nhóm cùng vào.</span></span><button type="button" data-act="qr-split" class="shrink-0 text-xs font-medium underline underline-offset-2">Tách từng vé</button></div>`;
   const info = `<div class="flex items-start gap-3">${poster(f, "h-16 w-11 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h2 class="truncate text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div><p class="text-sm text-muted">${dayLabel(sh.start)} · ${hhmm(sh.start)} · ${room(sh.roomId).name}</p></div></div>
+    ${t.viewerUser && t.viewerUser === Auth.user.username && t.ownerUser !== Auth.user.username ? `<p class="mt-3 flex items-center gap-1.5 text-xs text-muted">${ic("gift", "size-3.5")}Vé do <b class="font-mono">@${esc(t.ownerUser)}</b> mua cho bạn.</p>` : t.viewerUser && t.ownerUser === Auth.user.username ? `<p class="mt-3 flex items-center gap-1.5 text-xs text-muted">${ic("user-check", "size-3.5")}Vé của bạn đi cùng <b>${esc(t.viewerName)}</b> (<span class="font-mono">@${esc(t.viewerUser)}</span>)${t.verified ? " · đã xác thực, vào thẳng" : " · kiểm tuổi ở cửa"}.</p>` : ""}
     <dl class="mt-4 grid grid-cols-3 gap-3 text-sm"><div><dt class="text-xs text-muted">Ghế</dt><dd class="font-medium">${grp && !split ? esc(sameShow.map(x => x.seat).join(", ")) : esc(t.seat)}</dd></div><div><dt class="text-xs text-muted">Mã vé</dt><dd class="font-mono font-medium">${t.code}</dd></div><div><dt class="text-xs text-muted">Tuổi</dt><dd class="font-medium">${t.needDoc ? "Kiểm tra tại cửa" : t.verified ? "Đã xác minh" : RATINGS[f.rating] ? "Kiểm tra tại cửa" : "Không giới hạn"}</dd></div></dl>
     ${new Date(sh.start) > new Date() || endOf(sh) > new Date() ? `<div class="mt-4 flex flex-wrap items-center justify-between gap-2">
       ${new Date(sh.start) > new Date() && freeSeats(sh) > 0 ? `<button type="button" class="${B.outline}" data-act="buy-more" data-show="${sh.id}">${ic("user-plus")}Mua thêm vé cùng suất</button>` : `<span class="text-xs text-muted">${freeSeats(sh) === 0 ? "Suất đã hết ghế" : "Suất đang chiếu"}</span>`}

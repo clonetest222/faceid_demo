@@ -118,6 +118,36 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     const tk = await T.ev(`myTickets().filter(t=>t.status==='valid').map(t=>t.code).pop()`);
     await T.ev(`location.hash='#/taikhoan'`); await sleep(1200);
     check("Voucher đã dùng hiện mờ trong Tài khoản; lịch sử có đơn vừa mua", await T.ev(`/CHAONHOM05/.test($t('main')) && /Lịch sử đặt vé/.test($t('main')) && !!document.querySelector('[data-act="hist-open"]')`));
+    // 4a. mua thêm vé phim T16 cho bạn đi cùng có tài khoản đã xác thực (giaovien ↔ hồ sơ gv) và một bạn chưa xác thực
+    const gvTok = await T.ev(`Remote.rpc('login',{p_user:'giaovien',p_pass:'giaovien123'}).then(r=>r.token)`);
+    await T.ev(`(async()=>{const d=Array.from({length:128},(_,i)=>Math.cos(i)/9);try{await Remote.rpc('face_check',{p_key:'gv',p_descriptor:d,p_device:'e2e',p_account:'e2e',p_method:'ảnh',p_liveness:false})}catch(e){};try{await Remote.rpc('link_vneid',{p_token:'${gvTok}',p_key:'gv',p_method:'e2e'})}catch(e){};return 1})()`);
+    await T.ev(`location.hash='#/lich'`); await sleep(800); await T.ev(H);
+    const okT16 = await T.ev(`(()=>{const s=S.shows.filter(s=>s.filmId==='f4'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>4).sort((a,b)=>new Date(a.start)-new Date(b.start))[0];if(!s)return false;A["pick-show"]({dataset:{show:s.id}});return true})()`);
+    check("Chọn suất phim T16 để mua cho bạn", okT16); await sleep(1200);
+    for (let k = 0; k < 2; k++) { await T.ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')].filter(b=>b.getAttribute('aria-pressed')==='false');s[Math.floor(s.length/3)].click();return 1})()`); await sleep(1300); }
+    await T.ev(`A["to-checkout"]()`); await sleep(900); await T.ev(H);
+    check("Chọn người xem có mục 'Bạn đi cùng có tài khoản CineVin…'", await T.ev(`!!document.querySelector('[data-select="viewer-0"] [data-sel-opt="friend"]')`));
+    await T.ev(`$sel('viewer-0','friend')`); await sleep(400); await T.ev(H);
+    check("Chưa nhập bạn → nút thanh toán khoá", await T.ev(`document.querySelector('[data-act="pay-ok"]').disabled`));
+    await T.ev(`$v('friend-0','nhanvien');$c('[data-act="friend-check"][data-i="0"]')`); await sleep(1200);
+    check("Nhập tài khoản nhân viên → không tìm thấy (không lộ nhân sự)", !(await T.ev(`!!S.draft.assign[0].viewer.user`)));
+    await T.ev(`$v('friend-0','GIAOVIEN');$c('[data-act="friend-check"][data-i="0"]')`); await sleep(1500);
+    check("Bạn đã xác thực VNeID → hiện tên, tuổi, 'vé vào thẳng'", await T.ev(`S.draft.assign[0].viewer.user==='giaovien' && S.draft.assign[0].viewer.verified===true && /vào thẳng/.test($t('main'))`), await T.ev(`JSON.stringify(S.draft.assign[0].viewer)`));
+    await T.ev(`$sel('viewer-1','friend')`); await sleep(400); await T.ev(`$v('friend-1','${email}');$c('[data-act="friend-check"][data-i="1"]')`); await sleep(1500);
+    check("Bạn chưa xác thực (tra theo email) → cảnh báo kiểm giấy tờ ở cửa", await T.ev(`S.draft.assign[1].viewer.user==='${user}' && S.draft.assign[1].viewer.verified===false`));
+    await T.shot("cust_10_ban_di_cung");
+    await T.ev(`$c('[data-act="pay-ok"]')`); await T.waitFor(`location.hash==='#/ve'`, 15000); await sleep(1200);
+    const fTk = await T.ev(`myTickets().filter(t=>t.viewerUser==='giaovien').map(t=>({code:t.code,verified:t.verified,needDoc:t.needDoc,name:t.viewerName}))`);
+    check("Vé của bạn đã xác thực: verified, không cần kiểm tuổi, tên theo hồ sơ VNeID", fTk.length === 1 && fTk[0].verified && !fTk[0].needDoc && fTk[0].name === "Phạm Thu Hà", JSON.stringify(fTk));
+    check("Trang Vé ghi 'Vé của bạn đi cùng … đã xác thực, vào thẳng'", await T.ev(`S.view.tk='${fTk[0] && fTk[0].code}'; render(); /Vé của bạn đi cùng/.test($t('main')) && /vào thẳng/.test($t('main'))`));
+    await T.shot("cust_11_ve_cua_ban");
+    await logout(T); await toLogin(T);
+    await T.ev(`$v('li-user','giaovien');$v('li-pass','giaovien123');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
+    await T.ev(`location.hash='#/ve'`); await sleep(1500);
+    check("Bạn đăng nhập → thấy vé trong Vé của tôi, ghi 'do @… mua cho bạn', có QR", await T.ev(`myTickets().some(t=>t.code==='${fTk[0] && fTk[0].code}') && (S.view.tk='${fTk[0] && fTk[0].code}', render(), /mua cho bạn/.test($t('main')) && !!document.querySelector('#qr-box'))`));
+    await T.shot("cust_12_ve_ban_nhan");
+    await logout(T); await toLogin(T);
+    await T.ev(`$v('li-user','${user}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
     // 4b. nhân viên quét một vé của đơn 2 vé → bảng cả đơn → cho vào 2 người một lần
     const tkAll = await T.ev(`myTickets().filter(t=>t.status==='valid'&&t.showId===S.tickets.find(x=>x.code==='${tk}').showId).map(t=>t.code)`);
     await logout(T); await toLogin(T);

@@ -145,6 +145,63 @@ begin
   return _session_json(t);
 end $$;
 
+-- ---------- người đi cùng có tài khoản: vé gắn vào tài khoản bạn, tuổi lấy từ hồ sơ VNeID của bạn ----------
+alter table public.tickets add column if not exists viewer_user text;
+create index if not exists tickets_viewer on public.tickets (viewer_user);
+
+-- Người mua tra bạn đi cùng theo email / tên đăng nhập / SĐT: chỉ trả tên, đã xác thực chưa, tuổi tại ngày chiếu (không trả ngày sinh, email)
+create or replace function public.companion_check(p_token uuid, p_id text, p_show text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare me app_users; f app_users; s shows; age int;
+begin
+  me := _need(p_token, array['khach', 'nhanvien', 'quanly']);
+  f := _find_user(p_id);
+  if f.username is null then raise exception 'companion_unknown'; end if;
+  if f.username = me.username then raise exception 'companion_self'; end if;
+  if f.role <> 'khach' then raise exception 'companion_unknown'; end if;
+  select * into s from shows where id = p_show;
+  age := case when f.citizen_key is null then null else extract(year from age(coalesce(s.start_at, now()), f.dob))::int end;
+  return jsonb_build_object('username', f.username, 'name', f.display_name, 'verified', f.citizen_key is not null, 'age', age);
+end $$;
+
+-- Bán đơn: với vé gắn bạn đi cùng, máy chủ tự chốt verified / need_doc / tên theo hồ sơ của bạn đó
+create or replace function public._apply_companions(p_owner text, p_show text, p_tickets jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare x jsonb; f app_users; s shows; fm text; min_age int; age int;
+begin
+  select * into s from shows where id = p_show;
+  for x in select * from jsonb_array_elements(p_tickets) loop
+    continue when coalesce(x->>'viewer_user', '') = '';
+    select * into f from app_users where username = x->>'viewer_user';
+    if f.username is null or f.username = p_owner then raise exception 'companion_unknown'; end if;
+    if f.citizen_key is not null then
+      age := extract(year from age(s.start_at, f.dob))::int;
+      fm := s.film_id; min_age := case fm when 'f3' then 13 when 'f4' then 16 when 'f5' then 18 else 0 end;
+      if age < min_age then raise exception 'companion_underage'; end if;
+      update tickets set viewer_user = f.username, viewer_name = f.display_name, verified = true, need_doc = false, reason = null where code = x->>'code';
+    else
+      update tickets set viewer_user = f.username, viewer_name = f.display_name, verified = false,
+        need_doc = case when (select film_id from shows where id = p_show) in ('f3', 'f4', 'f5') then true else need_doc end,
+        reason = 'Bạn đi cùng chưa xác thực VNeID – kiểm tra giấy tờ tại cửa' where code = x->>'code';
+    end if;
+  end loop;
+end $$;
+
+-- QR vé: bạn đi cùng cũng lấy được QR vé của mình (ghi đè ticket_qr của 004)
+create or replace function public.ticket_qr(p_token uuid, p_code text, p_back int default 0)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare u app_users; t tickets; w bigint := floor(extract(epoch from now()) / 15);
+begin
+  u := _need(p_token, array['khach', 'nhanvien', 'quanly']);
+  select * into t from tickets where code = p_code;
+  if t.code is null then raise exception 'unknown_ticket'; end if;
+  if u.role = 'khach' and coalesce(t.owner_user, '') <> u.username and coalesce(t.viewer_user, '') <> u.username then raise exception 'forbidden'; end if;
+  if p_back <> 0 and u.role <> 'quanly' then raise exception 'forbidden'; end if;
+  w := w - greatest(p_back, 0);
+  return jsonb_build_object('payload', 'CV1.' || t.code || '.' || w || '.' || _qr_sig(t.code, w),
+    'status', t.status, 'issued_at', to_timestamp(w * 15), 'next_at', to_timestamp((w + 1) * 15));
+end $$;
+
 -- ---------- voucher & điểm ----------
 create or replace function public.voucher_check(p_token uuid, p_code text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -188,6 +245,7 @@ begin
   perform sell_order(p_show, p_hold, p_tickets);
   update tickets set owner_user = u.username
   where code in (select x->>'code' from jsonb_array_elements(p_tickets) x) and coalesce(channel, '') <> 'Quầy';
+  perform _apply_companions(u.username, p_show, p_tickets);
   if v.code is not null then update vouchers set used_at = now(), used_by = u.username where code = v.code; end if;
   earn := case when u.role = 'khach' then floor(paid * 0.05 / 1000)::int else 0 end;
   update app_users set points = points - pts + earn where username = u.username;
@@ -218,7 +276,7 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   perform _need(p_token, array['nhanvien', 'quanly']);
   return query select t.code, t.show_id, t.seat, t.viewer_name, t.status, t.need_doc, t.owner_user, a.username
-    from tickets t join app_users a on a.username = t.owner_user join shows s on s.id = t.show_id
+    from tickets t join app_users a on a.username = coalesce(t.viewer_user, t.owner_user) join shows s on s.id = t.show_id
     where a.citizen_key = p_key and t.status = 'valid' and s.end_at > now() and s.start_at < now() + interval '12 hours'
     order by s.start_at;
 end $$;
@@ -258,5 +316,6 @@ grant execute on function public.login(text, text), public.register(text, text, 
   public.login_face(text, float8[], text), public.login_vneid(text, text),
   public.voucher_check(uuid, text), public.my_vouchers(uuid), public.sell_order_u(uuid, text, text, jsonb, text, int),
   public.refund_ticket_u(uuid, text), public.tickets_by_citizen(uuid, text),
-  public.order_tickets(uuid, text), public.admit_many_s(uuid, text[])
+  public.order_tickets(uuid, text), public.admit_many_s(uuid, text[]), public.companion_check(uuid, text, text)
   to anon, authenticated;
+revoke execute on function public._apply_companions(text, text, jsonb) from public, anon, authenticated;

@@ -93,7 +93,8 @@ const film = id => S.films.find(f => f.id === id) || { id, title: "Phim mới", 
 const room = id => S.rooms.find(r => r.id === id);
 const show = id => S.shows.find(s => s.id === id);
 const ON = () => Remote.online;
-const mine = t => Auth.user && (t.ownerUser ? t.ownerUser === Auth.user.username : false);
+/** Vé của tôi: tôi mua, hoặc bạn mua cho tôi (viewer_user) */
+const mine = t => !!Auth.user && (t.ownerUser === Auth.user.username || t.viewerUser === Auth.user.username);
 
 /* Hàm máy chủ có bản kiểm tra vai trò (migration 004): gọi bản đó kèm token */
 const RPC4 = { sell_order: "sell_order_u", refund_ticket: "refund_ticket_u", create_group: "create_group_u", admit_ticket: "admit_ticket_s", scan_member: "scan_member_s", member_spot: "member_spot_s", group_update: "group_update_s", add_show: "add_show_s", reset_demo: "reset_demo_s", reset_citizen_face: "reset_citizen_face_s" };
@@ -131,6 +132,8 @@ function audience(age) { if (age == null) return { label: "Người lớn", disc
 function viewerInfo(v, when) {
   if (v.kind === "self") return S.user.linked ? { name: S.user.name, age: ageAt(S.user.dob, when), verified: true, level: "VNeID" } : { name: S.user.name + " (chưa xác thực)", age: null, verified: false, level: null };
   if (v.kind === "dep") { const d = S.dependents.find(x => x.id === v.depId); return d ? { name: d.name, age: ageAt(d.dob, when), verified: d.level === "VNeID", level: d.level } : { name: "?", age: null, verified: false }; }
+  // bạn đi cùng có tài khoản: máy chủ đã trả tên, đã xác thực chưa, tuổi tại ngày chiếu
+  if (v.kind === "friend") return v.verified ? { name: v.name, age: v.age, verified: true, level: "VNeID", user: v.user } : { name: v.name + " (chưa xác thực)", age: null, verified: false, level: null, user: v.user };
   return { name: "Người đi cùng", age: null, verified: false, level: null };
 }
 function checkOrder(sh, assigns) {

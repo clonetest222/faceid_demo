@@ -84,6 +84,26 @@ ok("cho vào 3 vé một lần", adm.VB1 === "valid" && adm.VB3 === "valid" && a
 ok("quét lại đơn: 3 vé đã vào, vé cần kiểm tuổi vẫn chờ", (await q(`select * from order_tickets($1,'VB2')`, [nv.token])).filter(x => x.status === "used").length === 3);
 ok("cho vào lần 2 cùng vé → báo đã dùng", (await j(`select admit_many_s($1, array['VB1']) j`, [nv.token])).VB1 === "used");
 ok("khách không gọi được order_tickets", /forbidden/.test(await err(`select * from order_tickets($1,'VB2')`, [kh.token])));
+// ---- bạn đi cùng có tài khoản
+const gv = await j(`select login('giaovien','giaovien123') j`);
+await q(`select face_check('gv',$1::float8[],'DV','t','ảnh',false)`, [d]); await q(`select link_vneid($1,'gv','ảnh') j`, [gv.token]);
+await q(`select add_show_s($1,'S4','f4','R2',now()+interval '3h',now()+interval '5h')`, [ql.token]);   // phim T16
+const cc = await j(`select companion_check($1,'giaovien@example.com','S4') j`, [kh.token]).catch(() => null) || await j(`select companion_check($1,'giaovien','S4') j`, [kh.token]);
+ok("tra bạn đi cùng theo tên đăng nhập: tên + đã xác thực + tuổi tại ngày chiếu, không lộ ngày sinh", cc.username === "giaovien" && cc.verified === true && cc.age >= 35 && !("dob" in cc), JSON.stringify(cc));
+ok("tra chính mình → báo", /companion_self/.test(await err(`select companion_check($1,'khach','S4')`, [kh.token])));
+ok("tra tài khoản nhân viên → không tìm thấy (không lộ nhân sự)", /companion_unknown/.test(await err(`select companion_check($1,'nhanvien','S4')`, [kh.token])));
+ok("tra tài khoản chưa xác thực → verified false, không có tuổi", (await j(`select companion_check($1,'minh.anh','S4') j`, [kh.token])).verified === false);
+await q(`select hold_seat('S4','A1','H4',now()+interval '5 min')`); await q(`select hold_seat('S4','A2','H4',now()+interval '5 min')`);
+await q(`select sell_order_u($1,'S4','H4','[{"code":"VC1","seat":"A1","price":85000,"channel":"Online","viewer_user":"giaovien","need_doc":true},{"code":"VC2","seat":"A2","price":85000,"channel":"Online","viewer_user":"minh.anh","need_doc":true}]'::jsonb) j`, [kh.token]);
+const vc = await q(`select code, viewer_user, viewer_name, verified, need_doc from tickets where code in ('VC1','VC2') order by code`);
+ok("vé của bạn đã xác thực: verified, KHÔNG cần kiểm tuổi ở cửa, tên theo hồ sơ", vc[0].viewer_user === "giaovien" && vc[0].verified === true && vc[0].need_doc === false && vc[0].viewer_name === "Phạm Thu Hà", JSON.stringify(vc[0]));
+ok("vé của bạn chưa xác thực: vẫn kiểm tuổi ở cửa", vc[1].viewer_user === "minh.anh" && vc[1].need_doc === true);
+ok("bạn đi cùng lấy được QR vé của mình", /^CV1\.VC1\./.test((await j(`select ticket_qr($1,'VC1') j`, [gv.token])).payload));
+ok("người lạ không lấy được QR vé đó", /forbidden/.test(await err(`select ticket_qr($1,'VC1')`, [reg.token])));
+ok("quên vé: bạn đi cùng FaceID → tìm thấy vé được mua cho mình", (await q(`select * from tickets_by_citizen($1,'gv')`, [nv.token])).some(t => t.code === "VC1"));
+await q(`select hold_seat('S4','A3','H5',now()+interval '5 min')`);
+await q(`select face_check('binh',$1::float8[],'DV','t','ảnh',false)`, [d]); await q(`select link_vneid($1,'binh','ảnh')`, [reg.token]);
+ok("bạn đi cùng 15 tuổi mua phim T16 → máy chủ chặn", /companion_underage/.test(await err(`select sell_order_u($1,'S4','H5','[{"code":"VC3","seat":"A3","price":85000,"channel":"Online","viewer_user":"minh.anh"}]'::jsonb)`, [kh.token])));
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);
