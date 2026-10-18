@@ -484,6 +484,7 @@ const A = {
   "lich-film"(el) { S.view.lichFilm = el.dataset.v; save(); render(); },
   "lich-city"(el) { S.view.lichCity = el.dataset.v; save(); render(); },
   "work-cinema-set"(el) { SEL["work-cinema"](null, el.dataset.v); },
+  "seat-blocked"(el) { toast(`Ghế ${el.dataset.seat} đang bảo trì – không chọn được, mời chọn ghế khác`, "bad"); },
   "cancel-draft"() { releaseDraft(); save(); go("lich"); },
   "to-checkout"() { go("thanhtoan"); },
   "back-seats"() { go("ghe"); },
@@ -798,29 +799,48 @@ function cinemaSheet(c) {
 }
 function roomSheet(cid, r) {
   const isNew = !r, c = cinema(cid), n = roomsOf(cid).length;
-  r = r || { id: `${cid}-R${n + 1}`, name: `Phòng ${n + 1}`, kind: "2D", rows: 8, cols: 12, vip: [3, 4, 5], blocked: [], active: true, note: "" };
-  const letters = idx => idx.map(i => String.fromCharCode(65 + i)).join(",");
-  const html = `${sheetHead(isNew ? `Thêm phòng · ${esc(c.name)}` : `Sửa ${esc(r.name)} · ${esc(c.name)}`, "Ghế = hàng (A, B, C…) × số ghế. Ghế bảo trì không bán; phòng tạm ngưng không xếp suất.")}
-    <div class="grid gap-3 sm:grid-cols-2">${field("Mã phòng", input("rm-id", r.id, `${isNew ? "" : "disabled"} placeholder="${cid}-R${n + 1}"`), isNew ? `Dạng ${cid}-R1` : "")}${field("Tên phòng", input("rm-name", r.name, 'placeholder="Phòng 3 · IMAX"'))}${field("Công nghệ / loại phòng", sel("rm-kind", ROOM_KINDS.map(k => [k, ROOM_KIND_TXT[k]]), r.kind), "Phụ thu theo loại: 3D, GOLD, IMAX.")}<div class="grid grid-cols-2 gap-3">${field("Số hàng", input("rm-rows", r.rows, 'type="number" min="1" max="26" inputmode="numeric"'))}${field("Ghế mỗi hàng", input("rm-cols", r.cols, 'type="number" min="1" max="30" inputmode="numeric"'))}</div>${field("Hàng VIP", input("rm-vip", letters(r.vip), 'placeholder="D,E,F"'), "Chữ cái hàng, cách nhau dấu phẩy (hàng couple/ghế đôi xếp vào VIP).")}${field("Ghế bảo trì / khoá", input("rm-blocked", (r.blocked || []).join(","), 'placeholder="A1,B2"'), "Mã ghế, cách nhau dấu phẩy. Để trống = không có.")}${field("Ghi chú", input("rm-note", r.note || "", 'placeholder="Đang thay máy chiếu – xong 20/10"'))}<div class="flex items-end pb-2">${chk("rm-active", "Phòng đang hoạt động (bỏ chọn = tạm ngưng)", r.active !== false)}</div></div>
+  r = r || { id: `${cid}-R${n + 1}`, name: `Phòng ${n + 1}`, kind: "2D", rows: 8, cols: 12, vip: [3, 4, 5], vipSeats: [], couple: [], blocked: [], active: true, note: "" };
+  // trạng thái trình sửa: loại từng ghế (chỉ ghi ghế khác "thường"); công cụ đang chọn áp lên ghế / cả hàng
+  const ed = { rows: r.rows, cols: r.cols, tool: "vip", types: {} };
+  for (let i = 0; i < r.rows; i++) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j), k = seatKind(r, sid); if (k !== "std") ed.types[sid] = k; }
+  const TOOLS = [["std", "Thường", "square", "border-border-strong bg-surface"], ["vip", "VIP", "crown", "border-warning/60 bg-warning-bg text-warning"], ["couple", "Ghế đôi", "heart", "border-[var(--primary)]/50 bg-primary-light text-primary"], ["blocked", "Bảo trì", "wrench", "border-dashed border-border bg-background text-muted"]];
+  const count = () => { const o = { std: 0, vip: 0, couple: 0, blocked: 0 }; for (let i = 0; i < ed.rows; i++) for (let j = 0; j < ed.cols; j++) o[ed.types[seatId(i, j)] || "std"]++; return o; };
+  const grid = () => { const half = Math.ceil(ed.cols / 2), cnt = count(); let h = `<div class="mb-2 flex flex-wrap items-center gap-2"><span class="text-sm font-medium">Loại ghế – chọn công cụ rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng</span></div>
+      <div class="mb-3 flex flex-wrap gap-2">${TOOLS.map(([k, l, ic_, cls]) => `<button type="button" data-act="tool" data-v="${k}" aria-pressed="${ed.tool === k}" class="flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-sm ${cls} ${ed.tool === k ? "ring-2 ring-focus" : ""}">${ic(ic_, "size-4")}${l}<span class="tabular-nums opacity-70">${cnt[k]}</span></button>`).join("")}</div>
+      <div class="mx-auto mb-3 max-w-[420px]"><div class="h-1 rounded-full bg-foreground/20"></div><p class="mt-1 text-center text-xs text-muted">Màn hình</p></div><div class="overflow-x-auto pb-1"><div class="mx-auto grid w-max gap-1">`;
+    for (let i = 0; i < ed.rows; i++) { const L = String.fromCharCode(65 + i); h += `<div class="flex items-center gap-1"><button type="button" data-act="row" data-v="${i}" title="Áp ${SEAT_KIND_TXT[ed.tool]} cho cả hàng ${L}" class="grid size-7 cursor-pointer place-items-center rounded-md text-xs font-medium text-muted hover:bg-item-hover">${L}</button>`;
+      for (let j = 0; j < ed.cols; j++) { const sid = seatId(i, j), k = ed.types[sid] || "std", t = TOOLS.find(x => x[0] === k); h += `<button type="button" data-act="seat" data-v="${sid}" title="${sid} · ${t[1]}" class="grid size-7 cursor-pointer place-items-center rounded-md border text-[10px] tabular-nums hover:ring-2 hover:ring-focus ${t[3]}">${k === "std" ? j + 1 : ic(t[2], "size-3")}</button>${j === half - 1 ? '<span class="w-2"></span>' : ""}`; }
+      h += `</div>`; }
+    return h + `</div></div><p class="mt-2 text-xs text-muted">${cnt.vip + cnt.couple + cnt.blocked + cnt.std} ghế · bán được ${cnt.std + cnt.vip + cnt.couple}. Ghế đôi phụ thu ${vnd(PRICE_TIERS[c.tier].couple)}, VIP +${vnd(PRICE_TIERS[c.tier].vip)}; ghế bảo trì hiện khoá trên sơ đồ của khách.</p>`; };
+  const html = `${sheetHead(isNew ? `Thêm phòng · ${esc(c.name)}` : `Sửa ${esc(r.name)} · ${esc(c.name)}`, "Ghế = hàng (A, B, C…) × số ghế. Phòng tạm ngưng không xếp suất.")}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Mã phòng", input("rm-id", r.id, `${isNew ? "" : "disabled"} placeholder="${cid}-R${n + 1}"`), isNew ? `Dạng ${cid}-R1` : "")}${field("Tên phòng", input("rm-name", r.name, 'placeholder="Phòng 3 · IMAX"'))}${field("Công nghệ / loại phòng", sel("rm-kind", ROOM_KINDS.map(k => [k, ROOM_KIND_TXT[k]]), r.kind), "Phụ thu theo loại: 3D, GOLD, IMAX.")}<div class="grid grid-cols-2 gap-3">${field("Số hàng", input("rm-rows", r.rows, 'type="number" min="1" max="26" inputmode="numeric"'))}${field("Ghế mỗi hàng", input("rm-cols", r.cols, 'type="number" min="1" max="30" inputmode="numeric"'))}</div></div>
+    <div id="rm-grid" class="rounded-xl border border-border p-3">${grid()}</div>
+    <div class="grid gap-3 sm:grid-cols-2">${field("Ghi chú", input("rm-note", r.note || "", 'placeholder="Đang thay máy chiếu – xong 20/10"'))}<div class="flex items-end pb-2">${chk("rm-active", "Phòng đang hoạt động (bỏ chọn = tạm ngưng)", r.active !== false)}</div></div>
     <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button>${!isNew && Auth.user.role === "quanly" ? `<button type="button" class="${B.ghost} ml-auto text-err" data-act="del">${ic("trash-2")}Xoá phòng</button>` : ""}</div>`;
-  adminSheet(html, {
+  const redraw = () => { $("#rm-grid").innerHTML = grid(); };
+  const sh = adminSheet(html, {
+    tool(b) { ed.tool = b.dataset.v; redraw(); },
+    seat(b) { const sid = b.dataset.v; ed.tool === "std" ? delete ed.types[sid] : ed.types[sid] = ed.tool; redraw(); },
+    row(b) { const i = +b.dataset.v; for (let j = 0; j < ed.cols; j++) { const sid = seatId(i, j); ed.tool === "std" ? delete ed.types[sid] : ed.types[sid] = ed.tool; } redraw(); },
     async save(b, sh) {
-      const rows = +v("rm-rows"), cols = +v("rm-cols"), id = isNew ? v("rm-id").toUpperCase() : r.id;
-      const vip = v("rm-vip").toUpperCase().split(/[,\s]+/).filter(Boolean).map(x => x.charCodeAt(0) - 65).filter(i => i >= 0 && i < rows);
-      const blocked = v("rm-blocked").toUpperCase().split(/[,\s]+/).filter(x => /^[A-Z][0-9]{1,2}$/.test(x));
-      const p = { id, cinema_id: cid, name: v("rm-name") || id, kind: v("rm-kind") || "2D", rows, cols, vip, blocked, active: $("#rm-active").checked, note: v("rm-note") };
+      const rows = ed.rows, cols = ed.cols, id = isNew ? v("rm-id").toUpperCase() : r.id;
+      const pick = k => Object.keys(ed.types).filter(sid => ed.types[sid] === k && sid.charCodeAt(0) - 65 < rows && +sid.slice(1) <= cols).sort();
+      const vipSeats = pick("vip"), couple = pick("couple"), blocked = pick("blocked");
+      const p = { id, cinema_id: cid, name: v("rm-name") || id, kind: v("rm-kind") || "2D", rows, cols, vip: [], vip_seats: vipSeats, couple, blocked, active: $("#rm-active").checked, note: v("rm-note") };
       if (!new RegExp(`^${cid}-[A-Z0-9]{1,6}$`).test(id)) return toast(Auth.message({ message: "bad_room_id" }), "bad");
       if (!(rows >= 1 && rows <= 26 && cols >= 1 && cols <= 30)) return toast(Auth.message({ message: "bad_size" }), "bad");
       if (isNew && ROOMS.some(x => x.id === id)) return toast("Mã phòng đã tồn tại", "bad");
-      try { await adminCall("save_room_s", { p }, () => { const i = ROOMS.findIndex(x => x.id === id); const obj = { id, cinemaId: cid, name: p.name, kind: p.kind, rows, cols, vip, blocked, active: p.active, note: p.note }; i >= 0 ? Object.assign(ROOMS[i], obj) : ROOMS.push(obj); }); }
-      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
-      log("admin", `${isNew ? "Thêm" : "Sửa"} phòng ${id} (${p.kind}, ${rows}×${cols}${blocked.length ? ", khoá " + blocked.length + " ghế" : ""}${p.active ? "" : ", tạm ngưng"})`); sh.close(); save(); render(); toast(`Đã lưu ${p.name}`); },
+      try { await adminCall("save_room_s", { p }, () => { const i = ROOMS.findIndex(x => x.id === id); const obj = { id, cinemaId: cid, name: p.name, kind: p.kind, rows, cols, vip: [], vipSeats, couple, blocked, active: p.active, note: p.note }; i >= 0 ? Object.assign(ROOMS[i], obj) : ROOMS.push(obj); }); }
+      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008/009" : Auth.message(e), "bad"); }
+      log("admin", `${isNew ? "Thêm" : "Sửa"} phòng ${id} (${p.kind}, ${rows}×${cols}, VIP ${vipSeats.length}, đôi ${couple.length}, bảo trì ${blocked.length}${p.active ? "" : ", tạm ngưng"})`); sh.close(); save(); render(); toast(`Đã lưu ${p.name}`); },
     async del(b, sh) {
       if (!confirm(`Xoá ${r.name} (${r.id})? Chỉ xoá được khi không còn vé của suất sắp chiếu.`)) return;
       try { await adminCall("delete_room_s", { p_id: r.id }, () => { const i = ROOMS.findIndex(x => x.id === r.id); if (i >= 0) ROOMS.splice(i, 1); S.shows = S.shows.filter(s => s.roomId !== r.id); }); }
       catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
       log("admin", `Xoá phòng ${r.id}`); sh.close(); save(); render(); toast("Đã xoá phòng " + r.id); },
   }, { label: "Phòng chiếu", wide: true });
+  // đổi số hàng / ghế mỗi hàng → vẽ lại sơ đồ (giữ loại ghế đã đánh dấu còn nằm trong kích thước mới)
+  sh.el.addEventListener("input", e => { if (e.target.id === "rm-rows" || e.target.id === "rm-cols") { const rows = Math.min(26, Math.max(1, +$("#rm-rows").value || 1)), cols = Math.min(30, Math.max(1, +$("#rm-cols").value || 1)); ed.rows = rows; ed.cols = cols; redraw(); } });
 }
 function filmSheet(f) {
   const isNew = !f; f = f || { id: "f" + Date.now().toString(36).slice(-5), title: "", rating: "P", dur: 100, genre: "", img: "", active: true };

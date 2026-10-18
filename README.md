@@ -42,7 +42,8 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 | Việc | Cách làm |
 |---|---|
 | Cơ sở | **Cơ sở & phòng**: thêm/sửa/xoá cơ sở (mã 3 số, địa chỉ, hotline, hạng giá, tạm ngưng). Quản lý rạp chỉ sửa rạp mình; xoá chỉ khi chưa bán vé |
-| Phòng chiếu | Thêm/sửa/xoá phòng: số hàng × ghế, loại 2D / 3D / GOLD / IMAX (phụ thu theo loại), hàng VIP, **ghế bảo trì** (sơ đồ hiện khoá, không bán, trừ khỏi sức chứa), **tạm ngưng phòng** (không xếp suất). Không thu nhỏ phòng dưới ghế đã bán. Kỹ thuật và quản lý làm được |
+| Phòng chiếu | Thêm/sửa/xoá phòng: số hàng × ghế, loại 2D / 3D / GOLD / IMAX (phụ thu theo loại), **tạm ngưng phòng** (không xếp suất). Không thu nhỏ phòng dưới ghế đã bán. Kỹ thuật và quản lý làm được |
+| Sơ đồ ghế (009) | Trong hộp sửa phòng là **sơ đồ ghế giống màn khách chọn ghế**: chọn công cụ Thường / VIP / **Ghế đôi** / **Bảo trì** rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng. Khách thấy ghế đôi (phụ thu, biểu tượng tim) và ghế bảo trì (khoá, bấm vào báo "đang bảo trì – không chọn được") |
 | Kho phim | **Kho phim** dùng chung: thêm/sửa phim (nhãn tuổi, thời lượng, poster), ngừng chiếu. **Phân phối phim → cơ sở** bằng ma trận; phim chưa phân phối không xếp suất được ở rạp đó (`film_not_at_cinema`) |
 | Suất chiếu | Bấm vào suất trên lưới: ghế bán, vé qua hệ thống, **đổi ngày/giờ/phòng** (đã bán vé thì chỉ đổi giờ – máy chủ kiểm trùng), **huỷ suất** kèm lý do → mọi vé còn hiệu lực hoàn vào thẻ quà tặng của từng khách, ghế nhả, suất ẩn khỏi lịch khách |
 | Báo cáo | **Báo cáo & phân tích**: doanh thu/ghế bán/lấp đầy theo phim, giờ cao điểm, ghế VIP so ghế thường, suất đông nhất, theo kênh, theo cơ sở; lọc toàn chuỗi / rạp, hôm nay / ngày mai |
@@ -78,13 +79,13 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 
 ## Chạy
 - Online: https://clonetest222.github.io/faceid_demo/
-- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
+- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Ghép nối điện thoại: `?pair=MÃ`.
 
 ## Kiểm thử
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
-- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 94 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
+- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 97 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
 - `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 36 bước nghiệp vụ khách hàng, gồm bạn đi cùng có tài khoản và cửa soát đơn nhiều vé (cần 005).
 - `node tools/e2e-more.mjs [URL]`: mua thêm vé cùng suất, một QR cho cả đơn / tách từng vé (10 bước).

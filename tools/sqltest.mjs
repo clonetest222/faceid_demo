@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -136,6 +136,8 @@ ok("nhân viên không sửa phòng", /forbidden/.test(await err(`select save_ro
 ok("kỹ thuật rạp 086 không sửa phòng rạp 035", /wrong_cinema/.test(await err(`select save_room_s($1,'{"id":"035-R1","cinema_id":"035","rows":8,"cols":12}'::jsonb)`, [kt.token])));
 await q(`select save_room_s($1,'{"id":"086-R2","cinema_id":"086","name":"Phòng 2","kind":"IMAX","rows":10,"cols":14,"vip":[4,5],"active":true}'::jsonb)`, [qlv.token]);
 ok("quản lý rạp thêm phòng IMAX", (await q(`select kind from rooms where id='086-R2'`))[0].kind === "IMAX");
+await q(`select save_room_s($1,'{"id":"086-R2","cinema_id":"086","name":"Phòng 2","kind":"IMAX","rows":10,"cols":14,"vip":[],"vip_seats":["E1","E2"],"couple":["J13","J14"],"blocked":["a5"],"active":true}'::jsonb)`, [kt.token]);
+ok("009: loại ghế theo từng ghế (VIP E1,E2 · đôi J13,J14 · bảo trì A5) lưu đúng", JSON.stringify((await q(`select vip_seats, couple, blocked from rooms where id='086-R2'`))[0]) === '{"vip_seats":["E1","E2"],"couple":["J13","J14"],"blocked":["A5"]}');
 await q(`select save_cinema_s($1,'{"id":"099","name":"CineVin Huế","city":"Thừa Thiên Huế","district":"TP Huế","tier":"B"}'::jsonb)`, [ql.token]);
 ok("quản lý chuỗi thêm cơ sở 099; quản lý rạp không thêm cơ sở khác", (await q(`select name from cinemas where id='099'`))[0].name === "CineVin Huế" && /wrong_cinema/.test(await err(`select save_cinema_s($1,'{"id":"098","name":"CineVin X","city":"Y"}'::jsonb)`, [qlv.token])));
 await q(`select save_cinema_s($1,'{"id":"086","name":"CineVin Vinh Centre","city":"Nghệ An","district":"TP Vinh","hotline":"1900 6017","tier":"B"}'::jsonb)`, [qlv.token]);

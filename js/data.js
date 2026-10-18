@@ -24,8 +24,8 @@ const FILMS = [
 /* Chuỗi rạp: Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất. Giá vé theo hạng rạp: A (Hà Nội, TP.HCM), B (Vinh, Đà Nẵng).
    Nghệ An có 2 cơ sở cùng TP Vinh để thử tình huống "một nơi nhiều cơ sở". */
 const PRICE_TIERS = {
-  A: { weekday: { adult: 115000, child: 68000, senior: 83000, u22: 70000 }, wed: { adult: 79000, child: 68000, senior: 79000, u22: 70000 }, weekend: { adult: 135000, child: 68000, senior: 93000, u22: 70000 }, vip: 5500, gold: 60000, imax: 80000, s3d: { weekday: 32000, weekend: 53000 }, holiday: 11000 },
-  B: { weekday: { adult: 70000, child: 50000, senior: 50000, u22: 60000 }, wed: { adult: 60000, child: 50000, senior: 60000, u22: 60000 }, weekend: { adult: 85000, child: 58000, senior: 58000, u22: 60000 }, vip: 5500, gold: 40000, imax: 60000, s3d: { weekday: 32000, weekend: 32000 }, holiday: 11000 },
+  A: { weekday: { adult: 115000, child: 68000, senior: 83000, u22: 70000 }, wed: { adult: 79000, child: 68000, senior: 79000, u22: 70000 }, weekend: { adult: 135000, child: 68000, senior: 93000, u22: 70000 }, vip: 5500, couple: 26000, gold: 60000, imax: 80000, s3d: { weekday: 32000, weekend: 53000 }, holiday: 11000 },
+  B: { weekday: { adult: 70000, child: 50000, senior: 50000, u22: 60000 }, wed: { adult: 60000, child: 50000, senior: 60000, u22: 60000 }, weekend: { adult: 85000, child: 58000, senior: 58000, u22: 60000 }, vip: 5500, couple: 16000, gold: 40000, imax: 60000, s3d: { weekday: 32000, weekend: 32000 }, holiday: 11000 },
 };
 const CINEMAS = [
   { id: "086", name: "CineVin Vinh Centre", city: "Nghệ An", district: "TP Vinh", address: "Tầng 4, TTTM Vinh Center, 69 Hồ Tùng Mậu, P. Trường Thi", hotline: "1900 6017", tier: "B" },
@@ -49,7 +49,7 @@ const ROOM_PLAN = {
 const ROOM_KIND_TXT = { "2D": "2D Phụ đề", "3D": "3D Phụ đề", GOLD: "2D Phụ đề · Phòng GOLD", IMAX: "IMAX 2D" };
 const ROOM_KINDS = ["2D", "3D", "GOLD", "IMAX"];
 const ROOMS = [];
-for (const cid in ROOM_PLAN) ROOM_PLAN[cid].forEach(([r, kind, rows, cols, vip], i) => ROOMS.push({ id: `${cid}-${r}`, cinemaId: cid, name: `Phòng ${i + 1}${kind === "2D" ? "" : " · " + kind}`, kind, rows, cols, vip, blocked: [], active: true, note: "" }));
+for (const cid in ROOM_PLAN) ROOM_PLAN[cid].forEach(([r, kind, rows, cols, vip], i) => ROOMS.push({ id: `${cid}-${r}`, cinemaId: cid, name: `Phòng ${i + 1}${kind === "2D" ? "" : " · " + kind}`, kind, rows, cols, vip, vipSeats: [], couple: [], blocked: [], active: true, note: "" }));
 /* Lịch chiếu cố định theo ngày (hôm nay + 2 ngày tới): mọi máy sinh ra cùng một lịch với cùng mã suất,
    nên khi nối Supabase chỉ máy đầu tiên tạo, các máy sau dùng chung. Ghế "đã bán sẵn" sinh theo hạt giống cố định. */
 function buildSchedule() {
@@ -129,7 +129,7 @@ const SEED_ORDER = CINEMAS.map(c => c.id);   // giữ thứ tự hiển thị nh
 const seedRank = id => { const i = SEED_ORDER.indexOf(id); return i < 0 ? 1000 + Number(id) : i; };
 function applyCatalog({ cinemas, rooms, films, cinemaFilms } = {}) {
   if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", active: c.active !== false })); }
-  if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], blocked: r.blocked || [], active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
+  if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
   if (films && films.length) { FILMS.length = 0; films.forEach(f => FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false })); S.films = FILMS; }
   if (cinemaFilms) { DIST.clear(); cinemaFilms.forEach(x => { if (!x.active) DIST.add(x.cinema_id + "|" + x.film_id); }); }
 }
@@ -154,7 +154,7 @@ const formatOf = sh => sh.format || ROOM_KIND_TXT[(room(sh.roomId) || {}).kind] 
 /** "CineVin Vinh Centre · Phòng 2 · 3D" – nơi chiếu in trên vé, lịch, quầy */
 const placeOf = sh => `${cinemaOf(sh).name} · ${room(sh.roomId).name}`;
 /** Giá thường / VIP (người lớn) của một suất, cho chú giải sơ đồ ghế */
-function priceLegend(sh) { const r = room(sh.roomId); let std = null, vip = null; for (let i = 0; i < r.rows; i++) { const p = seatPrice(sh, seatId(i, 0)); if (r.vip.includes(i)) vip ??= p; else std ??= p; } return { std: std ?? vip, vip: vip ?? std }; }
+function priceLegend(sh) { const r = room(sh.roomId), out = {}; for (let i = 0; i < r.rows; i++) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j), k = seatKind(r, sid); if (k !== "blocked" && out[k] == null) out[k] = seatPrice(sh, sid); } const t = PRICE_TIERS[cinemaOf(sh).tier] || PRICE_TIERS.B, base = out.std ?? out.vip ?? out.couple ?? 0; return { std: base, vip: out.vip ?? base + t.vip, couple: out.couple ?? base + t.couple, hasVip: out.vip != null, hasCouple: out.couple != null }; }
 const show = id => S.shows.find(s => s.id === id);
 const ON = () => Remote.online;
 /** Vé của tôi: tôi mua, hoặc bạn mua cho tôi (viewer_user) */
@@ -190,7 +190,11 @@ async function logVerif(kind, ok, { key = null, method = "", detail = {} } = {})
 function tier() { if (S.user.linked && ageAt(S.user.dob, new Date()) <= 22) return "U22"; return S.user.points >= 4000 ? "VIP" : "Member"; }
 
 /* ---------- giá & độ tuổi ---------- */
-const isVip = (r, sid) => r.vip.includes(sid.charCodeAt(0) - 65);
+/** Loại ghế: blocked (bảo trì, không bán) · couple (ghế đôi, phụ thu) · vip · std. VIP theo hàng (006) hoặc theo ghế (009). */
+const seatKind = (r, sid) => (r.blocked || []).includes(sid) ? "blocked" : (r.couple || []).includes(sid) ? "couple" : ((r.vipSeats || []).includes(sid) || (r.vip || []).includes(sid.charCodeAt(0) - 65)) ? "vip" : "std";
+const isVip = (r, sid) => seatKind(r, sid) === "vip";
+const isCouple = (r, sid) => seatKind(r, sid) === "couple";
+const SEAT_KIND_TXT = { std: "Thường", vip: "VIP", couple: "Ghế đôi", blocked: "Bảo trì" };
 /** Loại ngày của suất: thứ Tư vui vẻ · cuối tuần (T6, T7, CN) · ngày thường */
 function dayType(sh) { const d = new Date(sh.start).getDay(); return d === 3 ? "wed" : (d === 0 || d === 5 || d === 6) ? "weekend" : "weekday"; }
 /** Giá một ghế = bảng giá của rạp [loại ngày][đối tượng] + phụ thu ghế VIP + phụ thu 3D / phòng GOLD */
@@ -198,6 +202,7 @@ function seatPrice(sh, sid, aud = "adult") {
   const r = room(sh.roomId), c = cinemaOf(sh), t = PRICE_TIERS[c.tier] || PRICE_TIERS.B, dt = dayType(sh);
   let p = t[dt][aud] ?? t[dt].adult;
   if (isVip(r, sid)) p += t.vip;
+  if (isCouple(r, sid)) p += t.couple;
   if (r.kind === "3D") p += t.s3d[dt === "weekend" ? "weekend" : "weekday"];
   if (r.kind === "GOLD") p += t.gold;
   if (r.kind === "IMAX") p += t.imax || t.gold;

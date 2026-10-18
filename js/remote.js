@@ -34,7 +34,7 @@ const Remote = (() => {
       else sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
       await rpc("ensure_schedule", { p_shows: schedule.rows, p_sold: schedule.sold });
       // migration 006: danh mục rạp/phòng của chuỗi (không có hàm → máy chủ chưa chạy 006, chạy theo mã phòng)
-      if (v6 === null && typeof CINEMAS !== "undefined") { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
+      if (v6 === null && typeof CINEMAS !== "undefined") { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip, blocked: r.blocked, vip_seats: r.vipSeats, couple: r.couple })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
       // migration 008: kho phim dùng chung + phân phối
       if (v6 && v8 === null && typeof FILMS !== "undefined") { try { await rpc("ensure_films", { p_films: FILMS.map(f => ({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre, img: f.img })) }); v8 = true; } catch (e) { v8 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
       await reloadCatalog();

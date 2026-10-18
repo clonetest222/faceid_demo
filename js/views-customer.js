@@ -102,17 +102,19 @@ function seatMap(sh, selected, act, opts = {}) {
     const L = String.fromCharCode(65 + i);
     h += `<div class="flex items-center gap-0.5 sm:gap-1.5"><span class="hidden w-4 text-center text-xs text-muted sm:block">${L}</span>`;
     for (let j = 0; j < r.cols; j++) {
-      const sid = seatId(i, j), st = seatState(sh.id, sid), pick = selected.includes(sid), vip = r.vip.includes(i);
-      const own = mine.has(sid), sold = st && st.st === "sold" && !own, held = st && st.st === "held" && !pick, blk = isBlocked(r, sid);
+      const sid = seatId(i, j), st = seatState(sh.id, sid), pick = selected.includes(sid), kind = seatKind(r, sid), vip = kind === "vip", cpl = kind === "couple";
+      const own = mine.has(sid), sold = st && st.st === "sold" && !own, held = st && st.st === "held" && !pick, blk = kind === "blocked";
       const look = opts.inspect && !blk && (sold || held || own);
-      const cls = blk ? "bg-background text-muted/40 border-border border-dashed" : own ? "bg-success-bg text-success border-success/50" : pick ? "bg-primary text-primary-foreground border-primary" : sold ? "bg-secondary text-muted/60 border-secondary" : held ? "bg-background text-muted border-dashed border-muted/50" : vip ? "bg-surface border-warning/60 text-foreground hover:bg-warning-bg" : "bg-surface border-border-strong text-foreground hover:bg-button-hover";
-      h += `<button type="button" data-act="${look ? "seat-info" : act}" data-seat="${sid}" ${blk || ((sold || held || own) && !look) ? "disabled" : ""} aria-pressed="${pick}" aria-label="Ghế ${sid}${vip ? " VIP" : ""}${blk ? ", ghế bảo trì – không bán" : own ? ", ghế của bạn (đã mua)" : sold ? ", đã bán" : held ? ", người khác đang giữ" : ""}${look ? " – bấm để xem" : ""}" class="grid size-6 cursor-pointer place-items-center rounded-md border text-xs tabular-nums disabled:cursor-not-allowed sm:size-9 ${cls} ${look ? "hover:ring-2 hover:ring-focus" : ""}">${blk ? ic("wrench", "size-3") : own ? ic("check", "size-3") : sold ? ic("x", "size-3") : `<span class="hidden sm:inline">${j + 1}</span>`}</button>${j === half - 1 ? '<span class="w-1 sm:w-3"></span>' : ""}`;
+      const cls = blk ? "bg-background text-muted/40 border-border border-dashed cursor-not-allowed" : own ? "bg-success-bg text-success border-success/50" : pick ? "bg-primary text-primary-foreground border-primary" : sold ? "bg-secondary text-muted/60 border-secondary" : held ? "bg-background text-muted border-dashed border-muted/50" : cpl ? "bg-surface border-[var(--primary)]/50 text-foreground hover:bg-primary-light" : vip ? "bg-surface border-warning/60 text-foreground hover:bg-warning-bg" : "bg-surface border-border-strong text-foreground hover:bg-button-hover";
+      // ghế bảo trì: không disabled để bấm vào vẫn nhận được thông báo "đang bảo trì"
+      h += `<button type="button" data-act="${blk ? "seat-blocked" : look ? "seat-info" : act}" data-seat="${sid}" ${!blk && (sold || held || own) && !look ? "disabled" : ""} aria-pressed="${pick}" ${blk ? 'aria-disabled="true"' : ""} title="Ghế ${sid} · ${SEAT_KIND_TXT[kind]}${blk ? " – không chọn được" : ""}" aria-label="Ghế ${sid}${vip ? " VIP" : cpl ? " ghế đôi" : ""}${blk ? ", đang bảo trì – không chọn được" : own ? ", ghế của bạn (đã mua)" : sold ? ", đã bán" : held ? ", người khác đang giữ" : ""}${look ? " – bấm để xem" : ""}" class="grid size-6 cursor-pointer place-items-center rounded-md border text-xs tabular-nums disabled:cursor-not-allowed sm:size-9 ${cls} ${look ? "hover:ring-2 hover:ring-focus" : ""}">${blk ? ic("wrench", "size-3") : own ? ic("check", "size-3") : sold ? ic("x", "size-3") : cpl && !pick ? ic("heart", "size-3") : `<span class="hidden sm:inline">${j + 1}</span>`}</button>${j === half - 1 ? '<span class="w-1 sm:w-3"></span>' : ""}`;
     }
     h += `</div>`;
   }
   return h + `</div></div><div class="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted sm:flex sm:flex-wrap sm:justify-center sm:gap-x-5">
     <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-border-strong bg-surface"></i>Thường ${vnd(priceLegend(sh).std)}</span>
-    <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-warning/60 bg-surface"></i>VIP ${vnd(priceLegend(sh).vip)}</span>
+    ${priceLegend(sh).hasVip ? `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-warning/60 bg-surface"></i>VIP ${vnd(priceLegend(sh).vip)}</span>` : ""}
+    ${priceLegend(sh).hasCouple ? `<span class="flex items-center gap-1.5"><i class="grid size-4 place-items-center rounded border border-[var(--primary)]/50 bg-surface">${ic("heart", "size-2.5")}</i>Ghế đôi ${vnd(priceLegend(sh).couple)}</span>` : ""}
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-primary"></i>Bạn chọn</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-muted/50 bg-background"></i>Người khác đang giữ</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span>
@@ -122,9 +124,9 @@ function seatMap(sh, selected, act, opts = {}) {
 }
 function orderSummary(sh, seats, withNote = true) {
   const f = film(sh.filmId), r = room(sh.roomId), total = seats.reduce((a, s) => a + seatPrice(sh, s), 0);
-  const vipN = seats.filter(s => isVip(r, s)).length;
+  const vipN = seats.filter(s => isVip(r, s)).length, cplN = seats.filter(s => isCouple(r, s)).length;
   return `<div class="grid gap-3">
-    <div class="flex items-center justify-between gap-3 text-sm"><span class="text-muted">Ghế</span><span class="text-right font-medium">${seats.length ? esc(seats.join(", ")) + (vipN ? ` · ${vipN === seats.length ? "VIP" : vipN + " VIP"}` : "") : "Chưa chọn"}</span></div>
+    <div class="flex items-center justify-between gap-3 text-sm"><span class="text-muted">Ghế</span><span class="text-right font-medium">${seats.length ? esc(seats.join(", ")) + (vipN ? ` · ${vipN === seats.length ? "VIP" : vipN + " VIP"}` : "") + (cplN ? ` · ${cplN} ghế đôi` : "") : "Chưa chọn"}</span></div>
     <div class="flex items-center justify-between gap-3 text-sm"><span class="text-muted">Giá vé</span><span class="tabular-nums">${seats.length ? `${seats.length} vé` : "–"}</span></div>
     <div class="flex items-center justify-between border-t border-border pt-3"><span class="font-medium">Tổng</span><span class="text-lg font-semibold tabular-nums">${vnd(total)}</span></div>
     ${withNote && RATINGS[f.rating] > 0 ? `<div class="flex items-start gap-2 rounded-xl bg-background p-3 text-xs text-muted">${ic("shield-check", "size-4 mt-px")}<span class="text-pretty">Phim ${f.rating}: bước thanh toán sẽ xác minh tuổi qua VNeID${S.user.linked ? " (đã liên kết, chỉ cần FaceID)" : " – liên kết một lần ở Tài khoản"}.</span></div>` : ""}
