@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -161,6 +161,13 @@ const nCancel = (await q(`select cancel_show_s($1,'X2','Hỏng máy chiếu') n`
 ok("huỷ suất: hoàn 1 vé vào thẻ quà tặng của người mua, nhả ghế, suất = cancelled", nCancel === 1 && (await q(`select status from tickets where code='VX2'`))[0].status === "refunded" && (await q(`select count(*)::int n from vouchers where owner_user=$1 and kind='gift' and amount=70000`, [reg.username]))[0].n === 1 && (await q(`select count(*)::int n from seat_locks where show_id='X2'`))[0].n === 0 && (await q(`select status, cancel_reason from shows where id='X2'`))[0].status === "cancelled");
 ok("suất đã huỷ không đổi được nữa", /show_cancelled/.test(await err(`select update_show_s($1,'X2','086-R1',now()+interval '5h',now()+interval '7h')`, [qlv.token])));
 await q(`select hold_seat('X3','A1','H9',now()+interval '5 min')`); await q(`select sell_order_u($1,'X3','H9','[{"code":"VX3","seat":"A1","price":70000,"channel":"Online"}]'::jsonb)`, [reg.token]);
+const si = await j(`select seat_info_s($1,'X3','A1') j`, [nvv.token]);
+ok("010 tra ghế A1 suất X3: vé VX3, người mua là tài khoản thật (SĐT/email che bớt), đã xác thực VNeID, chưa vào", si.ticket && si.ticket.code === "VX3" && si.ticket.owner.username === reg.username && /•/.test(si.ticket.owner.phone) && /•••@/.test(si.ticket.owner.email) && si.ticket.owner.vneid === true && si.ticket.status === "valid" && si.lock.status === "sold", JSON.stringify(si.ticket.owner));
+ok("010 ghế đã hoàn (X2/A3 sau huỷ suất): không có vé hiện tại, lịch sử hoàn 1 vé, suất cancelled", (await j(`select seat_info_s($1,'X2','A3') j`, [nvv.token])).refunds.length === 1 && !(await j(`select seat_info_s($1,'X2','A3') j`, [nvv.token])).ticket && (await j(`select seat_info_s($1,'X2','A3') j`, [nvv.token])).show.status === "cancelled");
+await q(`select hold_seat('X3','B1','HOLD-UI',now()+interval '4 min')`);
+ok("010 ghế đang giữ → lock held kèm hold_id; ghế trống → không vé không khoá", (await j(`select seat_info_s($1,'X3','B1') j`, [nvv.token])).lock.hold_id === "HOLD-UI" && !(await j(`select seat_info_s($1,'X3','C1') j`, [nvv.token])).lock);
+ok("010 khách không tra ghế; nhân viên rạp 086 không tra ghế rạp 035; kỹ thuật không xem thông tin khách", /forbidden/.test(await err(`select seat_info_s($1,'X3','A1')`, [kh.token])) && /wrong_cinema/.test(await err(`select seat_info_s($1,'20260101-035-1','A1')`, [nvv.token])) && /forbidden/.test(await err(`select seat_info_s($1,'X3','A1')`, [kt.token])));
+ok("010 show_tickets_s: danh sách vé suất X3 kèm tên người mua", (await q(`select * from show_tickets_s($1,'X3')`, [qlv.token])).some(t => t.code === "VX3" && t.owner_name));
 ok("xoá phòng còn vé sắp chiếu → room_in_use; quản lý rạp không xoá cơ sở", /room_in_use/.test(await err(`select delete_room_s($1,'086-R1')`, [qlv.token])) && /forbidden/.test(await err(`select delete_cinema_s($1,'099')`, [qlv.token])));
 await q(`select delete_cinema_s($1,'099')`, [ql.token]);
 ok("quản lý chuỗi xoá cơ sở chưa có vé", (await q(`select count(*)::int n from cinemas where id='099'`))[0].n === 0);

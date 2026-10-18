@@ -628,28 +628,7 @@ const A = {
         if (/FaceID/.test(r.method)) mark("c-face", true, note);
         render(); } }); },
   "lab-age-rating"(el) { LAB.ageRating = el.dataset.v; render(); },
-  async "seat-info"(el) {
-    const p = S.view.pos, sh = show(p.showId), sid = el.dataset.seat, st = seatState(sh.id, sid), f = film(sh.filmId);
-    const head = sheetHead(`Ghế ${sid}`, `${esc(f.title)} ${f.rating} · ${dayLabel(sh.start)} ${hhmm(sh.start)} · ${room(sh.roomId).name}`);
-    const sheet = openSheet(`${head}<div class="grid gap-2">${skelRows(3, "h-8")}</div>`, { label: "Tra cứu ghế " + sid });
-    const row = (k, v) => `<div class="flex items-start justify-between gap-4 border-b border-border py-2 text-sm last:border-0"><span class="text-muted">${k}</span><span class="text-right">${v}</span></div>`;
-    let body = "";
-    if (!st) body = banner("ok", "Ghế trống", "Ghế vừa được nhả – có thể bán.");
-    else if (st.st === "held") {
-      const left = Math.max(0, Math.round((new Date(st.until) - Date.now()) / 1000));
-      body = `${row("Trạng thái", tone("Đang giữ – chưa thanh toán", "warn"))}${row("Ai giữ", String(st.by || "").startsWith("POS-") ? (st.by === "POS-" + Remote.DEVICE ? "Quầy này" : "Quầy khác") : "Khách đặt online")}${row("Tự nhả sau", `<span class="tabular-nums">${pad(Math.floor(left / 60))}:${pad(left % 60)}</span>`)}
-        <p class="mt-2 text-pretty text-xs text-muted">Khách chưa trả tiền thì hết hạn giữ ghế tự trống lại cho người khác. Không bán chồng được: máy chủ khoá theo suất + ghế.</p>`;
-    } else {
-      let t = S.tickets.find(x => x.showId === sh.id && x.seat === sid && x.status !== "refunded");
-      if (!t && ON()) { try { t = await Remote.fetchSeatTicket(sh.id, sid); if (t && !S.tickets.some(x => x.code === t.code)) S.tickets.push(t); } catch (e) {} }
-      const grp = S.groups.find(g => g.showId === sh.id && (g.seats || []).includes(sid));
-      if (t) body = `${row("Trạng thái", t.status === "used" ? tone("Đã vào phòng", "neutral") : tone("Đã bán – chưa vào", "ok"))}${row("Mã vé", `<span class="font-mono">${t.code}</span>`)}${row("Người mua", t.ownerUser ? "@" + esc(t.ownerUser) : t.channel === "Quầy" ? "Khách tại quầy" : "—")}${row("Người xem", esc(t.viewerName || "—"))}${row("Đối tượng · giá", `${esc(t.aud || "")} · ${vnd(t.price)}`)}${row("Kênh", esc(t.channel || ""))}${row("Tuổi", t.needDoc ? tone("Phải kiểm tại cửa", "warn") : t.verified ? tone("Đã xác thực VNeID", "ok") : RATINGS[f.rating] ? "—" : "Không giới hạn")}
-        <p class="mt-2 text-pretty text-xs text-muted">Hai khách cùng nhận một ghế: đối chiếu mã vé trên app với mã ở đây. Mỗi ghế chỉ có một vé hợp lệ.</p>`;
-      else if (grp) body = `${row("Trạng thái", tone("Vé đoàn", "ok"))}${row("Mã đoàn", `<span class="font-mono">${grp.code}</span>`)}${row("Phụ trách", esc(grp.teacher))}${row("Sĩ số", `${grp.students.length} học sinh + 1`)}`;
-      else body = `${row("Trạng thái", tone("Đã bán", "neutral"))}<p class="mt-2 text-pretty text-xs text-muted">Ghế bán trước khi mở hệ thống (dữ liệu mẫu của lịch chiếu) – không có vé điện tử.</p>`;
-    }
-    sheet.set(head + `<div>${body}</div>`); sheet.el.onclick = e => { if (e.target.closest('[data-m="close"]')) sheet.close(); };
-  },
+  "seat-info"(el) { const sh = show(el.closest("[data-show]")?.dataset.show || (S.view.pos || {}).showId); if (sh) seatDetail(sh, el.dataset.seat); },
   "gate-face"(el) { const grp = S.groups.find(x => x.code === el.dataset.code); verifyFace({ who: "gate-teacher", title: "Đối chiếu người phụ trách", fixedKey: grp.teacherKey || "gv", onDone(id, r) { grp.faceOk = true; grp.faceScore = r.score; call("group_update", { p_code: grp.code, p_counted: null, p_face_ok: true, p_face_score: r.score, p_finish: false }); log("gate", `Đối chiếu khuôn mặt ${grp.teacher}: ${r.score ?? "ảnh gốc mới"}%`); } }); },
   "gate-count"(el) { const grp = S.groups.find(x => x.code === S.view.gate.result.code); grp.counted = Math.max(0, Math.min(grp.students.length, (grp.counted || 0) + Number(el.dataset.d))); if (grp.counted === grp.students.length && Number(el.dataset.d) > 0) toast("Đã đủ số học sinh – người tiếp theo bị chặn"); call("group_update", { p_code: grp.code, p_counted: grp.counted, p_face_ok: null, p_face_score: null, p_finish: false }); save(); gateRefresh(); },
   "gate-card-camera"() { openScanner("Quét thẻ học sinh", code => scanCard(code.trim().toUpperCase())); },
@@ -858,6 +837,58 @@ function filmSheet(f) {
       log("admin", `${isNew ? "Thêm" : "Sửa"} phim ${p.title} (${p.rating}) · ${cs.length} rạp`); sh.close(); save(); render(); toast(`Đã lưu phim ${p.title}`); },
   }, { label: "Phim", wide: true });
 }
+/** Tra cứu một ghế: dữ liệu thật từ máy chủ (010: vé, người mua, người xem, đơn, khoá ghế, vé đoàn, lịch sử hoàn); chưa có 010 → dữ liệu đã tải */
+async function seatDetail(sh, sid, back) {
+  const f = film(sh.filmId), r = room(sh.roomId);
+  const head = sheetHead(`Ghế ${sid}${seatKind(r, sid) !== "std" ? " · " + SEAT_KIND_TXT[seatKind(r, sid)] : ""}`, `${esc(f.title)} ${f.rating} · ${dayLabel(sh.start)} ${hhmm(sh.start)} · ${esc(placeOf(sh))}`);
+  const sheet = openSheet(`${head}<div class="grid gap-2">${skelRows(4, "h-8")}</div>`, { label: "Tra cứu ghế " + sid });
+  const row = (k, v) => `<div class="flex items-start justify-between gap-4 border-b border-border py-2 text-sm last:border-0"><span class="shrink-0 text-muted">${k}</span><span class="min-w-0 text-right">${v}</span></div>`;
+  let info = null, body = "", src = "máy chủ (thời gian thực)";
+  if (ON() && Auth.token) { try { info = await Remote.rpc("seat_info_s", { p_token: Auth.token, p_show: sh.id, p_seat: sid }); } catch (e) { if (!/PGRST202|not find|does not exist/i.test(e.message || "")) body = banner("bad", "Không tra cứu được", esc(Auth.message(e))); } }
+  if (info) body = seatInfoHtml(info, row);
+  else if (!body) { src = ON() ? "dữ liệu đã tải trên máy (máy chủ chưa chạy migration 010)" : "dữ liệu trên máy (ngoại tuyến)"; body = await seatLocalHtml(sh, sid, row); }
+  if (!document.body.contains(sheet.el)) return;
+  sheet.set(head + `<div>${body}</div><p class="mt-3 text-xs text-muted">Nguồn: ${src}.${info && info.ticket && info.ticket.owner ? " SĐT/email che bớt; không hiển thị số giấy tờ." : ""}</p>${back ? `<button type="button" class="${B.outline} mt-3" data-act="back">${ic("chevron-left")}Quay lại sơ đồ</button>` : ""}`);
+  sheet.el.onclick = e => { if (e.target.closest('[data-act="back"]')) { sheet.close(); back(); } else if (e.target.closest('[data-m="close"]')) sheet.close(); };
+}
+const fmtAt = t => t ? `${hhmm(t)} ${ddmm(t)}` : "–";
+function seatInfoHtml(x, row) {
+  const t = x.ticket, l = x.lock, g = x.group; let h = "";
+  if (x.blocked) h += `<div class="mb-2">${banner("warn", "Ghế đang bảo trì", "Không bán ghế này cho tới khi kỹ thuật mở lại.")}</div>`;
+  if (t) {
+    const o = t.owner, vw = t.viewer, pos = (t.channel || "") === "Quầy";
+    h += row("Trạng thái", t.status === "used" ? tone(`Đã vào phòng lúc ${fmtAt(t.used_at)}`, "neutral") : tone("Đã bán – chưa vào phòng", "ok"))
+      + row("Mã vé · đơn", `<span class="font-mono">${esc(t.code)}</span>${t.order_id ? ` · đơn <span class="font-mono">${esc(t.order_id)}</span>` : ""}${t.order_size > 1 ? ` <span class="text-xs text-muted">(${t.order_size} vé cùng chủ, một QR)</span>` : ""}`)
+      + row("Người mua", o ? `<span class="block font-medium">${esc(o.name)} <span class="font-mono text-xs text-muted">@${esc(o.username)}</span></span><span class="block text-xs text-muted">${o.phone ? esc(o.phone) : "không SĐT"} · ${o.email ? esc(o.email) : "không email"}</span><span class="mt-1 inline-block">${o.vneid ? tone(`VNeID · xác thực ${fmtAt(o.vneid_at)}`, "ok") : tone("Chưa liên kết VNeID", "warn")}</span>` : pos ? "Khách tại quầy (không tài khoản)" : "—")
+      + row("Người xem", `<span class="block">${esc(t.viewer_name || "—")}${vw ? ` <span class="font-mono text-xs text-muted">@${esc(vw.username)}</span>${vw.vneid ? " " + tone("VNeID", "ok") : ""}` : ""}</span><span class="block text-xs text-muted">${esc(t.aud || "")}</span>`)
+      + row("Kiểm tuổi", t.need_doc ? `${tone("Phải kiểm giấy tờ tại cửa", "warn")}${t.reason ? `<span class="block text-xs text-muted">${esc(t.reason)}</span>` : ""}` : t.verified ? tone("Đã xác thực tuổi qua VNeID", "ok") : "Không giới hạn")
+      + row("Giá · kênh", `${vnd(Number(t.price))} · ${esc(t.channel || "Online")}`)
+      + row("Mua lúc", `${fmtAt(t.created_at)}${t.device_id ? ` <span class="font-mono text-xs text-muted">${esc(String(t.device_id).slice(0, 10))}</span>` : ""}`);
+  } else if (l && l.status === "held") {
+    const left = Math.max(0, Math.round((new Date(l.until) - Date.now()) / 1000));
+    h += row("Trạng thái", tone("Đang giữ – chưa thanh toán", "warn")) + row("Ai giữ", String(l.hold_id || "").startsWith("POS-") ? (l.hold_id === "POS-" + Remote.DEVICE ? "Quầy này" : "Quầy khác") : `Khách đặt online <span class="font-mono text-xs text-muted">${esc(l.hold_id || "")}</span>`) + row("Tự nhả sau", `<span class="tabular-nums">${pad(Math.floor(left / 60))}:${pad(left % 60)}</span>`)
+      + `<p class="mt-2 text-pretty text-xs text-muted">Hết hạn giữ mà chưa trả tiền thì ghế tự trống lại. Máy chủ khoá theo suất + ghế nên không bán chồng được.</p>`;
+  } else if (g) {
+    h += row("Trạng thái", tone(g.status === "used" ? `Vé đoàn – đã vào ${g.entered}/${g.members}` : "Vé đoàn – chưa vào", g.status === "used" ? "neutral" : "ok")) + row("Mã đoàn", `<span class="font-mono">${esc(g.code)}</span>`) + row("Phụ trách", `${esc(g.teacher || "")}${g.org ? ` · ${esc(g.org)}` : ""}`) + row("Sĩ số", `${g.members} học sinh + 1 · ${(g.seats || []).length} ghế`) + row("Tổng", vnd(Number(g.total || 0)));
+  } else if (l && l.status === "sold") {
+    h += row("Trạng thái", tone("Đã bán", "neutral")) + `<p class="mt-2 text-pretty text-xs text-muted">Ghế bán trước khi mở hệ thống (dữ liệu mẫu của lịch chiếu) – không có vé điện tử hay người mua.</p>`;
+  } else h += banner("ok", "Ghế trống", "Có thể bán ghế này.");
+  if (x.refunds && x.refunds.length) h += `<div class="mt-3 rounded-xl bg-background p-3 text-xs"><p class="mb-1 font-medium">Lịch sử hoàn vé ghế này</p>${x.refunds.map(rf => `<p class="text-muted"><span class="font-mono">${esc(rf.code)}</span> · ${fmtAt(rf.at)} · ${vnd(Number(rf.price))}${rf.owner ? ` · @${esc(rf.owner)}` : ""}</p>`).join("")}</div>`;
+  if (x.show && x.show.status === "cancelled") h = `<div class="mb-2">${banner("bad", "Suất đã huỷ", "Vé của suất này đã được hoàn vào thẻ quà tặng.")}</div>` + h;
+  return h;
+}
+async function seatLocalHtml(sh, sid, row) {
+  const st = seatState(sh.id, sid), f = film(sh.filmId);
+  if (!st) return banner("ok", "Ghế trống", "Có thể bán ghế này.");
+  if (st.st === "held") { const left = Math.max(0, Math.round((new Date(st.until) - Date.now()) / 1000));
+    return `${row("Trạng thái", tone("Đang giữ – chưa thanh toán", "warn"))}${row("Ai giữ", String(st.by || "").startsWith("POS-") ? (st.by === "POS-" + Remote.DEVICE ? "Quầy này" : "Quầy khác") : "Khách đặt online")}${row("Tự nhả sau", `<span class="tabular-nums">${pad(Math.floor(left / 60))}:${pad(left % 60)}</span>`)}`; }
+  let t = S.tickets.find(x => x.showId === sh.id && x.seat === sid && x.status !== "refunded");
+  if (!t && ON()) { try { t = await Remote.fetchSeatTicket(sh.id, sid); if (t && !S.tickets.some(x => x.code === t.code)) S.tickets.push(t); } catch (e) {} }
+  const grp = S.groups.find(g => g.showId === sh.id && (g.seats || []).includes(sid));
+  if (t) return `${row("Trạng thái", t.status === "used" ? tone("Đã vào phòng", "neutral") : tone("Đã bán – chưa vào", "ok"))}${row("Mã vé", `<span class="font-mono">${t.code}</span>`)}${row("Người mua", t.ownerUser ? "@" + esc(t.ownerUser) : t.channel === "Quầy" ? "Khách tại quầy" : "—")}${row("Người xem", esc(t.viewerName || "—"))}${row("Đối tượng · giá", `${esc(t.aud || "")} · ${vnd(t.price)}`)}${row("Kênh", esc(t.channel || ""))}${row("Tuổi", t.needDoc ? tone("Phải kiểm tại cửa", "warn") : t.verified ? tone("Đã xác thực VNeID", "ok") : RATINGS[f.rating] ? "—" : "Không giới hạn")}`;
+  if (grp) return `${row("Trạng thái", tone("Vé đoàn", "ok"))}${row("Mã đoàn", `<span class="font-mono">${grp.code}</span>`)}${row("Phụ trách", esc(grp.teacher))}${row("Sĩ số", `${grp.students.length} học sinh + 1`)}`;
+  return `${row("Trạng thái", tone("Đã bán", "neutral"))}<p class="mt-2 text-pretty text-xs text-muted">Ghế bán trước khi mở hệ thống (dữ liệu mẫu của lịch chiếu) – không có vé điện tử.</p>`;
+}
 function showSheet(s) {
   if (!s) return;
   const f = film(s.filmId), r = room(s.roomId), c = cinemaOf(s), sold = soldCount(s), cap = capacity(s), tks = S.tickets.filter(t => t.showId === s.id && t.status !== "refunded"), off = s.status === "cancelled", past = endOf(s) < new Date();
@@ -867,10 +898,13 @@ function showSheet(s) {
     ${off ? banner("bad", "Suất đã huỷ", esc(s.cancelReason || "Không ghi lý do") + ". Vé đã bán được hoàn vào thẻ quà tặng của từng khách.") : ""}
     <div class="grid grid-cols-3 gap-3">${[["Ghế bán", `${sold}/${cap}`], ["Lấp đầy", `${cap ? Math.round(sold / cap * 100) : 0}%`], ["Vé qua hệ thống", `${tks.length} · ${vnd(tks.reduce((a, t) => a + t.price, 0))}`]].map(([l, x]) => `<div class="rounded-xl bg-background p-3"><p class="text-xs text-muted">${l}</p><p class="mt-0.5 text-base font-semibold tabular-nums">${x}</p></div>`).join("")}</div>
     ${tks.length ? `<div class="max-h-40 overflow-auto rounded-xl border border-border text-sm">${tks.slice(0, 30).map(t => `<div class="flex items-center gap-2 border-b border-border px-3 py-1.5 last:border-0"><span class="w-10 font-mono font-medium">${t.seat}</span><span class="min-w-0 flex-1 truncate">${esc(t.viewerName || "")}${t.ownerUser ? ` <span class="font-mono text-xs text-muted">@${esc(t.ownerUser)}</span>` : ""}</span>${t.status === "used" ? tone("Đã vào", "neutral") : tone(t.channel || "Online", "ok")}</div>`).join("")}</div>` : ""}
+    <div class="rounded-xl border border-border p-3" data-show="${s.id}"><p class="mb-1 text-sm font-medium">Sơ đồ ghế</p><p class="mb-2 text-xs text-muted">Bấm ghế đã bán / đang giữ để xem người mua, người xem, đơn, giờ vào phòng – dữ liệu thật từ máy chủ.</p>${seatMap(s, [], "seat-none", { inspect: true })}</div>
     ${canEdit ? `<div class="grid gap-3 border-t border-border pt-4"><p class="text-sm font-medium">Điều chỉnh suất</p><div class="grid gap-3 sm:grid-cols-3">${field("Ngày", input("sh-day", ymd, 'type="date"'))}${field("Giờ bắt đầu", input("sh-time", hhmm(s.start), 'placeholder="19:30" maxlength="5"'))}${field("Phòng", sel("sh-room", roomsOn.map(x => [x.id, `${x.name} · ${x.rows * x.cols} ghế`]), s.roomId), tks.length ? "Đã bán vé: chỉ đổi giờ." : "")}</div>
       <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu thay đổi</button><span class="text-xs text-muted">Khách đã mua vé nhận thông báo đổi giờ (mô phỏng).</span></div>
       <div class="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-border p-3"><div class="min-w-[200px] flex-1">${field("Lý do huỷ", input("sh-reason", "", 'placeholder="Hỏng máy chiếu / bảo trì phòng"'))}</div><button type="button" class="${B.outline} min-h-11 md:min-h-10 text-err" data-act="cancel">${ic("calendar-x")}Huỷ suất${tks.length ? ` · hoàn ${tks.length} vé` : ""}</button></div></div>` : ""}`;
   adminSheet(html, {
+    "seat-info"(b, sh) { sh.close(); seatDetail(s, b.dataset.seat, () => showSheet(show(s.id) || s)); },
+    "seat-blocked"(b) { toast(`Ghế ${b.dataset.seat} đang bảo trì – không bán`, "bad"); },
     async save(b, sh) {
       const t = v("sh-time"); if (!/^\d{1,2}:\d{2}$/.test(t)) return toast("Giờ dạng HH:MM", "bad");
       const [h, m] = t.split(":").map(Number), s0 = new Date(v("sh-day") + "T00:00:00"); s0.setHours(h, m, 0, 0); const e0 = new Date(s0.getTime() + (f.dur + 15) * 60000), rid_ = v("sh-room");

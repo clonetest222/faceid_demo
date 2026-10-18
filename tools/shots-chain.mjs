@@ -87,8 +87,16 @@ try {
   await ev("location.hash='#/suat'"); await sleep(1000);
   await ev("A['suat-day']({dataset:{v:dayKey(new Date(Date.now()+864e5))}})"); await sleep(600);
   await ev("(()=>{const b=[...document.querySelectorAll('[data-act=\"show-info\"]')].find(b=>new Date(show(b.dataset.show).start)>Date.now());b.click();return 1})()"); await sleep(600);
-  check("Bấm suất → hộp thoại: ghế bán, đổi ngày/giờ/phòng, huỷ suất kèm lý do", await ev("!!document.querySelector('#sh-time') && !!document.querySelector('#sh-room') && !!document.querySelector('#sh-reason') && !!document.querySelector('[data-sheet] [data-act=\"cancel\"]')"));
-  await shot("chain_14_suat_sua"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  check("Bấm suất → hộp thoại: sơ đồ ghế, ghế bán, đổi ngày/giờ/phòng, huỷ suất kèm lý do", await ev("!!document.querySelector('#sh-time') && !!document.querySelector('#sh-room') && !!document.querySelector('#sh-reason') && !!document.querySelector('[data-sheet] [data-act=\"cancel\"]') && document.querySelectorAll('[data-sheet] [data-seat]').length>0"));
+  await shot("chain_14_suat_sua");
+  const soldSeat = await ev("(()=>{const id=document.querySelector('[data-sheet] [data-show]').dataset.show;const t=S.tickets.find(t=>t.showId===id&&t.status!=='refunded');return t?t.seat:null})()");
+  if (soldSeat) { await ev(`document.querySelector('[data-sheet] [data-act=\"seat-info\"][data-seat=\"${soldSeat}\"]').click()`); await sleep(2500);
+    const detail = await ev("document.querySelector('[data-sheet]').innerText");
+    check("Bấm ghế đã bán → thông tin thật: mã vé, người mua (@tài khoản), người xem, giờ mua, nguồn máy chủ", /Mã vé/.test(detail) && /Người mua/.test(detail) && /@/.test(detail) && /Nguồn:/.test(detail) && (!/Nguồn: máy chủ/.test(detail) || /Mua lúc/.test(detail)), detail.split("\n").slice(0, 3).join(" | "));
+    await shot("chain_16_ghe_nguoi_mua"); await ev("document.querySelector('[data-sheet] [data-act=\"back\"]').click()"); await sleep(600);
+    check("Quay lại sơ đồ → hộp thoại suất mở lại", await ev("!!document.querySelector('[data-sheet] [data-show]')")); }
+  else console.log("SKIP  chưa có vé thật ở suất này để tra ghế");
+  await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
   const ktOk = await ev(`Auth.login('kythuat','kythuat123').then(r=>r.ok?true:r.message)`);
   if (ktOk === true) { await sleep(800); await ev("location.hash='#/tongquan'"); await sleep(400); await ev("location.hash='#/coso'"); await sleep(1200);
     check("Kỹ thuật rạp 086: chỉ thấy cơ sở mình, sửa được phòng, không sửa cơ sở / không thêm cơ sở", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 0 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") === 2 && await ev("!document.querySelector('[data-act=\"cinema-new\"]')"));
