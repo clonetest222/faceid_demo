@@ -13,6 +13,8 @@ const rid = (p, n = 6) => p + Array.from({ length: n }, () => "ABCDEFGHJKLMNPQRS
 const ageAt = (dob, when) => { const b = new Date(dob), w = new Date(when); let a = w.getFullYear() - b.getFullYear(); if (w.getMonth() < b.getMonth() || (w.getMonth() === b.getMonth() && w.getDate() < b.getDate())) a--; return a; };
 const WEEKDAY = ["Chủ nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
 
+/* QR mã hoá UTF-8: họ tên tiếng Việt (QR căn cước) không bị hỏng byte */
+if (window.qrcode && qrcode.stringToBytesFuncs && qrcode.stringToBytesFuncs["UTF-8"]) qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
 /** QR dạng SVG co giãn theo khung chứa. Mức sửa lỗi H để watermark/đồng hồ quanh mã không làm hỏng việc quét. */
 function qrSvg(text, level = "M") {
   try { const q = qrcode(0, level); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
@@ -39,6 +41,7 @@ async function decodeQrImage(file) {
     const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, w, h);
     const r = jsQR(x.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "attemptBoth" });
     if (r && r.data) return r.data;
+    if (r && r.binaryData && r.binaryData.length) { try { return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(r.binaryData)); } catch (e) {} }
   }
   return null;
 }

@@ -120,9 +120,9 @@ function makeServerMatch(key, account) {
 /** who: self | teacher | parent | gate-teacher | lab.  onDone(identity, r) khi đạt; onResult(r, identity) mọi kết quả */
 function verifyFace({ who, title, fixedKey, onDone = () => {}, onResult = () => {} }) {
   FaceKit.preload();
-  const ids = fixedKey ? IDENTITIES.filter(i => i.key === fixedKey) : who === "lab" ? IDENTITIES : who === "teacher" ? IDENTITIES.filter(i => i.key === "gv") : IDENTITIES.filter(i => i.key !== "gv");
+  const ids = fixedKey ? IDENTITIES.filter(i => i.key === fixedKey) : who === "lab" || who === "gate-viewer" ? IDENTITIES : who === "teacher" ? IDENTITIES.filter(i => i.key === "gv") : IDENTITIES.filter(i => i.key !== "gv");
   let chosen = ids[0], stopCam = null, pairH = null;
-  const account = who === "gate-teacher" ? "Soát vé" : who === "lab" ? "Kiểm thử · " + Auth.user.name : S.user.name;
+  const account = who === "gate-teacher" || who === "gate-viewer" ? "Soát vé · " + Auth.user.name : who === "lab" ? "Kiểm thử · " + Auth.user.name : S.user.name;
   const sh = openSheet("", { label: title, onClose: () => { stopCam && stopCam(); pairH && pairH.close(); render(); } });
   const consent = () => sh.set(`${sheetHead(title)}
     ${who === "gate-teacher" ? `<p class="text-sm">Đối chiếu khuôn mặt 1:1 người phụ trách đoàn với ảnh gốc trong CSDL dân cư.</p>` : `
@@ -145,7 +145,7 @@ function verifyFace({ who, title, fixedKey, onDone = () => {}, onResult = () => 
   const done = async r => {
     stopCam = null;
     let vneidRec = null;
-    if (r.ok && who !== "gate-teacher") vneidRec = await logVerif("vneid", true, { key: chosen.key, method: "đồng ý chia sẻ họ tên, ngày sinh (mô phỏng)", detail: { name: chosen.name, dob: chosen.dob, who, face_record: r.recordId || null } });
+    if (r.ok && who !== "gate-teacher" && who !== "gate-viewer") vneidRec = await logVerif("vneid", true, { key: chosen.key, method: "đồng ý chia sẻ họ tên, ngày sinh (mô phỏng)", detail: { name: chosen.name, dob: chosen.dob, who, face_record: r.recordId || null } });
     r.vneidRecord = vneidRec && vneidRec.id;
     onResult(r, chosen);
     if (!r.ok) return sh.set(`${sheetHead("Xác thực không thành công")}${banner("bad", "", esc(r.message || "Không xác thực được."))}
@@ -278,15 +278,22 @@ async function gateProcess(raw, via) {
     if (t) {
       const sh = show(t.showId), f = sh ? film(sh.filmId) : { title: "?" }, d = `${f.title} · ${t.seat}`;
       if (t.status !== "valid") { g.result = { kind: t.status, code, qr }; gatePush(code, t.status, d); return; }
-      if (qr && qr.status === "static") { g.result = { kind: "static", code, qr }; gatePush(code, "static", d + " · " + via); return; }
-      if (t.needDoc) { g.result = { kind: "doc", code, qr }; gatePush(code, "doc", d); return; }
-      if (!(await admit(t))) { g.result = { kind: t.status === "valid" ? "none" : t.status, code, qr }; return; }
-      log("gate", `Vào phòng: ${t.code} (${t.viewerName})`); g.result = { kind: "ok", code, qr }; gatePush(code, "ok", d);
+      await gateTicketFlow(t, qr, via, false);
     } else if (grp) {
       g.result = { kind: "group", code: grp.code }; gatePush(grp.code, "group", `${grp.students.length} học sinh · ${grp.teacher}`);
       if (code !== grp.code) setTimeout(() => scanCard(code));
     } else { g.result = { kind: "none", code, qr }; gatePush(code, "none", via); log("gate", `Mã không hợp lệ ${code}`, false); }
   } finally { GATE.busy = false; save(); gateRefresh(); }
+}
+/** Luật nghiệp vụ một vé hợp lệ tại cửa: đúng khung giờ → mã có chữ ký → tuổi đã xác thực hay phải kiểm → cho vào */
+async function gateTicketFlow(t, qr, via, allowEarly) {
+  const g = S.view.gate, sh = show(t.showId), f = film(sh.filmId), d = `${f.title} · ${t.seat}`, code = t.code, now = Date.now();
+  if (now > endOf(sh).getTime()) { g.result = { kind: "over", code, qr }; gatePush(code, "over", d); log("gate", `Từ chối ${code}: suất đã kết thúc`, false); return; }
+  if (!allowEarly && new Date(sh.start).getTime() - now > GATE_OPEN_MIN * 60000) { g.result = { kind: "early", code, qr }; gatePush(code, "early", `${d} · chiếu ${hhmm(sh.start)}`); return; }
+  if (qr && qr.status === "static") { g.result = { kind: "static", code, qr }; gatePush(code, "static", d + " · " + via); return; }
+  if (t.needDoc) { g.result = { kind: "doc", code, qr }; gatePush(code, "doc", d); return; }
+  if (!(await admit(t))) { g.result = { kind: t.status === "valid" ? "none" : t.status, code, qr }; return; }
+  log("gate", `Vào phòng: ${t.code} (${t.viewerName})${allowEarly ? " – cho vào sớm" : ""}`); g.result = { kind: "ok", code, qr }; gatePush(code, "ok", d);
 }
 /** Cho vào phòng chiếu. Trực tuyến: máy chủ đảm bảo một vé chỉ qua cửa một lần dù nhiều máy cùng quét. */
 async function admit(t) {
@@ -448,6 +455,40 @@ const A = {
     if (ok) { if (!(await admit(t))) { S.view.gate = { result: { kind: t.status, code: t.code } }; return gateRefresh(); } log("gate", `Vào phòng sau kiểm tra giấy tờ: ${t.code}`); gatePush(t.code, "ok", `${type} – đạt`); S.view.gate = { result: { kind: "ok", code: t.code } }; }
     else { gatePush(t.code, "rejected", `${type} – không đạt`); S.view.gate = {}; }
     save(); gateRefresh(); toast(ok ? "Đã cho vào" : "Đã ghi nhận từ chối"); },
+  async "gate-early"(el) { const t = S.tickets.find(x => x.code === el.dataset.code), qr = S.view.gate.result && S.view.gate.result.qr; log("gate", `Cho vào sớm vé ${t.code} (nhân viên ${Auth.user.name} quyết định)`); await gateTicketFlow(t, qr, "cho vào sớm", true); save(); gateRefresh(); },
+  "age-check"(el) {
+    if (el.dataset.seat) { // quầy vé
+      const p = S.view.pos, sh = show(p.showId), sid = el.dataset.seat;
+      return openAgeCheck({ rating: film(sh.filmId).rating, when: sh.start, title: `Kiểm tuổi ghế ${sid}`, onResult(r) { p.docs[sid] = { type: r.method, ok: r.ok, age: r.age }; save(); render(); toast(r.ok ? `Ghế ${sid}: ${r.name}, ${r.age} tuổi – đạt` : `Ghế ${sid}: không đạt – ${r.reason}`, r.ok ? "" : "bad"); } });
+    }
+    const t = S.tickets.find(x => x.code === el.dataset.code), sh = show(t.showId), f = film(sh.filmId), prev = S.view.gate.result || {};
+    openAgeCheck({ rating: f.rating, when: sh.start, expectName: t.viewerName, mode: el.dataset.mode, title: `Kiểm tuổi vé ${t.code}`, async onResult(r) {
+      if (r.ok) {
+        if (!(await admit(t))) { S.view.gate = { result: { kind: t.status, code: t.code } }; return gateRefresh(); }
+        log("gate", `Vào phòng sau kiểm tuổi qua ${r.method}: ${t.code}`); gatePush(t.code, "ok", `${r.name}, ${r.age} tuổi · ${r.method}`);
+        S.view.gate = { result: { kind: "ok", code: t.code, qr: prev.qr, via: `${r.method}: ${r.name}, ${r.age} tuổi`, recordId: r.recordId } };
+      } else { gatePush(t.code, "rejected", `${r.name || ""}${r.age != null ? ", " + r.age + " tuổi" : ""} · ${r.method} – ${r.reason}`); S.view.gate = {}; toast("Đã ghi nhận từ chối: " + r.reason, "bad"); }
+      save(); gateRefresh(); } });
+  },
+  "export-age"() {
+    const rows = [["Thời điểm", "Nguồn", "Loại", "Nội dung", "Kết quả"]];
+    S.logs.filter(l => ["age", "gate", "spot", "doc", "vneid", "parent"].includes(l.type)).forEach(l => rows.push([new Date(l.t).toLocaleString("vi-VN"), "Nhật ký rạp", l.type, l.msg, l.ok ? "Đạt" : "Từ chối"]));
+    (S.verifs || []).filter(v => ["doc", "qr", "vneid", "faceid"].includes(v.kind)).forEach(v => rows.push([new Date(v.created_at).toLocaleString("vi-VN"), `Supabase #${v.id}`, v.kind, `${v.account_name || ""} · ${verifDetail(v)}`, v.ok ? "Đạt" : "Không đạt"]));
+    const q = c => '"' + String(c ?? "").replace(/"/g, '""') + '"';
+    const csv = "\ufeff" + rows.map(r => r.map(q).join(",")).join("\r\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `nhat-ky-kiem-tra-tuoi-${dmy(new Date()).replace(/\//g, "-")}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    S.view.lastExport = rows.length - 1; toast(`Đã xuất ${rows.length - 1} dòng`); },
+  "lab-age"() {
+    const rating = LAB.ageRating || "T18", min = RATINGS[rating] || 0;
+    const mark = (id, ok, note) => { setCase(id, ok, note); refreshLabCard("cccd"); };
+    openAgeCheck({ rating, when: new Date(), title: `Kiểm thử kiểm tuổi phim ${rating}`, onBad(m) { mark("c-bad", true, m); },
+      onResult(r) {
+        const adult = r.age >= min, note = `${r.name}, ${r.age} tuổi · ${r.ok ? "cho vào" : "từ chối"}${r.recordId ? " · bản ghi #" + r.recordId : ""}`;
+        if (/QR/.test(r.method)) mark(adult ? "c-adult" : "c-minor", adult ? r.ok === true : r.ok === false, note);
+        if (/chip/.test(r.method)) mark("c-chip", true, note);
+        if (/FaceID/.test(r.method)) mark("c-face", true, note);
+        render(); } }); },
+  "lab-age-rating"(el) { LAB.ageRating = el.dataset.v; render(); },
   "gate-face"(el) { const grp = S.groups.find(x => x.code === el.dataset.code); verifyFace({ who: "gate-teacher", title: "Đối chiếu người phụ trách", fixedKey: grp.teacherKey || "gv", onDone(id, r) { grp.faceOk = true; grp.faceScore = r.score; call("group_update", { p_code: grp.code, p_counted: null, p_face_ok: true, p_face_score: r.score, p_finish: false }); log("gate", `Đối chiếu khuôn mặt ${grp.teacher}: ${r.score ?? "ảnh gốc mới"}%`); } }); },
   "gate-count"(el) { const grp = S.groups.find(x => x.code === S.view.gate.result.code); grp.counted = Math.max(0, Math.min(grp.students.length, (grp.counted || 0) + Number(el.dataset.d))); if (grp.counted === grp.students.length && Number(el.dataset.d) > 0) toast("Đã đủ số học sinh – người tiếp theo bị chặn"); call("group_update", { p_code: grp.code, p_counted: grp.counted, p_face_ok: null, p_face_score: null, p_finish: false }); save(); gateRefresh(); },
   "gate-card-camera"() { openScanner("Quét thẻ học sinh", code => scanCard(code.trim().toUpperCase())); },

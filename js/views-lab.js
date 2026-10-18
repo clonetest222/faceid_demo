@@ -8,6 +8,7 @@ const CASES = {
   haar: ["Haar (OpenCV)", [["h-face", "Phát hiện khuôn mặt"], ["h-eyes", "Phát hiện đủ 2 mắt trong vùng mặt"], ["h-blink", "Đếm được chớp mắt (camera)"], ["h-speed", "Đo tốc độ Haar so với TinyFace"]]],
   qr: ["QR vé", [["q-ok", "QR động vừa tạo → hợp lệ"], ["q-exp", "QR cũ hơn 30 giây (ảnh chụp màn hình) → hết hạn"], ["q-forged", "QR bị sửa mã vé → sai chữ ký"], ["q-static", "Mã tĩnh / gõ tay → cảnh báo đối chiếu"], ["q-image", "Đọc QR từ ảnh chọn trong máy"], ["q-cam", "Đọc QR bằng camera"]]],
   nfc: ["NFC", [["n-read", "Đọc thẻ NDEF"], ["n-write", "Ghi mã vé vào thẻ trống"], ["n-chip", "Chip CCCD (mô phỏng) → lưu bản ghi"], ["n-why", "Thiết bị không hỗ trợ → báo rõ lý do"]]],
+  cccd: ["Kiểm tuổi tại cửa", [["c-adult", "QR căn cước người đủ tuổi → cho vào"], ["c-minor", "QR căn cước người chưa đủ tuổi → từ chối"], ["c-bad", "Ảnh/mã không phải QR căn cước → báo rõ"], ["c-chip", "Chip căn cước (mô phỏng) → đọc ngày sinh"], ["c-face", "FaceID qua VNeID → lấy ngày sinh"]]],
   vneid: ["VNeID + passkey", [["v-link", "Đồng ý chia sẻ họ tên, ngày sinh → lưu bản ghi VNeID"], ["p-create", "Tạo passkey (Face ID / vân tay của máy)"], ["p-verify", "Xác thực passkey: chữ ký hợp lệ"]]],
 };
 const labCases = () => S.labCases || (S.labCases = {});
@@ -83,6 +84,12 @@ function vKiemThu() {
      <div class="mt-4 flex flex-wrap items-end gap-2"><div class="min-w-[180px] flex-1">${field("Chip CCCD (mô phỏng)", selectBox("chip-key", IDENTITIES.map(i => [i.key, i.name]), LAB.chipKey || "an", { act: "chip-key" }))}</div><button type="button" class="${B.outline} min-h-11 md:min-h-10" data-act="lab-chip">Đọc chip</button></div>
      ${LAB.chip ? `<div class="mt-3 rounded-xl border border-border p-3 text-sm"><p><b>${esc(LAB.chip.name)}</b> · sinh ${dmy(LAB.chip.dob)} · ${ageAt(LAB.chip.dob, new Date())} tuổi</p><p class="text-xs text-muted">Số định danh ••••••••${esc(String(LAB.chip.id_number).slice(-4))}</p></div><div class="mt-2">${savedLine(LAB.chip.saved)}</div>` : ""}`);
 
+  // Kiểm tuổi tại cửa bằng căn cước / VNeID
+  const ageCard = labCard("cccd", "Vé chưa xác thực tuổi phải kiểm ở cửa. Thay vì nhìn giấy tờ, nhân viên quét QR mặt sau thẻ căn cước (có họ tên, ngày sinh), chạm chip, hoặc cho khách xác thực VNeID + FaceID – hệ thống tự tính tuổi tại ngày chiếu và so tên với vé.",
+    `<div class="mt-4 flex flex-wrap items-center gap-3"><span class="text-sm text-muted">Nhãn phim</span>${seg([["T13", "T13"], ["T16", "T16"], ["T18", "T18"]], LAB.ageRating || "T18", "lab-age-rating")}<button type="button" class="${B.primary} ml-auto" data-act="lab-age">${ic("id-card")}Mở kiểm tra tuổi</button></div>
+     <p class="mt-3 text-xs text-muted">QR căn cước mẫu của hồ sơ dân cư mô phỏng – tải ảnh rồi dùng “Ảnh QR căn cước”, hoặc mở trên điện thoại khác để quét bằng camera:</p>
+     <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">${IDENTITIES.map(i => { const t = cccdSample(i.key); return `<div class="grid justify-items-center gap-1.5 rounded-xl border border-border p-2 text-center"><div class="qr-box size-20">${qrSvg(t)}</div><p class="w-full truncate text-xs font-medium">${esc(i.name)}</p><p class="text-xs text-muted">${ageAt(i.dob, new Date())} tuổi</p><a class="${B.ghost} min-h-8 px-2 text-xs" download="qr-can-cuoc-${i.key}.png" href="${qrPng(t)}">${ic("download")}PNG</a></div>`; }).join("")}<div class="grid justify-items-center gap-1.5 rounded-xl border border-dashed border-border-strong p-2 text-center"><div class="qr-box size-20">${qrSvg("https://example.com/khong-phai-can-cuoc")}</div><p class="text-xs font-medium">Không phải căn cước</p><p class="text-xs text-muted">mã thường</p><a class="${B.ghost} min-h-8 px-2 text-xs" download="qr-khong-hop-le.png" href="${qrPng("https://example.com/khong-phai-can-cuoc")}">${ic("download")}PNG</a></div></div>`);
+
   // VNeID + passkey
   const vn = labCard("vneid", "Liên kết VNeID: người dùng đồng ý chia sẻ họ tên, ngày sinh (không chia sẻ ảnh, số căn cước). Passkey: thiết bị ký bằng khoá riêng sau khi quét Face ID/vân tay – máy chủ chỉ giữ khoá công khai.",
     `<div class="mt-4 flex flex-wrap gap-2"><button type="button" class="${B.outline}" data-act="lab-vneid">${ic("badge-check")}Liên kết VNeID</button>${PK.avail ? `<button type="button" class="${B.outline}" data-act="lab-pk-create">${ic("fingerprint")}Tạo passkey</button><button type="button" class="${B.outline}" data-act="lab-pk-verify" ${LAB.pk ? "" : "disabled"}>Xác thực passkey</button>` : `<span class="self-center text-sm text-muted">Máy này không có sinh trắc tích hợp – thử trên điện thoại.</span>`}</div>`);
@@ -104,7 +111,7 @@ function vKiemThu() {
 
   const body = `<div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">${kpi("Ca đã đạt", `${total[0]}/${total[1]}`, "list-checks")}${kpi("Bản ghi hôm nay", (S.verifs || []).filter(v => dayKey(v.created_at) === dayKey(new Date())).length, "database")}${kpi("Camera", LAB.cam ? "Có" : LAB.cam === false ? "Không" : "…", "camera")}${kpi("Web NFC", Nfc.supported() ? "Có" : "Không", "nfc")}</div>
     <div class="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2 xl:items-start">
-      <div class="grid gap-4">${face}${qr}${vn}</div>
+      <div class="grid gap-4">${face}${qr}${ageCard}${vn}</div>
       <div class="grid gap-4">${haar}${nfc}${card(`<h2 class="mb-3 text-base font-semibold">Thiết bị này</h2><div class="grid gap-2">${cap.map(([k, v]) => `<div class="flex items-center justify-between gap-3 text-sm"><span class="text-muted">${k}</span>${v}</div>`).join("")}</div><p class="mt-3 font-mono text-xs text-muted">Mã thiết bị ${esc(Remote.DEVICE)}</p>`)}</div>
     </div>${records}`;
   return staffShell("kiemthu", "Kiểm thử", "FaceID · Haar · QR · NFC · VNeID", `<button type="button" class="${B.ghost}" data-act="lab-clear">${ic("eraser")}<span class="hidden sm:inline">Xoá kết quả ca</span></button>`, body);

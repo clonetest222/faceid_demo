@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>CineVin – Sơ đồ nghiệp vụ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --primary: #d6303a; --primary-light: #d6303a12; --background: #f4f4f6; --surface: #fff; --foreground: #2c2c2c; --muted: #6b6b6b;
+    --border: #e6e6ea; --border-strong: #d9d9de; --secondary: #ececf0;
+    --ok: #007a55; --ok-bg: #ecfdf5; --warn: #bb4d00; --warn-bg: #fffbeb; --bad: #c10007; --bad-bg: #fef2f2; --info: #3f3f8f; --info-bg: #f1f1fb;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--background); color: var(--foreground); font: 14px/1.45 "Be Vietnam Pro", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .page { width: 1880px; padding: 36px 40px 40px; }
+  header { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 22px; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--primary); }
+  h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 15px; margin-top: 2px; }
+  .legend { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+
+  .lane { display: grid; grid-template-columns: 184px 1fr; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 14px; overflow: hidden; }
+  .who { padding: 18px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .who b { font-size: 17px; }
+  .who small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+  .acct { white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 11px; background: var(--secondary); border-radius: 6px; padding: 2px 6px; align-self: flex-start; }
+  .flow { padding: 16px 18px; display: grid; gap: 12px; }
+  .row { display: flex; align-items: stretch; gap: 0; }
+  .step { flex: 1; min-width: 0; border: 1px solid var(--border-strong); border-radius: 12px; padding: 10px 12px; background: var(--surface); }
+  .step h3 { margin: 0 0 4px; font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .n { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--foreground); color: #fff; font-size: 12px; font-weight: 600; }
+  .step p { margin: 0; color: #4a4a4a; font-size: 12.8px; }
+  .step ul { margin: 4px 0 0; padding-left: 16px; color: #4a4a4a; font-size: 12.8px; }
+  .step li { margin: 1px 0; }
+  .arrow { flex: 0 0 26px; display: grid; place-items: center; color: #9a9aa2; }
+  .arrow svg { width: 18px; height: 18px; }
+  .key { border-color: var(--primary); background: var(--primary-light); }
+  .key .n { background: var(--primary); }
+  .ok { background: var(--ok-bg); border-color: #b9e8d4; } .ok h3 { color: var(--ok); }
+  .bad { background: var(--bad-bg); border-color: #f6caca; } .bad h3 { color: var(--bad); }
+  .warn { background: var(--warn-bg); border-color: #f2dcb3; } .warn h3 { color: var(--warn); }
+  .info { background: var(--info-bg); border-color: #dcdcf2; } .info h3 { color: var(--info); }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 1px 6px; margin: 2px 3px 0 0; background: var(--secondary); color: #444; }
+  .tag.r { background: var(--primary); color: #fff; }
+  .branch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .note { font-size: 12px; color: var(--muted); }
+  .split { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; }
+
+  .bottom { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; }
+  .box h2 { margin: 0 0 10px; font-size: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.8px; }
+  td, th { text-align: left; padding: 5px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; border-top: 0; }
+  td:first-child { font-family: ui-monospace, Consolas, monospace; font-size: 12.3px; white-space: nowrap; color: #333; }
+  .rate { display: inline-block; min-width: 38px; text-align: center; font-weight: 600; border-radius: 6px; padding: 1px 6px; font-size: 12px; }
+  .rP { background: var(--ok-bg); color: var(--ok); } .rT13 { background: var(--secondary); color: #444; } .rT16 { background: var(--warn-bg); color: var(--warn); } .rT18 { background: var(--bad-bg); color: var(--bad); }
+  .mini { display: grid; gap: 6px; font-size: 12.8px; }
+  .mini div { display: flex; gap: 8px; align-items: flex-start; }
+  footer { margin-top: 14px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="logo"><i><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9M12.4 3.4l3.1 4M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></i>
+      <div><h1>CineVin – Sơ đồ nghiệp vụ hệ thống bán vé xem phim</h1><div class="sub">Nhóm 05 · ĐH Vinh · Đề tài 20: lịch chiếu, chọn ghế, thanh toán, quản lý suất chiếu · xác thực tuổi bằng VNeID + FaceID · QR vé chống chụp màn hình</div></div></div>
+    <div class="legend"><span><i class="dot" style="background:var(--primary)"></i>Điểm khác biệt</span><span><i class="dot" style="background:var(--ok)"></i>Cho phép</span><span><i class="dot" style="background:var(--bad)"></i>Chặn / từ chối</span><span><i class="dot" style="background:var(--warn)"></i>Cần nhân viên quyết</span><span><i class="dot" style="background:var(--info)"></i>Máy chủ kiểm</span></div>
+  </header>
+
+  <!-- KHÁCH HÀNG -->
+  <section class="lane">
+    <div class="who"><b>Khách hàng</b><span class="acct">khach / khach123</span><small>Mua vé trên web, điện thoại hoặc máy tính. Tự đăng ký tài khoản.</small></div>
+    <div class="flow">
+      <div class="row">
+        <div class="step"><h3><span class="n">1</span>Đăng nhập / đăng ký</h3><p>Mật khẩu băm bcrypt trên máy chủ, cấp token phiên 7 ngày.</p></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step"><h3><span class="n">2</span>Lịch chiếu</h3><p>Chọn ngày → phim → giờ. Suất đã chiếu, hết ghế bị khoá; còn ≤ 10 ghế thì báo.</p></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step info"><h3><span class="n">3</span>Chọn ghế</h3><p>Giữ ghế 5 phút, tối đa 8 ghế/đơn. Máy chủ khoá ghế nguyên tử → 1000 khách cùng lúc vẫn 0 ghế bán trùng.</p></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step key"><h3><span class="n">4</span>Thanh toán + kiểm tuổi</h3><ul><li>Chọn người xem từng ghế; tuổi tính <b>tại ngày chiếu</b></li><li>Giá theo tuổi: trẻ em −30%, U22 −20%, cao tuổi −30%</li><li>Chưa đủ tuổi nhãn phim → <b>chặn ngay khi bán</b></li><li>Dùng tuổi đã xác thực → quét passkey (Face ID máy)</li></ul></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step key"><h3><span class="n">5</span>Vé của tôi – QR động</h3><ul><li>Máy chủ ký mã mới <b>mỗi 15 giây</b> (HMAC)</li><li>Watermark sọc chạy + đồng hồ giây</li><li>Vé T13+ mở QR bằng passkey</li><li>Hoàn vé trước 45 phút → thẻ quà tặng</li></ul></div>
+      </div>
+      <div class="branch">
+        <div class="step key"><h3><span class="n">A</span>Liên kết VNeID + FaceID (một lần)</h3><p>Đồng ý chia sẻ <b>họ tên + ngày sinh</b> (không chia sẻ ảnh, số căn cước). Quét mặt: camera / điện thoại (ghép mã QR) / ảnh. Người thật: quay đầu hoặc chớp mắt. Máy chủ so vector 128 số với ảnh gốc, ngưỡng 0,5.</p></div>
+        <div class="step"><h3><span class="n">B</span>Người phụ thuộc</h3><p>Trẻ dưới 14 tuổi chưa có căn cước: cha mẹ đã xác thực khai báo con (số định danh 12 số). Con có tài khoản định danh → xác nhận qua VNeID; chưa có → cam kết theo giấy khai sinh (vẫn kiểm ở cửa).</p></div>
+        <div class="step"><h3><span class="n">C</span>Phim K</h3><p>Trẻ dưới 13 tuổi phải đi cùng cha mẹ/người giám hộ: đơn chỉ có vé trẻ em bị chặn, thêm vé người lớn thì được.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GIÁO VIÊN -->
+  <section class="lane">
+    <div class="who"><b>Giáo viên</b><span class="acct">giaovien / giaovien123</span><small>Vé đoàn: 1 giáo viên + cả lớp. Không thu thập khuôn mặt trẻ em.</small></div>
+    <div class="flow"><div class="row">
+      <div class="step key"><h3><span class="n">1</span>Xác thực người phụ trách</h3><p>Chỉ giáo viên quét VNeID + FaceID – người duy nhất cần sinh trắc.</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step"><h3><span class="n">2</span>Chọn suất + danh sách</h3><p>Tải danh sách lớp (Họ tên, ngày sinh, lớp), tối thiểu 10 người, giảm 15%.</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step warn"><h3><span class="n">3</span>Kiểm tuổi theo danh sách</h3><p>So từng em với nhãn phim tại ngày chiếu → bỏ em không đạt hoặc đổi phim.</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step"><h3><span class="n">4</span>Phụ huynh xác nhận</h3><p>Phim T13+: phụ huynh xác nhận ngày sinh + đồng ý qua VNeID (SMS mời).</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step key"><h3><span class="n">5</span>Cam kết → QR đoàn</h3><p>Giáo viên cam kết danh sách. Phát <b>1 QR cho cả đoàn</b> + thẻ QR in cho từng em (phim T13+).</p></div>
+    </div></div>
+  </section>
+
+  <!-- NHÂN VIÊN -->
+  <section class="lane">
+    <div class="who"><b>Nhân viên</b><span class="acct">nhanvien / nhanvien123</span><small>Soát vé ở cửa phòng chiếu và bán tại quầy. Mọi cửa dùng chung dữ liệu realtime.</small></div>
+    <div class="flow">
+      <div class="row">
+        <div class="step"><h3><span class="n">1</span>Quét vé</h3><p>Camera quét liên tục · <b>chọn / kéo thả ảnh QR</b> · chạm thẻ NFC · gõ mã.</p></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step info"><h3><span class="n">2</span>Máy chủ kiểm QR</h3><p>Chữ ký đúng + ký chưa quá <b>30 giây</b>.</p><span class="tag">quá 30 giây → <b>hết hạn</b> (ảnh chụp màn hình)</span><span class="tag">sửa mã → <b>giả</b></span><span class="tag">gõ tay → <b>mã tĩnh</b></span></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step"><h3><span class="n">3</span>Kiểm vé & giờ vào</h3><p>Đã dùng / đã hoàn → từ chối. Suất đã kết thúc → từ chối. Sớm hơn 30 phút trước giờ chiếu → <b>chưa đến giờ</b> (nhân viên có thể cho vào sớm, có ghi nhật ký).</p></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step key"><h3><span class="n">4</span>Tuổi đã xác thực?</h3><p><b>Có</b> (VNeID khi mua) → cho vào ngay.<br><b>Chưa</b> → kiểm tuổi điện tử:</p><span class="tag r">QR mặt sau căn cước</span><span class="tag r">Chip căn cước NFC</span><span class="tag r">FaceID qua VNeID</span><span class="tag">giấy tờ khác bằng mắt</span></div>
+        <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="step"><h3><span class="n">5</span>Kết quả</h3><p style="color:var(--ok)"><b>Đủ tuổi tại ngày chiếu</b> → cho vào (1 vé chỉ qua cửa 1 lần, kể cả nhiều cửa cùng quét).</p><p style="color:var(--bad);margin-top:4px"><b>Chưa đủ tuổi</b> → từ chối.</p><p style="color:var(--warn);margin-top:4px"><b>Tên giấy tờ ≠ tên vé</b> → nhân viên quyết (chống mượn vé).</p></div>
+      </div>
+      <div class="split">
+        <div class="step"><h3><span class="n">Đ</span>Soát vé đoàn</h3><p>Đối chiếu khuôn mặt giáo viên 1:1. <b>Phim P</b>: chỉ đếm người, chặn khi vượt sĩ số. <b>Phim T13+</b>: quét thẻ QR từng em (thẻ lạ, quét lại bị chặn) → kiểm ngẫu nhiên 5 em → hoàn tất, ghi số vắng.</p></div>
+        <div class="step"><h3><span class="n">Q</span>Bán tại quầy</h3><p>Dùng chung sơ đồ ghế với kênh online. Chọn đối tượng giá từng ghế → kiểm tuổi bằng căn cước / VNeID hoặc giấy tờ → tiền mặt / thẻ.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUẢN LÝ -->
+  <section class="lane">
+    <div class="who"><b>Quản lý</b><span class="acct">quanly / quanly123</span><small>Có mọi quyền của nhân viên, cộng quản trị.</small></div>
+    <div class="flow"><div class="row">
+      <div class="step"><h3><span class="n">1</span>Tổng quan</h3><p>Suất hôm nay, ghế đã bán, lấp đầy, doanh thu theo kênh. Nhật ký kiểm tra độ tuổi → <b>xuất CSV</b> làm bằng chứng khi thanh tra.</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step info"><h3><span class="n">2</span>Quản lý suất chiếu</h3><p>Lưới giờ theo phòng. Giờ kết thúc = bắt đầu + thời lượng + 15 phút dọn. Gõ giờ là thấy ngay trùng phòng; máy chủ chặn lần nữa khi lưu.</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step"><h3><span class="n">3</span>Tài khoản & quyền</h3><p>Ma trận quyền 3 vai. Tạo tài khoản nhân viên. Máy chủ kiểm vai trò trong từng hàm (khách gọi thẳng API → <b>forbidden</b>).</p></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="step"><h3><span class="n">4</span>Kiểm thử</h3><p>27 ca tự đánh dấu: FaceID, Haar (OpenCV), QR, kiểm tuổi tại cửa, NFC, VNeID + passkey. Bảng bản ghi xác thực realtime.</p></div>
+    </div></div>
+  </section>
+
+  <div class="bottom">
+    <div class="box"><h2>Dữ liệu trên máy chủ (Supabase Postgres + Realtime)</h2>
+      <table>
+        <tr><th>Bảng</th><th>Giữ gì</th></tr>
+        <tr><td>shows · seat_locks</td><td>Suất chiếu; khoá ghế (khoá chính suất + ghế → không bán trùng)</td></tr>
+        <tr><td>tickets</td><td>Vé, chủ vé (owner_user), cần kiểm tuổi hay không, trạng thái đã dùng/hoàn</td></tr>
+        <tr><td>groups · group_members</td><td>Vé đoàn, thẻ từng em, đã vào, kiểm ngẫu nhiên</td></tr>
+        <tr><td>verifications</td><td>Mỗi lần FaceID / VNeID / QR / kiểm tuổi / NFC / passkey: đạt?, điểm, cách kiểm – <b>không ảnh</b></td></tr>
+        <tr><td>mock_citizens</td><td>Ảnh gốc = vector 128 số (mô phỏng CSDL dân cư) – web không đọc được</td></tr>
+        <tr><td>app_users · sessions</td><td>Tài khoản, mật khẩu bcrypt, vai trò, token phiên</td></tr>
+        <tr><td>audit_logs</td><td>Nhật ký bán vé, soát vé, kiểm tuổi</td></tr>
+      </table>
+    </div>
+    <div class="box"><h2>Nhãn phim (Luật Điện ảnh 2022, Điều 32)</h2>
+      <div class="mini">
+        <div><span class="rate rP">P</span><span>Mọi lứa tuổi – vé đoàn chỉ đếm người</span></div>
+        <div><span class="rate rP">K</span><span>Dưới 13 tuổi phải có cha mẹ / người giám hộ đi cùng</span></div>
+        <div><span class="rate rT13">T13</span><span>Từ đủ 13 tuổi</span></div>
+        <div><span class="rate rT16">T16</span><span>Từ đủ 16 tuổi</span></div>
+        <div><span class="rate rT18">T18</span><span>Từ đủ 18 tuổi – nên đối chiếu FaceID tại cửa</span></div>
+        <div class="note" style="margin-top:4px">Để người xem sai độ tuổi: phạt 60–80 triệu đồng (NĐ 128/2022). Tuổi luôn tính tại ngày chiếu.</div>
+      </div>
+    </div>
+    <div class="box"><h2>Bảo mật & dữ liệu cá nhân</h2>
+      <div class="mini">
+        <div>• Web chỉ dùng publishable key; mọi thao tác ghi đi qua hàm máy chủ, kiểm vai trò bằng token.</div>
+        <div>• QR vé ký HMAC bằng khoá chỉ máy chủ có; ảnh chụp màn hình hết hạn sau 30 giây.</div>
+        <div>• Không lưu ảnh khuôn mặt, ảnh giấy tờ, số căn cước đầy đủ – chỉ kết quả + 4 số cuối.</div>
+        <div>• Trẻ em không quét mặt; phụ huynh đồng ý thay (Luật BVDLCN 2025).</div>
+        <div>• Mô phỏng: VNeID, cổng thanh toán, chip căn cước (web chưa đọc được chip ICAO 9303).</div>
+      </div>
+    </div>
+  </div>
+  <footer><span>https://clonetest222.github.io/faceid_demo/</span><span>Tài khoản demo: khach · giaovien · nhanvien · quanly (mật khẩu = tên + 123)</span></footer>
+</div>
+</body>
+</html>
