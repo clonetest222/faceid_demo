@@ -38,7 +38,7 @@ const openShow = (P, id) => P.ev(`(A["pick-show"]({dataset:{show:"${id}"}}), tru
     await PA.waitFor(`Remote.v4`); await PB.waitFor(`Remote.v4`);
     await login(PA, "khach", "khach123"); await login(PB, "giaovien", "giaovien123");
     // suất phim P sớm nhất còn ≥ 6 ghế, chưa chiếu (không cần kiểm tuổi)
-    const showId = await PA.ev(`S.shows.filter(s=>film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>6).sort((a,b)=>new Date(a.start)-new Date(b.start))[0].id`);
+    const showId = await PA.ev(`S.shows.filter(s=>cinemaOf(s).id==='086'&&film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>6).sort((a,b)=>new Date(a.start)-new Date(b.start))[0].id`);
     await openShow(PA, showId); await openShow(PB, showId); await sleep(1200);
     const free = await PA.ev(`[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')].map(b=>b.dataset.seat)`);
     const [s1, s2, s3, s4] = [free[2], free[5], free[8], free[11]];

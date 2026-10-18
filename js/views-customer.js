@@ -1,7 +1,9 @@
 /* Màn khách hàng: Lịch chiếu → Chọn ghế → Thanh toán → Vé của tôi; Vé đoàn; Tài khoản. Bố cục theo wireframe phương án A. */
 "use strict";
 const poster = (f, cls) => f.img ? `<img src="${f.img}" alt="" loading="lazy" class="${cls} rounded-lg bg-secondary object-cover">` : `<div class="${cls} grid place-items-center rounded-lg bg-secondary text-muted" title="Chưa có ảnh">${ic("film", "size-5")}</div>`;
-const showLine = sh => `${dayLabel(sh.start)} · ${hhmm(sh.start)} – ${hhmm(new Date(sh.start).getTime() + film(sh.filmId).dur * 60000)} · ${room(sh.roomId).name}`;
+const showLine = sh => `${dayLabel(sh.start)} · ${hhmm(sh.start)} – ${hhmm(new Date(sh.start).getTime() + film(sh.filmId).dur * 60000)} · ${placeOf(sh)} · ${formatOf(sh)}`;
+/** Nút chọn rạp trên đầu trang khách: "Nghệ An · CineVin Vinh Centre" */
+const cinemaButton = (cls = "") => { const c = curCinema(); return `<button type="button" data-act="cinema-pick" class="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 text-left hover:bg-item-hover ${cls}" aria-label="Chọn rạp: ${esc(c.name)}">${ic("map-pin", "size-4 shrink-0 text-muted")}<span class="min-w-0"><span class="block truncate text-sm font-medium leading-tight">${esc(c.name)}</span><span class="block truncate text-xs text-muted">${esc(c.city)} · ${esc(c.district)}</span></span>${ic("chevron-down", "size-4 shrink-0 text-muted")}</button>`; };
 function dayLabel(d) { const x = new Date(d), t = new Date(); t.setHours(0, 0, 0, 0); const diff = Math.round((new Date(x).setHours(0, 0, 0, 0) - t) / 864e5); return (diff === 0 ? "Hôm nay" : diff === 1 ? "Ngày mai" : WEEKDAY[x.getDay()]) + " " + ddmm(x); }
 
 /* ---------- khung app khách ---------- */
@@ -12,6 +14,7 @@ function customerShell(active, body, { bottomNav = true } = {}) {
   <header class="sticky top-0 z-30 border-b border-border bg-surface">
     <div class="mx-auto flex h-16 max-w-[1200px] items-center gap-6 px-4 sm:px-6">
       <a href="#/lich" aria-label="CineVin – lịch chiếu">${LOGO}</a>
+      ${cinemaButton("hidden max-w-[260px] md:flex")}
       <nav class="hidden items-center gap-1 md:flex" aria-label="Điều hướng chính">${nav.slice(0, 3).map(([k, l]) => `<a href="#/${k}" ${k === active ? 'aria-current="page"' : ""} class="flex h-10 items-center rounded-xl px-3 text-sm ${k === active ? "bg-secondary font-medium text-foreground" : "text-foreground/70 hover:bg-item-hover hover:text-foreground"}">${l}</a>`).join("")}</nav>
       <a href="#/taikhoan" class="ml-auto flex items-center gap-2 rounded-xl p-1 hover:bg-item-hover" aria-label="Tài khoản">
         <span class="hidden text-right sm:block"><span class="block text-sm font-medium leading-tight">${esc(S.user.linked ? S.user.name : u.name)}</span><span class="block text-xs text-muted">Khách · ${S.user.linked ? "đã liên kết VNeID" : "chưa liên kết VNeID"}</span></span>
@@ -34,25 +37,60 @@ function timeChip(s) {
   const sub = past ? "Đã chiếu" : full ? "Hết ghế" : left <= 10 ? `Còn ${left} ghế` : room(s.roomId).name;
   return `<button type="button" data-act="pick-show" data-show="${s.id}" ${past || full ? "disabled" : ""} class="grid h-14 min-w-[92px] cursor-pointer content-center rounded-xl border px-3 text-left disabled:cursor-not-allowed ${past || full ? "border-border bg-background text-muted" : "border-border-strong bg-surface hover:bg-button-hover"}"><span class="text-base font-semibold tabular-nums ${past || full ? "line-through decoration-1" : ""}">${hhmm(s.start)}</span><span class="text-xs ${!past && !full && left <= 10 ? "font-medium text-warning" : "text-muted"}">${sub}</span></button>`;
 }
+/** Nhóm suất theo phòng/định dạng của một rạp: [["2D Phụ đề", [suất…]], ["3D Phụ đề", [...]]] */
+const byFormat = ss => { const m = new Map(); ss.forEach(s => { const k = formatOf(s); if (!m.has(k)) m.set(k, []); m.get(k).push(s); }); return [...m]; };
+const fmtTag = k => `<span class="mr-1 inline-flex h-6 items-center rounded-md bg-secondary px-1.5 text-xs font-medium">${esc(k)}</span>`;
 function vLich() {
   const days = showDays(), today = dayKey(new Date());
   const cur = days.includes(S.view.day) ? S.view.day : (days.includes(today) ? today : days[0]);
-  const now = new Date();
-  const head = pageHead("Lịch chiếu", `CineVin Vinh · ${WEEKDAY[now.getDay()]}, ${dmy(now)} · bây giờ ${hhmm(now)}`);
-  let list;
-  if (!S.shows.length && Remote.status === "connecting") list = `<div class="grid gap-3 lg:grid-cols-2">${skelRows(4, "h-40")}</div>`;
-  else {
-    const films = S.films.map(f => [f, S.shows.filter(s => s.filmId === f.id && dayKey(s.start) === cur).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(x => x[1].length);
-    list = !films.length ? card(emptyState("calendar-x", "Chưa có suất chiếu ngày này", "Rạp chưa lên lịch cho ngày đã chọn. Xem ngày khác hoặc quay lại sau.", days.length ? `<button class="${B.outline}" data-act="lich-day" data-v="${esc(days[0])}">Xem ${dayLabel(days[0]).toLowerCase()}</button>` : ""))
-      : `<div class="grid gap-3 lg:grid-cols-2">${films.map(([f, ss]) => `<article class="flex gap-4 rounded-xl border border-border bg-surface p-4">
-        ${poster(f, "h-[132px] w-[88px] shrink-0")}
-        <div class="min-w-0 flex-1">
-          <div class="flex items-start gap-2"><h2 class="line-clamp-2 min-w-0 flex-1 text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div>
-          <p class="mt-0.5 text-sm text-muted">${esc(f.genre)} · ${f.dur} phút</p>
-          <div class="mt-3 flex flex-wrap gap-2">${ss.map(timeChip).join("")}</div>
-        </div></article>`).join("")}</div>`;
+  const now = new Date(), mode = S.view.lichMode === "phim" ? "phim" : "rap", c = curCinema();
+  const tabs = `<div class="inline-flex rounded-xl border border-border bg-surface p-1" role="tablist">${[["rap", "Theo rạp"], ["phim", "Theo phim"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${mode === k}" data-act="lich-mode" data-v="${k}" class="h-9 cursor-pointer rounded-lg px-3 text-sm ${mode === k ? "bg-foreground text-surface" : "text-foreground/70 hover:bg-item-hover"}">${l}</button>`).join("")}</div>`;
+  const head = pageHead("Lịch chiếu", `${WEEKDAY[now.getDay()]}, ${dmy(now)} · bây giờ ${hhmm(now)}`, tabs);
+  const loading = !S.shows.length && Remote.status === "connecting";
+  const pickDay = `<div class="mb-5">${dateStrip(days, cur, "lich-day")}</div>`;
+  const chipRow = ss => byFormat(ss).map(([k, list]) => `<div class="flex flex-wrap items-center gap-2">${fmtTag(k)}${list.map(timeChip).join("")}</div>`).join("");
+  let body;
+  if (mode === "rap") {
+    // Theo rạp: chọn rạp (nhớ trên máy) → ngày → phim → suất theo định dạng
+    const sub = `<div class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">${cinemaButton("flex-1 min-w-[220px] -m-1")}<span class="hidden text-xs text-muted sm:block">${esc(c.address)} · ${esc(c.hotline)}</span><button type="button" class="${B.outline} min-h-9 px-3" data-act="cinema-pick">${ic("arrow-left-right")}Đổi rạp</button></div>`;
+    let list;
+    if (loading) list = `<div class="grid gap-3 lg:grid-cols-2">${skelRows(4, "h-40")}</div>`;
+    else {
+      const films = S.films.map(f => [f, showsOf(c.id).filter(s => s.filmId === f.id && dayKey(s.start) === cur).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(x => x[1].length);
+      list = !films.length ? card(emptyState("calendar-x", "Chưa có suất chiếu ngày này", `${esc(c.name)} chưa lên lịch cho ngày đã chọn. Xem ngày khác, hoặc đổi sang rạp khác.`, `<button class="${B.outline}" data-act="cinema-pick">Đổi rạp</button>`))
+        : `<div class="grid gap-3 lg:grid-cols-2">${films.map(([f, ss]) => `<article class="flex gap-4 rounded-xl border border-border bg-surface p-4">
+          ${poster(f, "h-[132px] w-[88px] shrink-0")}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start gap-2"><h2 class="line-clamp-2 min-w-0 flex-1 text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div>
+            <p class="mt-0.5 text-sm text-muted">${esc(f.genre)} · ${f.dur} phút</p>
+            <div class="mt-3 grid gap-2">${chipRow(ss)}</div>
+          </div></article>`).join("")}</div>`;
+    }
+    body = head + sub + pickDay + list;
+  } else {
+    // Theo phim: chọn phim → ngày → tỉnh/thành → từng rạp (kể cả nhiều cơ sở cùng thành phố) → suất
+    const fid = S.films.some(f => f.id === S.view.lichFilm) ? S.view.lichFilm : S.films[0].id, f = film(fid);
+    const filmRow = `<div class="-mx-4 mb-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2">${S.films.map(x => `<button type="button" data-act="lich-film" data-v="${x.id}" aria-pressed="${x.id === fid}" class="flex h-[72px] w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-xl border p-2 text-left ${x.id === fid ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${poster(x, "h-14 w-10 shrink-0")}<span class="min-w-0"><span class="line-clamp-2 text-sm font-medium leading-tight">${esc(x.title)}</span><span class="block text-xs ${x.id === fid ? "text-surface/70" : "text-muted"}">${x.rating} · ${x.dur} phút</span></span></button>`).join("")}</div></div>`;
+    const ss = S.shows.filter(s => s.filmId === fid && dayKey(s.start) === cur);
+    const cities = CITIES.filter(ct => ss.some(s => cinemaOf(s).city === ct));
+    const city = cities.includes(S.view.lichCity) ? S.view.lichCity : (cities.includes(c.city) ? c.city : cities[0]);
+    const cityRow = cities.length ? `<div class="mb-3 flex flex-wrap gap-2">${cities.map(ct => `<button type="button" data-act="lich-city" data-v="${esc(ct)}" aria-pressed="${ct === city}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${ct === city ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(ct)} <span class="${ct === city ? "text-surface/70" : "text-muted"}">${cinemasIn(ct).filter(x => ss.some(s => cinemaOf(s).id === x.id)).length}</span></button>`).join("")}</div>` : "";
+    let list;
+    if (loading) list = `<div class="grid gap-3">${skelRows(3, "h-28")}</div>`;
+    else if (!ss.length) list = card(emptyState("calendar-x", "Không rạp nào chiếu phim này trong ngày", "Chọn ngày khác hoặc phim khác."));
+    else list = `<div class="grid gap-3">${cinemasIn(city).map(x => [x, ss.filter(s => cinemaOf(s).id === x.id).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(z => z[1].length).map(([x, list]) => `<article class="rounded-xl border bg-surface p-4 ${x.id === c.id ? "border-foreground" : "border-border"}">
+        <div class="flex flex-wrap items-start gap-2"><div class="min-w-0 flex-1"><h2 class="text-base font-semibold">${esc(x.name)}${x.id === c.id ? ` <span class="text-xs font-normal text-muted">· rạp đang chọn</span>` : ""}</h2><p class="text-xs text-muted">${esc(x.district)} · ${esc(x.address)}</p></div><button type="button" class="${B.ghost} min-h-8 px-2 text-xs" data-act="cinema-set" data-v="${x.id}">Chọn rạp này</button></div>
+        <div class="mt-3 grid gap-2">${chipRow(list)}</div></article>`).join("")}</div>`;
+    body = head + filmRow + pickDay + `<div class="mb-1 flex items-center gap-2"><h2 class="text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}<span class="text-sm text-muted">· ${dayLabel(cur)}</span></div>` + cityRow + list;
   }
-  return customerShell("lich", head + `<div class="mb-5">${dateStrip(days, cur, "lich-day")}</div>` + list);
+  return customerShell("lich", body);
+}
+/** Bảng chọn rạp: Tỉnh/Thành → các cơ sở (Nghệ An có 2 cơ sở cùng TP Vinh). */
+function cinemaSheetHtml(city) {
+  const c = curCinema(), ct = CITIES.includes(city) ? city : c.city;
+  return `${sheetHead("Chọn rạp", "Tỉnh/Thành → Rạp. Lịch, giá vé và vé của bạn hiện theo rạp đã chọn.")}
+    <div class="mb-3 flex flex-wrap gap-2">${CITIES.map(x => `<button type="button" data-act="cinema-city" data-v="${esc(x)}" aria-pressed="${x === ct}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${x === ct ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(x)} <span class="${x === ct ? "text-surface/70" : "text-muted"}">${cinemasIn(x).length}</span></button>`).join("")}</div>
+    <div class="grid gap-2">${cinemasIn(ct).map(x => `<button type="button" data-act="cinema-set" data-v="${x.id}" aria-pressed="${x.id === c.id}" class="flex w-full cursor-pointer items-start gap-3 rounded-xl border p-3 text-left ${x.id === c.id ? "border-foreground" : "border-border hover:bg-surface-hover"}"><span class="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary font-mono text-xs">${x.id}</span><span class="min-w-0 flex-1"><span class="block font-medium">${esc(x.name)}</span><span class="block text-xs text-muted">${esc(x.district)} · ${esc(x.address)}</span><span class="mt-1 block text-xs text-muted">${roomsOf(x.id).length} phòng · ${roomsOf(x.id).map(r => r.kind).filter((v, i, a) => a.indexOf(v) === i).join(", ")} · giá từ ${vnd(PRICE_TIERS[x.tier].weekday.u22)}</span></span>${x.id === c.id ? ic("check", "size-4 shrink-0 mt-1") : ""}</button>`).join("")}</div>`;
 }
 
 /* ---------- Chọn ghế ---------- */
@@ -73,8 +111,8 @@ function seatMap(sh, selected, act, opts = {}) {
     h += `</div>`;
   }
   return h + `</div></div><div class="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted sm:flex sm:flex-wrap sm:justify-center sm:gap-x-5">
-    <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-border-strong bg-surface"></i>Thường ${vnd(S.prices.std)}</span>
-    <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-warning/60 bg-surface"></i>VIP ${vnd(S.prices.vip)}</span>
+    <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-border-strong bg-surface"></i>Thường ${vnd(priceLegend(sh).std)}</span>
+    <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-warning/60 bg-surface"></i>VIP ${vnd(priceLegend(sh).vip)}</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-primary"></i>Bạn chọn</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-muted/50 bg-background"></i>Người khác đang giữ</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span>
@@ -116,7 +154,7 @@ function vThanhToan() {
   const friendPending = d.assign.some(a => a.viewer.kind === "friend" && !a.viewer.user);
   const opts = [["other", "Người đi cùng (chưa xác thực)"], ["self", `Tôi – ${S.user.name}${S.user.linked ? "" : " (chưa xác thực)"}`], ...S.dependents.map(x => ["dep:" + x.id, `Con – ${x.name} (${ageAt(x.dob, sh.start)} tuổi)`]), ...(Remote.v5 ? [["friend", "Bạn đi cùng có tài khoản CineVin…"]] : [])];
   const rows = d.seats.map((sid, i) => {
-    const a = d.assign[i], r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid) * (1 - aud.disc);
+    const a = d.assign[i], r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid, aud.key);
     if (!r.block) total += price;
     const val = a.viewer.kind === "dep" ? "dep:" + a.viewer.depId : a.viewer.kind;
     const fr = a.viewer.kind === "friend" ? (a.viewer.user
@@ -212,7 +250,7 @@ function vVe() {
   const seatTabs = !grp ? "" : split
     ? `<div class="mb-3 -mx-1 overflow-x-auto px-1 scrollbar-clean"><div class="flex w-max items-center gap-1.5"><span class="mr-1 text-xs text-muted">${sameShow.length} vé · ghế</span>${sameShow.map(x => `<button type="button" data-act="ticket-pick" data-code="${x.code}" aria-pressed="${x === t}" class="h-8 cursor-pointer rounded-full px-3 text-sm tabular-nums ${x === t ? "bg-foreground text-surface" : "bg-secondary hover:bg-secondary-hover"}">${esc(x.seat)}</button>`).join("")}<button type="button" data-act="qr-split" class="ml-1 h-8 cursor-pointer rounded-full border border-border-strong px-3 text-xs hover:bg-button-hover">Gộp lại</button></div></div>`
     : `<div class="mb-3 flex items-start gap-3 rounded-xl bg-background p-3"><span class="grid size-9 shrink-0 place-items-center rounded-lg bg-surface text-foreground">${ic("users")}</span><span class="min-w-0 flex-1"><span class="block text-sm font-medium">1 QR cho cả đơn · ${sameShow.length} vé</span><span class="block text-xs text-muted">Ghế ${esc(sameShow.map(x => x.seat).join(", "))}. Nhân viên quét một lần, cả nhóm cùng vào.</span></span><button type="button" data-act="qr-split" class="shrink-0 text-xs font-medium underline underline-offset-2">Tách từng vé</button></div>`;
-  const info = `<div class="flex items-start gap-3">${poster(f, "h-16 w-11 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h2 class="truncate text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div><p class="text-sm text-muted">${dayLabel(sh.start)} · ${hhmm(sh.start)} · ${room(sh.roomId).name}</p></div></div>
+  const info = `<div class="flex items-start gap-3">${poster(f, "h-16 w-11 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h2 class="truncate text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div><p class="text-sm text-muted">${dayLabel(sh.start)} · ${hhmm(sh.start)} · ${placeOf(sh)} · ${formatOf(sh)}</p></div></div>
     ${t.viewerUser && t.viewerUser === Auth.user.username && t.ownerUser !== Auth.user.username ? `<p class="mt-3 flex items-center gap-1.5 text-xs text-muted">${ic("gift", "size-3.5")}Vé do <b class="font-mono">@${esc(t.ownerUser)}</b> mua cho bạn.</p>` : t.viewerUser && t.ownerUser === Auth.user.username ? `<p class="mt-3 flex items-center gap-1.5 text-xs text-muted">${ic("user-check", "size-3.5")}Vé của bạn đi cùng <b>${esc(t.viewerName)}</b> (<span class="font-mono">@${esc(t.viewerUser)}</span>)${t.verified ? " · đã xác thực, vào thẳng" : " · kiểm tuổi ở cửa"}.</p>` : ""}
     <dl class="mt-4 grid grid-cols-3 gap-3 text-sm"><div><dt class="text-xs text-muted">Ghế</dt><dd class="font-medium">${grp && !split ? esc(sameShow.map(x => x.seat).join(", ")) : esc(t.seat)}</dd></div><div><dt class="text-xs text-muted">Mã vé</dt><dd class="font-mono font-medium">${t.code}</dd></div><div><dt class="text-xs text-muted">Tuổi</dt><dd class="font-medium">${t.needDoc ? "Kiểm tra tại cửa" : t.verified ? "Đã xác minh" : RATINGS[f.rating] ? "Kiểm tra tại cửa" : "Không giới hạn"}</dd></div></dl>
     ${new Date(sh.start) > new Date() || endOf(sh) > new Date() ? `<div class="mt-4 flex flex-wrap items-center justify-between gap-2">
@@ -227,7 +265,7 @@ function vVe() {
   const body = head + `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
     <section class="rounded-xl border border-border bg-surface p-4 sm:p-5">${top}</section>
     <section>${h2("Vé khác")}${others.length ? `<div class="overflow-hidden rounded-xl border border-border bg-surface">${others.map(g => { const x = g.items[0], s2 = show(g.showId), f2 = film(s2.filmId), seats = g.items.map(y => y.seat);
-      return `<button type="button" data-act="ticket-pick" data-code="${x.code}" class="flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-surface-hover">${poster(f2, "h-14 w-10 shrink-0")}<span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(f2.title)}${g.items.length > 1 ? ` <span class="text-sm font-normal text-muted">· ${g.items.length} vé</span>` : ""}</span><span class="block truncate text-xs text-muted">${dayLabel(s2.start)} · ${hhmm(s2.start)} · ${room(s2.roomId).name} · ghế ${esc(seats.slice(0, 6).join(", "))}${seats.length > 6 ? ` +${seats.length - 6}` : ""}</span></span>${ticketStatus(x)}</button>`; }).join("")}</div>` : `<p class="text-sm text-muted">Chưa có vé khác. Mua thêm vé cho bạn bè bằng nút “Mua thêm vé cùng suất”, hoặc <a href="#/lich" class="font-medium text-foreground underline underline-offset-2">xem lịch chiếu</a>.</p>`}
+      return `<button type="button" data-act="ticket-pick" data-code="${x.code}" class="flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-surface-hover">${poster(f2, "h-14 w-10 shrink-0")}<span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(f2.title)}${g.items.length > 1 ? ` <span class="text-sm font-normal text-muted">· ${g.items.length} vé</span>` : ""}</span><span class="block truncate text-xs text-muted">${dayLabel(s2.start)} · ${hhmm(s2.start)} · ${placeOf(s2)} · ghế ${esc(seats.slice(0, 6).join(", "))}${seats.length > 6 ? ` +${seats.length - 6}` : ""}</span></span>${ticketStatus(x)}</button>`; }).join("")}</div>` : `<p class="text-sm text-muted">Chưa có vé khác. Mua thêm vé cho bạn bè bằng nút “Mua thêm vé cùng suất”, hoặc <a href="#/lich" class="font-medium text-foreground underline underline-offset-2">xem lịch chiếu</a>.</p>`}
     ${S.gifts.length ? `<div class="mt-4">${h2("Thẻ quà tặng")}<div class="flex flex-wrap gap-2">${S.gifts.map(g => tone(`${g.code} · ${vnd(g.amount)}`, "neutral")).join("")}</div></div>` : ""}</section></div>`;
   return customerShell("ve", body);
 }
@@ -260,7 +298,7 @@ function vDoan() {
     const steps = ["Suất", "Danh sách", "Kiểm tra tuổi", "Phụ huynh", "Cam kết"], sh = g.showId && show(g.showId), f = sh && film(sh.filmId);
     let inner = "";
     if (g.step === 0) inner = `<div class="grid gap-3 lg:grid-cols-2">${S.films.map(ff => { const ss = S.shows.filter(s => s.filmId === ff.id && new Date(s.start) > new Date()).sort((a, b) => new Date(a.start) - new Date(b.start)); if (!ss.length) return "";
-      return `<article class="flex gap-4 rounded-xl border border-border p-4">${poster(ff, "h-24 w-16 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-start gap-2"><h3 class="min-w-0 flex-1 truncate font-semibold">${esc(ff.title)}</h3>${rate(ff.rating)}</div><div class="mt-3 flex flex-wrap gap-2">${ss.map(s => `<button type="button" data-act="g-show" data-show="${s.id}" class="grid h-12 cursor-pointer content-center rounded-xl border border-border-strong bg-surface px-3 text-left hover:bg-button-hover"><span class="text-sm font-semibold tabular-nums">${ddmm(s.start)} ${hhmm(s.start)}</span><span class="text-xs text-muted">${freeSeats(s)} ghế trống</span></button>`).join("")}</div></div></article>`; }).join("")}</div>`;
+      return `<article class="flex gap-4 rounded-xl border border-border p-4">${poster(ff, "h-24 w-16 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-start gap-2"><h3 class="min-w-0 flex-1 truncate font-semibold">${esc(ff.title)}</h3>${rate(ff.rating)}</div><div class="mt-3 flex flex-wrap gap-2">${ss.map(s => `<button type="button" data-act="g-show" data-show="${s.id}" class="grid h-12 cursor-pointer content-center rounded-xl border border-border-strong bg-surface px-3 text-left hover:bg-button-hover"><span class="text-sm font-semibold tabular-nums">${ddmm(s.start)} ${hhmm(s.start)}</span><span class="text-xs text-muted">${esc(cinemaOf(s).name.replace("CineVin ", ""))} · ${freeSeats(s)} ghế trống</span></button>`).join("")}</div></div></article>`; }).join("")}</div>`;
     else if (g.step === 1) inner = `<p class="text-sm">Tải danh sách học sinh (xuất từ phần mềm quản lý của trường). Mỗi dòng: <span class="font-mono">Họ tên, dd/mm/yyyy, Lớp</span>.</p>
       <div class="mt-3 flex flex-wrap gap-2"><button type="button" class="${B.outline}" data-act="g-sample" data-k="4A">Mẫu lớp 4A (50 em, 9–10 tuổi)</button><button type="button" class="${B.outline}" data-act="g-sample" data-k="8A">Mẫu lớp 8A (có 1 em 12 tuổi)</button></div>
       <div class="mt-3">${field("Hoặc dán danh sách", `<textarea id="g-csv" rows="4" class="${INPUT} !h-auto py-2" placeholder="Nguyễn Văn A, 12/05/2015, 4A"></textarea>`)}</div>
@@ -274,7 +312,7 @@ function vDoan() {
         <div class="mt-3 flex items-center gap-3"><span class="text-sm font-medium tabular-nums">${done}/${g.students.length}</span><span class="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary"><span class="block h-full rounded-full bg-chart-fill" style="width:${done / g.students.length * 100}%"></span></span></div>
         <div class="mt-3 flex flex-wrap gap-2"><button type="button" class="${B.outline}" data-act="g-sms">Gửi SMS cho ${g.students.length} phụ huynh</button><button type="button" class="${B.outline}" data-act="g-parent-one">Thử vai 1 phụ huynh</button><button type="button" class="${B.outline}" data-act="g-parent-many">Giả lập 90% xác nhận</button></div>
         <div class="mt-3 flex flex-wrap items-center gap-2"><button type="button" class="${B.outline}" data-act="g-back">Quay lại</button>${need && done < g.students.length ? `<button type="button" class="${B.outline}" data-act="g-drop-unconfirmed">Bỏ các em chưa xác nhận</button>` : ""}<button type="button" class="${B.primary} ml-auto" data-act="g-next" ${need && done < g.students.length ? "disabled" : ""}>Tiếp tục</button></div>`; }
-    else { const n = g.students.length + 1, unit = S.prices.std * (1 - S.params.groupDiscount);
+    else { const n = g.students.length + 1, unit = Math.round(priceLegend(sh).std * (1 - S.params.groupDiscount) / 1000) * 1000;
       inner = `<div class="grid grid-cols-3 gap-3">${[["Số vé", n, `${g.students.length} HS + 1 phụ trách`], ["Giá vé đoàn", vnd(unit), ""], ["Tổng", vnd(unit * n), ""]].map(([l, v, s]) => `<div class="rounded-xl border border-border p-3"><p class="text-xs text-muted">${l}</p><p class="mt-1 text-base font-semibold tabular-nums">${v}</p>${s ? `<p class="text-xs text-muted">${s}</p>` : ""}</div>`).join("")}</div>
         <label class="mt-4 flex cursor-pointer items-start gap-3 text-sm"><input type="checkbox" id="g-commit" ${g.commit ? "checked" : ""} data-act="g-commit" class="mt-0.5 size-4 accent-[var(--primary)]"><span class="text-pretty">Tôi, ${esc(t.name)}, đại diện ${esc(t.org)}, cam kết danh sách và ngày sinh học sinh là chính xác và chịu trách nhiệm quản lý đoàn tại rạp.</span></label>
         <div class="mt-4 flex flex-wrap items-center gap-2"><button type="button" class="${B.outline}" data-act="g-back">Quay lại</button><button type="button" class="${B.primary} ml-auto" data-act="g-pay" ${g.commit ? "" : "disabled"}>Xác nhận & thanh toán chuyển khoản</button></div>`; }
@@ -285,7 +323,7 @@ function vDoan() {
   }
   const list = myGroups();
   const issued = list.length ? `<section class="mt-6">${h2("Đơn đã phát hành")}<div class="grid gap-3 lg:grid-cols-2">${list.map(gr => { const sh = show(gr.showId), f = film(sh.filmId), cards = RATINGS[f.rating] >= 13;
-    return `<article class="rounded-xl border border-border bg-surface p-4"><div class="flex gap-4"><div class="qr-box size-24 shrink-0 rounded-lg border border-border p-1.5">${qrSvg(gr.code)}</div><div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h3 class="truncate font-semibold">${esc(f.title)}</h3>${rate(f.rating)}</div><p class="text-sm text-muted">${ddmm(sh.start)} ${hhmm(sh.start)} · ${room(sh.roomId).name} · ${seatRows(gr.seats)}</p><p class="mt-1 font-mono text-sm">${gr.code}</p><div class="mt-2">${gr.status === "used" ? tone(`Đã vào ${gr.enteredCount}/${gr.students.length}`, "neutral") : tone(`${gr.students.length} HS + 1 phụ trách · chưa sử dụng`, "ok")}</div></div></div>
+    return `<article class="rounded-xl border border-border bg-surface p-4"><div class="flex gap-4"><div class="qr-box size-24 shrink-0 rounded-lg border border-border p-1.5">${qrSvg(gr.code)}</div><div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h3 class="truncate font-semibold">${esc(f.title)}</h3>${rate(f.rating)}</div><p class="text-sm text-muted">${ddmm(sh.start)} ${hhmm(sh.start)} · ${placeOf(sh)} · ${seatRows(gr.seats)}</p><p class="mt-1 font-mono text-sm">${gr.code}</p><div class="mt-2">${gr.status === "used" ? tone(`Đã vào ${gr.enteredCount}/${gr.students.length}`, "neutral") : tone(`${gr.students.length} HS + 1 phụ trách · chưa sử dụng`, "ok")}</div></div></div>
       ${cards ? `<details class="mt-3"><summary class="cursor-pointer text-sm text-muted hover:text-foreground">Thẻ QR cá nhân (${gr.students.length}) – in và phát cho từng em</summary><div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">${gr.students.map(s => `<div class="rounded-lg border border-border p-2 text-center"><div class="qr-box mx-auto size-20">${qrSvg(s.card)}</div><p class="mt-1 truncate text-xs font-medium">${esc(s.name)}</p><p class="font-mono text-xs text-muted">${s.card}</p></div>`).join("")}</div></details>` : ""}</article>`; }).join("")}</div></section>` : "";
   return customerShell("doan", head + `<div class="mb-4">${intro}</div>` + body + issued);
 }

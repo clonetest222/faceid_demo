@@ -20,10 +20,22 @@ Bản HTML để sửa: `docs/nghiep-vu.html` → xuất lại ảnh bằng `nod
 |---|---|---|---|
 | `khach` | `khach123` | Khách hàng | Lịch chiếu, chọn ghế, thanh toán, vé của tôi, vé đoàn, tài khoản |
 | `giaovien` | `giaovien123` | Khách hàng | như trên (dùng để thử vé đoàn) |
-| `nhanvien` | `nhanvien123` | Nhân viên | Soát vé, bán tại quầy |
-| `quanly` | `quanly123` | Quản lý | Tất cả + tổng quan, suất chiếu, kiểm thử, tài khoản & quyền |
+| `nhanvien` | `nhanvien123` | Nhân viên · rạp 086 Vinh Centre | Soát vé, bán tại quầy (chỉ suất của rạp mình) |
+| `quanlyvinh` | `quanlyvinh123` | Quản lý rạp · 086 Vinh Centre | Tổng quan, suất chiếu, quầy, soát vé, tạo nhân viên **cho rạp mình** |
+| `quanly` | `quanly123` | Quản lý chuỗi | Mọi rạp: bảng toàn chuỗi theo tỉnh → rạp, đổi rạp đang thao tác, tạo tài khoản cho rạp bất kỳ |
 
 Mật khẩu băm bcrypt trên máy chủ; mỗi hàm nhạy cảm nhận token phiên và **tự kiểm vai trò ở máy chủ** (khách gọi thẳng API thêm suất → `forbidden`). Khách tự đăng ký được; tài khoản nhân viên do quản lý tạo.
+
+## Chuỗi nhiều rạp (migration 006)
+Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạp ở 4 tỉnh/thành; Nghệ An có **2 cơ sở cùng TP Vinh** (086 Vinh Centre, 087 Hưng Dũng) để thử tình huống "một nơi nhiều cơ sở".
+
+| Việc | Cách làm |
+|---|---|
+| Khách chọn rạp | Nút rạp trên đầu trang: Tỉnh/Thành → rạp (địa chỉ, số phòng, giá từ). Nhớ trên thiết bị. Lịch xem **theo rạp** (ngày → phim → suất theo định dạng 2D/3D/GOLD) hoặc **theo phim** (phim → ngày → tỉnh → từng rạp → suất) |
+| Giá vé theo rạp | Hạng A (Hà Nội, TP.HCM) / hạng B (tỉnh); ngày thường · thứ Tư · cuối tuần × người lớn / U22 / trẻ em / người cao tuổi; phụ thu ghế VIP, 3D, phòng GOLD. Giá tính ở `seatPrice(suất, ghế, đối tượng)`; đối tượng lấy từ tuổi **đã xác thực VNeID** nên bán được vé U22/trẻ em/cao tuổi online |
+| Mã suất, mã phòng | `YYYYMMDD-<rạp>-n`, phòng `<rạp>-R1` → mọi suất, vé, QR đều mang mã rạp; máy chủ chưa chạy 006 vẫn suy ra rạp từ mã phòng |
+| Nhân viên gắn rạp | `app_users.cinema_id`; soát vé / quầy / thêm suất ở rạp khác → máy chủ trả `wrong_cinema`; màn soát vé báo "Vé của rạp khác" kèm tên rạp đúng |
+| Quản lý chuỗi | `cinema_id = null`: tổng quan toàn chuỗi (suất, ghế bán, lấp đầy, doanh thu theo tỉnh → rạp), ô đổi rạp đang thao tác trên thanh tiêu đề; `chain_stats(ngày)` tính ở máy chủ |
 
 ## Nghiệp vụ khách hàng (migration 005)
 | Bước | Cách làm |
@@ -55,13 +67,13 @@ Mật khẩu băm bcrypt trên máy chủ; mỗi hàm nhạy cảm nhận token 
 
 ## Chạy
 - Online: https://clonetest222.github.io/faceid_demo/
-- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`. Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
+- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Ghép nối điện thoại: `?pair=MÃ`.
 
 ## Kiểm thử
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
-- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 53 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn.
+- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 67 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp).
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
 - `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 36 bước nghiệp vụ khách hàng, gồm bạn đi cùng có tài khoản và cửa soát đơn nhiều vé (cần 005).
 - `node tools/e2e-more.mjs [URL]`: mua thêm vé cùng suất, một QR cho cả đơn / tách từng vé (10 bước).

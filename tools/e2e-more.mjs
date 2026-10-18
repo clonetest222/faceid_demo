@@ -17,7 +17,7 @@ await send("Page.navigate", { url: BASE }); await sleep(2500); await ev("localSt
 try {
   await wait("Remote.v4"); await ev("location.hash='#/dangnhap'"); await sleep(500);
   await ev("document.querySelector('#li-user').value='khach';document.querySelector('#li-pass').value='khach123';document.querySelector('[data-form]').requestSubmit()"); await wait("!!Auth.user"); await sleep(1200);
-  const showId = await ev("S.shows.filter(s=>film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>6).sort((a,b)=>new Date(a.start)-new Date(b.start))[0].id");
+  const showId = await ev("S.shows.filter(s=>cinemaOf(s).id==='086'&&film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>6).sort((a,b)=>new Date(a.start)-new Date(b.start))[0].id");
   await ev(`A["pick-show"]({dataset:{show:"${showId}"}})`); await sleep(1200);
   await ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')];s[3].click();return 1})()`); await sleep(1300);
   await ev(`A["to-checkout"]()`); await sleep(900); await ev(`document.querySelector('[data-act="pay-ok"]').click()`); await wait("location.hash==='#/ve'"); await sleep(1000);

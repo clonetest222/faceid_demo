@@ -334,6 +334,7 @@ async function gateProcess(raw, via) {
 /** Luật nghiệp vụ một vé hợp lệ tại cửa: đúng khung giờ → mã có chữ ký → tuổi đã xác thực hay phải kiểm → cho vào */
 async function gateTicketFlow(t, qr, via, allowEarly) {
   const g = S.view.gate, sh = show(t.showId), f = film(sh.filmId), d = `${f.title} · ${t.seat}`, code = t.code, now = Date.now();
+  if (cinemaOf(sh).id !== workCinema().id) { g.result = { kind: "cinema", code, qr }; gatePush(code, "cinema", `${d} · ${cinemaOf(sh).name}`); log("gate", `Từ chối ${code}: vé của ${cinemaOf(sh).name}, soát tại ${workCinema().name}`, false); return; }
   if (now > endOf(sh).getTime()) { g.result = { kind: "over", code, qr }; gatePush(code, "over", d); log("gate", `Từ chối ${code}: suất đã kết thúc`, false); return; }
   if (!allowEarly && new Date(sh.start).getTime() - now > GATE_OPEN_MIN * 60000) { g.result = { kind: "early", code, qr }; gatePush(code, "early", `${d} · chiếu ${hhmm(sh.start)}`); return; }
   if (qr && qr.status === "static") { g.result = { kind: "static", code, qr }; gatePush(code, "static", d + " · " + via); return; }
@@ -457,6 +458,14 @@ const A = {
       d.until = until; d.seats.push(sid); (S.seats[d.showId] ||= {})[sid] = { st: "held", by: d.id, until };
     }
     d.assign = null; save(); render(); },
+  /* chuỗi rạp */
+  "cinema-pick"() { const sheet = openSheet(cinemaSheetHtml(curCinema().city), { label: "Chọn rạp" }); CINEMA_SHEET = sheet;
+    sheet.el.onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "cinema-city") sheet.set(cinemaSheetHtml(b.dataset.v)); else if (b.dataset.act === "cinema-set") A["cinema-set"](b); else if (e.target.closest('[data-m="close"]')) sheet.close(); }; },
+  "cinema-set"(el) { setCurCinema(el.dataset.v); if (CINEMA_SHEET) { CINEMA_SHEET.close(); CINEMA_SHEET = null; } S.view.lichMode = "rap"; save(); render(); toast(`Đang xem lịch ${cinema(el.dataset.v).name}`); },
+  "lich-mode"(el) { S.view.lichMode = el.dataset.v; save(); render(); },
+  "lich-film"(el) { S.view.lichFilm = el.dataset.v; save(); render(); },
+  "lich-city"(el) { S.view.lichCity = el.dataset.v; save(); render(); },
+  "work-cinema-set"(el) { SEL["work-cinema"](null, el.dataset.v); },
   "cancel-draft"() { releaseDraft(); save(); go("lich"); },
   "to-checkout"() { go("thanhtoan"); },
   "back-seats"() { go("ghe"); },
@@ -472,7 +481,7 @@ const A = {
     else if (S.user.confirmEvery && S.user.passkey) { const r = await Passkey.verify(S.user.passkey); log("passkey", `Xác nhận đặt vé đơn ${d.id}: ${r.ok ? "đạt" : r.message}`, r.ok); if (!r.ok) return toast(r.message, "bad"); }
     const chk = checkOrder(sh, d.assign); let pts = 0;
     chk.res.forEach((r, i) => log("age", `Đơn ${d.id} ghế ${d.seats[i]} – ${f.rating} – ${r.name}: ${r.block ? r.reason : r.needDoc || (pkFallback && r.verified) ? "cần kiểm tra giấy tờ" : "đạt"}`, !r.block));
-    const tks = d.seats.map((sid, i) => { const r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid) * (1 - aud.disc); pts += Math.round(price * 0.05 / 1000);
+    const tks = d.seats.map((sid, i) => { const r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid, aud.key); pts += Math.round(price * 0.05 / 1000);
       const nd = r.needDoc || (pkFallback && r.verified && RATINGS[f.rating] > 0);
       return { code: rid("V"), orderId: d.id, owner: "user", ownerUser: Auth.user.username, viewerUser: r.user || null, showId: d.showId, seat: sid, viewerName: r.name, aud: aud.label, verified: r.verified, needDoc: nd, reason: pkFallback && r.verified && !r.needDoc ? "Thiết bị không xác nhận chính chủ bằng sinh trắc – kiểm tra giấy tờ tại cửa" : r.reason, price, status: "valid", channel: "Online" }; });
     el.disabled = true;
@@ -518,7 +527,7 @@ const A = {
   async "g-pay"(el) { const g = S.view.gdraft, sh = show(g.showId), r = room(sh.roomId), need = g.students.length + 1, seats = [];
     outer: for (let i = r.rows - 1; i >= 0; i--) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j); if (!seatState(sh.id, sid)) { seats.push(sid); if (seats.length === need) break outer; } }
     if (seats.length < need) return toast("Không đủ ghế cho đoàn ở suất này");
-    const code = "G-" + rid("", 5), unit = S.prices.std * (1 - S.params.groupDiscount);
+    const code = "G-" + rid("", 5), unit = Math.round(priceLegend(sh).std * (1 - S.params.groupDiscount) / 1000) * 1000;
     const students = g.students.map((s, i) => ({ ...s, id: code + "-" + pad(i + 1), card: code + "-" + pad(i + 1), idx: i, entered: false }));
     el.disabled = true;
     const ok = await call("create_group", { p_code: code, p_show: sh.id, p_seats: seats, p_teacher: S.teacher.name, p_teacher_key: S.teacher.key || "gv", p_org: S.teacher.org, p_total: unit * need, p_members: students.map(s => ({ card: s.card, idx: s.idx, name: s.name, dob: s.dob, cls: s.cls })) });
@@ -537,8 +546,8 @@ const A = {
   "pos-docok"(el) { const sid = el.dataset.seat, type = selVal("pos-doc-" + sid); if (!type) return toast("Chọn loại giấy tờ trước"); S.view.pos.docs[sid] = { type, ok: el.dataset.ok === "1" }; log("doc", `Quầy – ghế ${sid}: ${type} – ${el.dataset.ok === "1" ? "đạt" : "không đạt"}`, el.dataset.ok === "1"); save(); render(); },
   async "pos-pay"(el) { const p = S.view.pos, sh = show(p.showId), f = film(sh.filmId);
     const bad = p.seats.filter(sid => p.docs[sid]?.ok === false && RATINGS[f.rating] > 0); if (bad.length) return toast("Vé không đạt độ tuổi – bỏ ghế " + bad.join(", ") + " trước");
-    const tks = p.seats.map(sid => { const ty = p.types[sid] || "adult", ok = p.docs[sid]?.ok !== false, disc = ok ? { adult: 0, child: S.prices.child, u22: S.prices.u22, senior: S.prices.senior }[ty] : 0;
-      return { code: rid("V"), orderId: "POS", owner: "pos", ownerUser: null, showId: p.showId, seat: sid, viewerName: "Khách tại quầy", aud: { adult: "Người lớn", child: "Trẻ em", u22: "U22", senior: "Người cao tuổi" }[ok ? ty : "adult"], verified: !!p.docs[sid], needDoc: false, price: seatPrice(sh, sid) * (1 - disc), status: "valid", channel: "Quầy" }; });
+    const tks = p.seats.map(sid => { const ty = p.types[sid] || "adult", ok = p.docs[sid]?.ok !== false;
+      return { code: rid("V"), orderId: "POS", owner: "pos", ownerUser: null, showId: p.showId, seat: sid, viewerName: "Khách tại quầy", aud: { adult: "Người lớn", child: "Trẻ em", u22: "U22", senior: "Người cao tuổi" }[ok ? ty : "adult"], verified: !!p.docs[sid], needDoc: false, price: seatPrice(sh, sid, ok ? ty : "adult"), status: "valid", channel: "Quầy" }; });
     el.disabled = true;
     const okSell = await call("sell_order", { p_show: p.showId, p_hold: "POS-" + Remote.DEVICE, p_tickets: tks.map(t => ({ code: t.code, order_id: "POS", device_id: Remote.DEVICE, seat: t.seat, viewer_name: t.viewerName, aud: t.aud, verified: t.verified, need_doc: false, reason: "", price: t.price, channel: "Quầy" })) });
     if (!okSell) return render();
@@ -639,13 +648,15 @@ const A = {
     let clash = S.shows.find(s => s.roomId === f.room && new Date(s.start) < e0 && endOf(s) > s0);
     if (!clash && ON()) { const cid = await call("add_show", { p_id: id, p_film: f.film, p_room: f.room, p_start: s0.toISOString(), p_end: e0.toISOString() }, null); if (cid === null && !show(id) && Remote.v4 === false) return; if (cid) clash = show(cid) || { start: s0, filmId: f.film, roomId: f.room }; }
     if (clash) { toast(`Trùng suất ${hhmm(clash.start)} (${film(clash.filmId).title})`, "bad"); return render(); }
-    if (!show(id)) S.shows.push({ id, filmId: f.film, roomId: f.room, start: s0.toISOString(), end: e0.toISOString() }); S.seats[id] ||= {};
+    if (!show(id)) S.shows.push({ id, filmId: f.film, roomId: f.room, cinemaId: room(f.room).cinemaId, format: formatOf({ roomId: f.room }), start: s0.toISOString(), end: e0.toISOString() }); S.seats[id] ||= {};
     log("admin", `Thêm suất ${film(f.film).title} ${ddmm(s0)} ${hhmm(s0)}`); f.time = ""; delete f._s0; delete f._e0; save(); render(); toast("Đã thêm suất chiếu"); },
   /* tài khoản & quyền */
   async "create-user"() {
     const name = $("#nu-name").value.trim(), u = $("#nu-user").value.trim().toLowerCase(), p = $("#nu-pass").value, role = selVal("nu-role");
     if (name.length < 2) return toast("Nhập họ tên", "bad");
-    try { await Remote.rpc("create_user", { p_token: Auth.token, p_user: u, p_pass: p, p_name: name, p_role: role }); S.view.users = null; toast(`Đã tạo tài khoản @${u}`); render(); }
+    const args = { p_token: Auth.token, p_user: u, p_pass: p, p_name: name, p_role: role };
+    if (Remote.v6 && role !== "khach") args.p_cinema = staffCinemaId() || S.view.nu.cinema || null;
+    try { await Remote.rpc("create_user", args); S.view.users = null; toast(`Đã tạo tài khoản @${u}`); render(); }
     catch (e) { toast(Auth.message(e), "bad"); } },
   /* kiểm thử */
   "lab-expect"(el) { LAB.expect = el.dataset.v; render(); },
@@ -725,13 +736,16 @@ const A = {
   "haar-stop"() { LAB.haar.stop && LAB.haar.stop(); LAB.haar.stop = null; render(); },
 };
 /* ô chọn tuỳ biến đổi giá trị */
+let CINEMA_SHEET = null;
 const SEL = {
+  "work-cinema"(box, v) { if (!isChainManager()) return; setWorkCinema(v); S.view.ns = null; S.view.pos = { showId: null, seats: [], types: {}, docs: {} }; S.view.gate = {}; save(); render(); toast(`Đang thao tác tại ${cinema(v).name}`); },
+  "nu-cinema"(box, v) { S.view.nu.cinema = v || null; },
   assign(box, v) { const d = S.draft, i = +box.dataset.i; d.assign[i] = { viewer: v.startsWith("dep:") ? { kind: "dep", depId: v.slice(4) } : { kind: v } }; save(); render(); if (v === "friend") { const x = $("#friend-" + i); x && x.focus(); } },
   ns(box, v) { const f = S.view.ns; f[box.dataset.select.slice(3)] = v; if (box.dataset.select === "ns-day") S.view.sday = v; save(); render(); },
   "pos-show"(box, v) { const p = S.view.pos; p.seats.forEach(sid => { delete S.seats[p.showId]?.[sid]; call("release_seat", { p_show: p.showId, p_seat: sid, p_hold: "POS-" + Remote.DEVICE }); }); S.view.pos = { showId: v || null, seats: [], types: {}, docs: {} }; save(); render(); },
   "pos-type"(box, v) { S.view.pos.types[box.dataset.seat] = v; delete S.view.pos.docs[box.dataset.seat]; save(); render(); },
   "gate-doc-type"(box, v) { S.view.gateDoc = v; },
-  "nu-role"(box, v) { S.view.nu.role = v; },
+  "nu-role"(box, v) { S.view.nu.role = v; render(); },
   "chip-key"(box, v) { LAB.chipKey = v; },
 };
 document.addEventListener("sel-change", e => { const box = e.target.closest("[data-select]"); const f = box && SEL[box.dataset.selAct]; if (f) f(box, e.detail.value); });

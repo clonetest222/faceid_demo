@@ -4,11 +4,12 @@
 "use strict";
 const Remote = (() => {
   const cfg = window.CINEVIN_CONFIG || {};
-  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null;
+  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null;
   const DEVICE = (() => { try { let d = localStorage.getItem("cinevin-device"); if (!d) { d = rid("DV", 8); localStorage.setItem("cinevin-device", d); } return d; } catch (e) { return rid("DV", 8); } })();
   const emit = () => listeners.forEach(f => f(status));
 
-  const mapShow = r => ({ id: r.id, filmId: r.film_id, roomId: r.room_id, start: r.start_at, end: r.end_at });
+  // mã rạp: cột cinema_id (006) hoặc suy từ mã phòng "<rạp>-<phòng>"; dữ liệu cũ phòng "R1" → rạp đầu tiên
+  const mapShow = r => ({ id: r.id, filmId: r.film_id, roomId: r.room_id, cinemaId: r.cinema_id || (String(r.room_id).includes("-") ? String(r.room_id).split("-")[0] : "086"), format: r.format || null, start: r.start_at, end: r.end_at });
   const mapTicket = r => ({ code: r.code, orderId: r.order_id, ownerUser: r.owner_user || null, viewerUser: r.viewer_user || null, device: r.device_id, owner: r.device_id === DEVICE && r.channel === "Online" ? "user" : "other", showId: r.show_id, seat: r.seat, viewerName: r.viewer_name, aud: r.aud, verified: r.verified, needDoc: r.need_doc, reason: r.reason, price: Number(r.price), status: r.status, channel: r.channel });
   const mapMember = m => ({ id: m.card, card: m.card, idx: m.idx, name: m.name, dob: m.dob, cls: m.cls, entered: m.entered, spot: m.spot });
   const mapGroup = (g, members) => ({ id: g.code, code: g.code, showId: g.show_id, seats: g.seats, teacher: g.teacher, teacherKey: g.teacher_key, org: g.org, total: Number(g.total), status: g.status, counted: g.counted, enteredCount: g.entered_count, faceOk: g.face_ok, faceScore: g.face_score, students: members.map(mapMember).sort((a, b) => a.idx - b.idx) });
@@ -24,22 +25,27 @@ const Remote = (() => {
       if (sb) { try { await sb.removeAllChannels(); } catch (e) {} }
       else sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
       await rpc("ensure_schedule", { p_shows: schedule.rows, p_sold: schedule.sold });
+      // migration 006: danh mục rạp/phòng của chuỗi (không có hàm → máy chủ chưa chạy 006, chạy theo mã phòng)
+      if (v6 === null && window.CINEMAS) { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
       const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 1);
-      const [sh, tk, gr, lg] = await Promise.all([
-        sb.from("shows").select("*").gte("start_at", since.toISOString()).order("start_at"),
-        sb.from("tickets").select("*").gte("created_at", since.toISOString()),
+      // PostgREST trả tối đa 1000 dòng/truy vấn: chuỗi 7 rạp có hàng nghìn khoá ghế → tải theo trang
+      const all = async build => { const out = []; for (let from = 0; ; from += 1000) { const { data, error } = await build().range(from, from + 999); if (error) throw error; out.push(...data); if (data.length < 1000) return out; } };
+      const [shRows, tkRows, gr, lg] = await Promise.all([
+        all(() => sb.from("shows").select("*").gte("start_at", since.toISOString()).order("start_at")),
+        all(() => sb.from("tickets").select("*").gte("created_at", since.toISOString()).order("created_at")),
         sb.from("groups").select("*, group_members(*)").gte("created_at", since.toISOString()),
         sb.from("audit_logs").select("*").order("id", { ascending: false }).limit(300),
       ]);
-      for (const r of [sh, tk, gr, lg]) if (r.error) throw r.error;
-      const ids = sh.data.map(r => r.id);
-      const lk = ids.length ? await sb.from("seat_locks").select("*").in("show_id", ids) : { data: [] };
-      if (lk.error) throw lk.error;
-      S.shows = sh.data.map(mapShow);
+      for (const r of [gr, lg]) if (r.error) throw r.error;
+      const sh = { data: shRows }, tk = { data: tkRows }, ids = sh.data.map(r => r.id);
+      const lk = { data: ids.length ? await all(() => sb.from("seat_locks").select("*").in("show_id", ids).order("show_id").order("seat")) : [] };
+      // suất kiểu cũ (phòng "R1", trước khi có chuỗi rạp) được ẩn khi đã có suất mang mã rạp; reset_demo xoá hẳn
+      const legacy = r => !String(r.room_id).includes("-"), rowsSh = sh.data.some(r => !legacy(r)) ? sh.data.filter(r => !legacy(r)) : sh.data;
+      S.shows = rowsSh.map(mapShow);
       S.seats = {}; S.shows.forEach(s => S.seats[s.id] = {});
-      lk.data.forEach(l => { (S.seats[l.show_id] ||= {})[l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp }; });
-      S.tickets = tk.data.map(mapTicket);
-      S.groups = gr.data.map(g => mapGroup(g, g.group_members || []));
+      lk.data.forEach(l => { if (S.seats[l.show_id]) S.seats[l.show_id][l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp }; });
+      S.tickets = tk.data.map(mapTicket).filter(t => S.seats[t.showId]);
+      S.groups = gr.data.filter(g => S.seats[g.show_id]).map(g => mapGroup(g, g.group_members || []));
       S.logs = lg.data.map(mapLog);
       // bảng nhật ký xác thực (migration 002) – có thì tải, chưa có thì bỏ qua
       const vf = await sb.from("verifications").select("*").order("id", { ascending: false }).limit(60);
@@ -97,7 +103,7 @@ const Remote = (() => {
 
   return {
     init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, hasV5, DEVICE,
-    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get hasClient() { return !!sb; },
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();

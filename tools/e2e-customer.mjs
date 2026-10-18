@@ -122,7 +122,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     const gvTok = await T.ev(`Remote.rpc('login',{p_user:'giaovien',p_pass:'giaovien123'}).then(r=>r.token)`);
     await T.ev(`(async()=>{const d=Array.from({length:128},(_,i)=>Math.cos(i)/9);try{await Remote.rpc('face_check',{p_key:'gv',p_descriptor:d,p_device:'e2e',p_account:'e2e',p_method:'ảnh',p_liveness:false})}catch(e){};try{await Remote.rpc('link_vneid',{p_token:'${gvTok}',p_key:'gv',p_method:'e2e'})}catch(e){};return 1})()`);
     await T.ev(`location.hash='#/lich'`); await sleep(800); await T.ev(H);
-    const okT16 = await T.ev(`(()=>{const s=S.shows.filter(s=>s.filmId==='f4'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>4).sort((a,b)=>new Date(a.start)-new Date(b.start))[0];if(!s)return false;A["pick-show"]({dataset:{show:s.id}});return true})()`);
+    const okT16 = await T.ev(`(()=>{const s=S.shows.filter(s=>cinemaOf(s).id==='086'&&s.filmId==='f4'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>4).sort((a,b)=>new Date(a.start)-new Date(b.start))[0];if(!s)return false;A["pick-show"]({dataset:{show:s.id}});return true})()`);
     check("Chọn suất phim T16 để mua cho bạn", okT16); await sleep(1200);
     for (let k = 0; k < 2; k++) { await T.ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')].filter(b=>b.getAttribute('aria-pressed')==='false');s[Math.floor(s.length/3)].click();return 1})()`); await sleep(1300); }
     await T.ev(`A["to-checkout"]()`); await sleep(900); await T.ev(H);
@@ -167,7 +167,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     await T.ev(`$v('li-user','${user}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
     // 5. hoàn vé → thẻ quà tặng của chính chủ (vé đã vào không hoàn được → mua thêm 1 vé mới để thử hoàn)
     await T.ev(`location.hash='#/lich'`); await sleep(800); await T.ev(H);
-    await T.ev(`(()=>{const s=S.shows.filter(s=>film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>2).sort((a,b)=>new Date(a.start)-new Date(b.start))[0];A["pick-show"]({dataset:{show:s.id}});return 1})()`); await sleep(1200);
+    await T.ev(`(()=>{const s=S.shows.filter(s=>cinemaOf(s).id==='086'&&film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>2).sort((a,b)=>new Date(a.start)-new Date(b.start))[0];A["pick-show"]({dataset:{show:s.id}});return 1})()`); await sleep(1200);
     await T.ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')];s[1].click();return 1})()`); await sleep(1300);
     await T.ev(`A["to-checkout"]()`); await sleep(900); await T.ev(`document.querySelector('[data-act="pay-ok"]').click()`); await T.waitFor(`location.hash==='#/ve'`, 15000); await sleep(1000);
     const tk2 = await T.ev(`myTickets().filter(t=>t.status==='valid').map(t=>t.code).pop()`);

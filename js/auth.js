@@ -9,8 +9,9 @@ const Auth = (() => {
   const DEMO = [
     { username: "khach", pass: "khach123", role: "khach", name: "Nguyễn Văn An", note: "Khách hàng" },
     { username: "giaovien", pass: "giaovien123", role: "khach", name: "Phạm Thu Hà", note: "Khách – giáo viên mua vé đoàn" },
-    { username: "nhanvien", pass: "nhanvien123", role: "nhanvien", name: "Lê Minh Tuấn", note: "Nhân viên soát vé, quầy" },
-    { username: "quanly", pass: "quanly123", role: "quanly", name: "Ngô Thị Lan", note: "Quản lý rạp" },
+    { username: "nhanvien", pass: "nhanvien123", role: "nhanvien", name: "Lê Minh Tuấn", note: "Nhân viên · CineVin Vinh Centre" },
+    { username: "quanlyvinh", pass: "quanlyvinh123", role: "quanly", name: "Trần Quốc Bảo", note: "Quản lý rạp · CineVin Vinh Centre" },
+    { username: "quanly", pass: "quanly123", role: "quanly", name: "Ngô Thị Lan", note: "Quản lý chuỗi · toàn bộ rạp" },
   ];
   const ROLE_TXT = { khach: "Khách hàng", nhanvien: "Nhân viên", quanly: "Quản lý" };
   const ERR = {
@@ -30,6 +31,7 @@ const Auth = (() => {
     vneid_not_linked: "Hồ sơ VNeID này chưa gắn với tài khoản nào – đăng ký rồi liên kết VNeID ở Tài khoản.",
     voucher_unknown: "Không có mã này.", voucher_used: "Mã đã dùng rồi.", voucher_expired: "Mã đã hết hạn.", voucher_not_yours: "Thẻ quà tặng này của tài khoản khác.", voucher_invalid: "Mã giảm giá không còn hợp lệ.",
     companion_unknown: "Không tìm thấy tài khoản khách hàng này.", companion_self: "Đó là tài khoản của bạn – chọn “Tôi”.", companion_underage: "Bạn đi cùng chưa đủ tuổi xem phim này (theo hồ sơ VNeID của họ).",
+    wrong_cinema: "Vé/suất này thuộc rạp khác – tài khoản của bạn chỉ thao tác ở rạp mình.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
   };
@@ -39,7 +41,7 @@ const Auth = (() => {
   const store = u => { user = u; try { u ? localStorage.setItem(KEY, JSON.stringify(u)) : localStorage.removeItem(KEY); } catch (e) {} };
   const fromServer = r => ({ token: r.token, username: r.username, role: r.role, name: r.name, email: r.email || null, phone: r.phone || null,
     citizenKey: r.citizen_key || null, dob: r.dob || null, vneidAt: r.vneid_verified_at || null, vneidMethod: r.vneid_method || null,
-    points: r.points == null ? null : r.points, confirmEvery: !!r.confirm_every, offline: false });
+    points: r.points == null ? null : r.points, confirmEvery: !!r.confirm_every, cinemaId: r.cinema_id === undefined ? undefined : (r.cinema_id || null), offline: false });
   const localUsers = () => { let extra = []; try { extra = JSON.parse(localStorage.getItem(LOCAL)) || []; } catch (e) {} return [...DEMO, ...extra]; };
   const okUser = u => /^[a-z0-9_.]{3,32}$/.test(u);
   const norm = s => String(s || "").trim();
