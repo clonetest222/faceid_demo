@@ -35,10 +35,14 @@ try {
   check("Thanh toán: 2 vé mới mặc định là 'Người đi cùng'", (await ev("S.draft.assign.filter(a=>a.viewer.kind==='other').length")) >= 1);
   await ev(`document.querySelector('[data-act="pay-ok"]').click()`); await wait("location.hash==='#/ve'"); await sleep(1200);
   const all = await ev(`myTickets().filter(t=>t.status==='valid'&&t.showId==='${showId}').length`);
+  check("Sau thanh toán: cùng suất thêm đúng 2 vé; mặc định MỘT QR cho cả đơn", all === before + 2 && await ev(`/1 QR cho cả đơn · ${all} vé/.test(document.querySelector('main').innerText)`) && (await ev(`document.querySelectorAll('[aria-pressed][data-act="ticket-pick"]').length`)) === 0, `${before} → ${all} vé`);
+  await ev(`document.querySelector('[data-act="qr-split"]').click()`); await sleep(500);
   const tabs = await ev(`document.querySelectorAll('[aria-pressed][data-act="ticket-pick"]').length`);
-  check("Sau thanh toán: cùng suất thêm đúng 2 vé; thẻ chính có dải ghế để chuyển vé", all === before + 2 && tabs === all, `${before} → ${all} vé, ${tabs} nút ghế`);
+  check("Tách từng vé → dải ghế, mỗi vé một QR riêng", tabs === all, `${tabs} nút ghế`);
   await ev(`document.querySelectorAll('[aria-pressed="false"][data-act="ticket-pick"]')[0].click()`); await sleep(600);
-  check("Bấm ghế khác → QR đổi sang vé đó", (await ev("S.view.tk")) !== (await ev(`myTickets().find(t=>t.showId==='${showId}'&&t.status==='valid').code`)) || true);
+  check("Bấm ghế khác → chuyển sang vé đó", await ev(`document.querySelector('[aria-pressed="true"][data-act="ticket-pick"]').dataset.code === S.view.tk`));
+  await ev(`document.querySelector('[data-act="qr-split"]').click()`); await sleep(400);
+  check("Gộp lại → về một QR cho cả đơn", await ev(`/1 QR cho cả đơn/.test(document.querySelector('main').innerText)`));
   check("'Vé khác' gom theo suất (mỗi suất một dòng)", await ev("[...document.querySelectorAll('section:last-child [data-act=\"ticket-pick\"]')].every(b=>!b.hasAttribute('aria-pressed'))") && (await ev("document.querySelectorAll('section:last-child [data-act=\"ticket-pick\"]').length")) <= (await ev("new Set(myTickets().filter(t=>t.showId!=='"+showId+"').map(t=>t.showId+t.status)).size")));
   await shot("more_03_ve_3");
   await send("Emulation.setDeviceMetricsOverride", { width: 375, height: 812, deviceScaleFactor: 2, mobile: true }); await sleep(600); await shot("more_04_ve_375");

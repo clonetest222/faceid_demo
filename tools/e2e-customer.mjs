@@ -118,10 +118,32 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     const tk = await T.ev(`myTickets().filter(t=>t.status==='valid').map(t=>t.code).pop()`);
     await T.ev(`location.hash='#/taikhoan'`); await sleep(1200);
     check("Voucher đã dùng hiện mờ trong Tài khoản; lịch sử có đơn vừa mua", await T.ev(`/CHAONHOM05/.test($t('main')) && /Lịch sử đặt vé/.test($t('main')) && !!document.querySelector('[data-act="hist-open"]')`));
-    // 5. hoàn vé → thẻ quà tặng của chính chủ
+    // 4b. nhân viên quét một vé của đơn 2 vé → bảng cả đơn → cho vào 2 người một lần
+    const tkAll = await T.ev(`myTickets().filter(t=>t.status==='valid'&&t.showId===S.tickets.find(x=>x.code==='${tk}').showId).map(t=>t.code)`);
+    await logout(T); await toLogin(T);
+    await T.ev(`$v('li-user','nhanvien');$v('li-pass','nhanvien123');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`location.hash==='#/soat'`, 15000); await sleep(800); await T.ev(H);
+    await T.ev(`$c('[data-act="gate-method"][data-v="ma"]')`); await sleep(400); await T.ev(H);
+    const qtok = await T.ev(`Remote.rpc('login',{p_user:'quanly',p_pass:'quanly123'}).then(r=>r.token)`);
+    const payload = await T.ev(`Remote.rpc('ticket_qr',{p_token:'${qtok}',p_code:'${tk}'}).then(r=>r.payload)`);
+    await T.ev(`gateProcess(${JSON.stringify(payload)}, 'kiểm thử')`); await sleep(1800);
+    if (await T.ev(`S.view.gate.result && S.view.gate.result.kind==='early'`)) { await T.ev(`$c('[data-act="gate-early"]')`); await sleep(1800); }
+    check("Quét 1 QR → bảng cả đơn, đủ số vé, tick sẵn", (await T.ev(`S.view.gate.result && S.view.gate.result.kind`)) === "order" && (await T.ev(`document.querySelectorAll('#gate-result input[data-order-code]:checked').length`)) === tkAll.length, `${tkAll.length} vé`);
+    await T.shot("cust_09_don_nhieu_ve");
+    await T.ev(`$c('[data-act="gate-admit-order"]')`); await sleep(2200);
+    check("Cho vào cả nhóm một lần → mọi vé 'Đã vào'", (await T.ev(`S.view.gate.result.order.filter(x=>x.status==='used').length`)) === tkAll.length);
+    await T.ev(`gateProcess(${JSON.stringify(await T.ev(`Remote.rpc('ticket_qr',{p_token:'${qtok}',p_code:'${tkAll[0]}'}).then(r=>r.payload)`))}, 'kiểm thử')`); await sleep(1800);
+    check("Quét lại đơn đã vào → không cho vào thêm", await T.ev(`!document.querySelector('[data-act="gate-admit-order"]') || document.querySelector('[data-act="gate-admit-order"]').disabled`));
+    await logout(T); await toLogin(T);
+    await T.ev(`$v('li-user','${user}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
+    // 5. hoàn vé → thẻ quà tặng của chính chủ (vé đã vào không hoàn được → mua thêm 1 vé mới để thử hoàn)
+    await T.ev(`location.hash='#/lich'`); await sleep(800); await T.ev(H);
+    await T.ev(`(()=>{const s=S.shows.filter(s=>film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>2).sort((a,b)=>new Date(a.start)-new Date(b.start))[0];A["pick-show"]({dataset:{show:s.id}});return 1})()`); await sleep(1200);
+    await T.ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')];s[1].click();return 1})()`); await sleep(1300);
+    await T.ev(`A["to-checkout"]()`); await sleep(900); await T.ev(`document.querySelector('[data-act="pay-ok"]').click()`); await T.waitFor(`location.hash==='#/ve'`, 15000); await sleep(1000);
+    const tk2 = await T.ev(`myTickets().filter(t=>t.status==='valid').map(t=>t.code).pop()`);
     await T.ev(`location.hash='#/ve'`); await sleep(800); await T.ev(H);
-    await T.ev(`window.confirm=()=>true`); await T.ev(`S.view.tk='${tk}'; render()`); await sleep(300);
-    await T.ev(`$c('[data-act="refund"][data-code="${tk}"]')`); await sleep(2000);
+    await T.ev(`window.confirm=()=>true`); await T.ev(`S.view.tk='${tk2}'; render()`); await sleep(300);
+    await T.ev(`$c('[data-act="refund"][data-code="${tk2}"]')`); await sleep(2000);
     await T.ev(`location.hash='#/taikhoan'`); await T.waitFor(`/GC[A-Z0-9]{6}/.test($t('main'))`, 10000);
     check("Hoàn vé → thẻ quà tặng GC… hiện ở Tài khoản", /GC[A-Z0-9]{6}/.test(await T.ev(`$t('main')`)));
     await T.shot("cust_07_voucher");
@@ -136,11 +158,12 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
       await T.ev(`document.querySelector('[data-m="close"]')?.click()`);
       const found = await T.waitFor(`/Vé của Lê Thị Cúc/.test($t('[data-sheet]'))`, 15000);
       const n = await T.ev(`document.querySelectorAll('[data-sheet] [data-m="pick"]').length`);
-      check("FaceID khách → liệt kê vé hôm nay theo hồ sơ VNeID", found && n >= 1, `${n} vé`);
+      check("FaceID khách → tra vé hôm nay theo hồ sơ VNeID (đã vào hết thì báo không còn vé)", found || await T.ev(`/Không có vé hôm nay/.test($t('[data-sheet]'))`), `${n} vé`);
+      if (!n) { await T.ev(`$c('[data-sheet] [data-m="close"]')`); await sleep(300); }
       await T.shot("cust_08_quen_ve");
-      await T.ev(`$c('[data-sheet] [data-m="pick"]')`); await sleep(2000);
-      const res = await T.ev(`$t('#gate-result')`);
-      check("Chọn vé → đi qua luật cửa (giờ vào / cho vào)", /Hợp lệ|Chưa đến giờ/.test(res), res.split("\n")[0]);
+      if (n) { await T.ev(`$c('[data-sheet] [data-m="pick"]')`); await sleep(2000);
+        const res = await T.ev(`$t('#gate-result')`);
+        check("Chọn vé → đi qua luật cửa (giờ vào / cho vào)", /Hợp lệ|Chưa đến giờ|Đơn/.test(res), res.split("\n")[0]); }
     }
   } catch (e) { console.log("ABORT:", e.message); await T.shot("cust_abort").catch(() => {}); }
   console.log(`\n${results.filter(r => r.startsWith("PASS")).length} PASS, ${results.filter(r => r.startsWith("FAIL")).length} FAIL`);

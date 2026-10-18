@@ -33,7 +33,7 @@ Mật khẩu băm bcrypt trên máy chủ; mỗi hàm nhạy cảm nhận token 
 | Hồ sơ | Liên kết VNeID **lưu trên máy chủ** (đổi thiết bị vẫn còn; một hồ sơ chỉ gắn một tài khoản); điểm thưởng; lịch sử đặt vé; voucher; tuỳ chọn "xác nhận mỗi lần đặt vé bằng passkey" |
 | Đặt vé | Mã khuyến mãi (`CHAONHOM05` −10%) / thẻ quà tặng + điểm thưởng (1 điểm = 1.000 đ) tính ở máy chủ; cộng 5% điểm; phim T13+ dùng tuổi đã xác thực thì quét passkey |
 | Hoàn vé | Tiền vào **thẻ quà tặng** của chính chủ (180 ngày) |
-| Vào rạp | QR động · kiểm tuổi bằng căn cước/VNeID · **quên vé**: nhân viên bấm "Khách quên vé" → khách FaceID → hệ thống tìm vé hôm nay theo hồ sơ VNeID → cho vào |
+| Vào rạp | **Một QR cho cả đơn** (mua nhiều vé cùng suất: nhân viên quét một lần, tick người có mặt, cho vào một lượt; "Tách từng vé" khi bạn bè đến lẻ) · kiểm tuổi bằng căn cước/VNeID · **quên vé**: nhân viên bấm "Khách quên vé" → khách FaceID → hệ thống tìm vé hôm nay theo hồ sơ VNeID → cho vào |
 
 ## Tính năng đã chạy thật
 | Tính năng | Cách làm |
@@ -60,9 +60,10 @@ Mật khẩu băm bcrypt trên máy chủ; mỗi hàm nhạy cảm nhận token 
 
 ## Kiểm thử
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
-- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 38 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ.
+- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 43 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn.
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
-- `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 24 bước nghiệp vụ khách hàng (cần 005).
+- `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 27 bước nghiệp vụ khách hàng, gồm cửa soát đơn nhiều vé (cần 005).
+- `node tools/e2e-more.mjs [URL]`: mua thêm vé cùng suất, một QR cho cả đơn / tách từng vé (10 bước).
 - `node tools/e2e-seats.mjs [URL]`: 13 bước với 2 trình duyệt cùng tranh một suất (đang giữ, đã bán, huỷ, hết hạn giữ, trả tiền muộn, đăng xuất, tra cứu ghế ở quầy).
 - `node tools/e2e-age.mjs [URL]`: 16 bước nghiệp vụ kiểm tuổi tại cửa (QR căn cước 22 tuổi cho vào, 15 tuổi từ chối, mã không phải căn cước, chip, giờ vào cửa, xuất CSV).
 

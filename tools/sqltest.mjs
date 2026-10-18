@@ -74,6 +74,16 @@ const nv = await j(`select login('nhanvien','nhanvien123') j`);
 const found = await q(`select * from tickets_by_citizen($1,'an')`, [nv.token]);
 ok("nhân viên tra vé hôm nay theo hồ sơ VNeID (sau FaceID)", found.length === 2 && found.every(t => t.username === "khach"), found.map(t => t.code).join(","));
 ok("khách không gọi được tickets_by_citizen", /forbidden/.test(await err(`select * from tickets_by_citizen($1,'an')`, [kh.token])));
+// ---- một QR cho cả đơn
+await q(`select hold_seat('S1','B1','H3',now()+interval '5 min')`); await q(`select hold_seat('S1','B2','H3',now()+interval '5 min')`); await q(`select hold_seat('S1','B3','H3',now()+interval '5 min')`);
+await q(`select sell_order_u($1,'S1','H3','[{"code":"VB1","seat":"B1","price":85000,"channel":"Online","need_doc":false},{"code":"VB2","seat":"B2","price":85000,"channel":"Online","need_doc":true},{"code":"VB3","seat":"B3","price":85000,"channel":"Online"}]'::jsonb) j`, [kh.token]);
+const ord = await q(`select * from order_tickets($1,'VB2')`, [nv.token]);
+ok("quét một vé → ra cả đơn cùng chủ + cùng suất (gồm vé mua thêm VT02, VT03)", ord.map(x => x.code).sort().join(",") === "VB1,VB2,VB3,VT02,VT03", ord.map(x => x.code).join(","));
+const adm = await j(`select admit_many_s($1, array['VB1','VB3','VT02']) j`, [nv.token]);
+ok("cho vào 3 vé một lần", adm.VB1 === "valid" && adm.VB3 === "valid" && adm.VT02 === "valid");
+ok("quét lại đơn: 3 vé đã vào, vé cần kiểm tuổi vẫn chờ", (await q(`select * from order_tickets($1,'VB2')`, [nv.token])).filter(x => x.status === "used").length === 3);
+ok("cho vào lần 2 cùng vé → báo đã dùng", (await j(`select admit_many_s($1, array['VB1']) j`, [nv.token])).VB1 === "used");
+ok("khách không gọi được order_tickets", /forbidden/.test(await err(`select * from order_tickets($1,'VB2')`, [kh.token])));
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);

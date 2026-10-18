@@ -337,9 +337,16 @@ async function gateTicketFlow(t, qr, via, allowEarly) {
   if (now > endOf(sh).getTime()) { g.result = { kind: "over", code, qr }; gatePush(code, "over", d); log("gate", `Từ chối ${code}: suất đã kết thúc`, false); return; }
   if (!allowEarly && new Date(sh.start).getTime() - now > GATE_OPEN_MIN * 60000) { g.result = { kind: "early", code, qr }; gatePush(code, "early", `${d} · chiếu ${hhmm(sh.start)}`); return; }
   if (qr && qr.status === "static") { g.result = { kind: "static", code, qr }; gatePush(code, "static", d + " · " + via); return; }
+  // một QR cho cả đơn: vé thuộc đơn nhiều vé → bảng cả đơn, cho vào một lần
+  if (Remote.v5 && ON() && Auth.token) { const order = await fetchOrder(t.code); if (order && order.length > 1) { g.result = { kind: "order", code, qr, order, early: allowEarly }; gatePush(code, "order", `${d} · đơn ${order.length} vé`); return; } }
   if (t.needDoc) { g.result = { kind: "doc", code, qr }; gatePush(code, "doc", d); return; }
   if (!(await admit(t))) { g.result = { kind: t.status === "valid" ? "none" : t.status, code, qr }; return; }
   log("gate", `Vào phòng: ${t.code} (${t.viewerName})${allowEarly ? " – cho vào sớm" : ""}`); g.result = { kind: "ok", code, qr }; gatePush(code, "ok", d);
+}
+async function fetchOrder(code) {
+  try { const list = await Remote.rpc("order_tickets", { p_token: Auth.token, p_code: code });
+    list.forEach(x => { const ex = S.tickets.find(y => y.code === x.code); if (ex) Object.assign(ex, { status: x.status, needDoc: x.need_doc }); });
+    return list; } catch (e) { return null; }
 }
 /** Cho vào phòng chiếu. Trực tuyến: máy chủ đảm bảo một vé chỉ qua cửa một lần dù nhiều máy cùng quét. */
 async function admit(t) {
@@ -471,6 +478,7 @@ const A = {
     if (ok && typeof ok === "object" && ok.points != null) { pts = ok.points_earned; S.user.points = ok.points; Auth.setPoints(ok.points); } else S.user.points += pts;
     log("pay", `Thanh toán đơn ${d.id}: ${vnd(ok && ok.paid != null ? ok.paid : d.total)} (${S.view.payMethod || "momo"})`);
     S.draft = null; S.view.tk = tks[0].code; save(); go("ve"); toast(`Đặt vé thành công · ${ok && ok.discount > 0 ? "giảm " + vnd(ok.discount) + " · " : ""}cộng ${pts} điểm`); },
+  "qr-split"() { S.view.splitQr = !S.view.splitQr; render(); },
   "hist-open"(el) { S.view.tk = el.dataset.code; go("ve"); },
   "ticket-pick"(el) { S.view.tk = el.dataset.code; render(); window.scrollTo({ top: 0, behavior: "smooth" }); },
   async refund(el) { const t = S.tickets.find(x => x.code === el.dataset.code), mins = (new Date(show(t.showId).start) - new Date()) / 60000;
@@ -537,6 +545,17 @@ const A = {
     else { gatePush(t.code, "rejected", `${type} – không đạt`); S.view.gate = {}; }
     save(); gateRefresh(); toast(ok ? "Đã cho vào" : "Đã ghi nhận từ chối"); },
   async "gate-early"(el) { const t = S.tickets.find(x => x.code === el.dataset.code), qr = S.view.gate.result && S.view.gate.result.qr; log("gate", `Cho vào sớm vé ${t.code} (nhân viên ${Auth.user.name} quyết định)`); await gateTicketFlow(t, qr, "cho vào sớm", true); save(); gateRefresh(); },
+  async "gate-admit-order"() {
+    const r = S.view.gate.result; if (!r || r.kind !== "order") return;
+    const codes = [...document.querySelectorAll('#gate-result input[data-order-code]:checked')].map(i => i.dataset.orderCode);
+    if (!codes.length) return toast("Chọn ít nhất một vé");
+    let res; try { res = await Remote.rpc("admit_many_s", { p_token: Auth.token, p_codes: codes }); } catch (e) { return toast(Auth.message(e), "bad"); }
+    const okN = codes.filter(c => res[c] === "valid").length, dup = codes.filter(c => res[c] === "used");
+    codes.forEach(c => { const t = S.tickets.find(x => x.code === c); if (t && res[c] === "valid") t.status = "used"; });
+    log("gate", `Đơn ${r.code}: cho vào ${okN} vé${dup.length ? `, ${dup.length} vé đã dùng` : ""} (${codes.join(", ")})`, okN > 0);
+    gatePush(r.code, "ok", `đơn: cho vào ${okN} người${dup.length ? " · " + dup.length + " vé đã dùng" : ""}`);
+    toast(`Đã cho vào ${okN} người${dup.length ? ` · ${dup.length} vé đã quét ở cửa khác` : ""}`, dup.length ? "bad" : "");
+    r.order = (await fetchOrder(r.code)) || r.order; save(); gateRefresh(); },
   "age-check"(el) {
     if (el.dataset.seat) { // quầy vé
       const p = S.view.pos, sh = show(p.showId), sid = el.dataset.seat;
@@ -547,7 +566,8 @@ const A = {
       if (r.ok) {
         if (!(await admit(t))) { S.view.gate = { result: { kind: t.status, code: t.code } }; return gateRefresh(); }
         log("gate", `Vào phòng sau kiểm tuổi qua ${r.method}: ${t.code}`); gatePush(t.code, "ok", `${r.name}, ${r.age} tuổi · ${r.method}`);
-        S.view.gate = { result: { kind: "ok", code: t.code, qr: prev.qr, via: `${r.method}: ${r.name}, ${r.age} tuổi`, recordId: r.recordId } };
+        if (prev.kind === "order") { prev.order = (await fetchOrder(prev.code)) || prev.order; S.view.gate = { result: prev }; toast(`${r.name} – cho vào (ghế ${t.seat})`); }
+        else S.view.gate = { result: { kind: "ok", code: t.code, qr: prev.qr, via: `${r.method}: ${r.name}, ${r.age} tuổi`, recordId: r.recordId } };
       } else { gatePush(t.code, "rejected", `${r.name || ""}${r.age != null ? ", " + r.age + " tuổi" : ""} · ${r.method} – ${r.reason}`); S.view.gate = {}; toast("Đã ghi nhận từ chối: " + r.reason, "bad"); }
       save(); gateRefresh(); } });
   },

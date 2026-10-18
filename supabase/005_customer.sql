@@ -223,6 +223,31 @@ begin
     order by s.start_at;
 end $$;
 
+-- ---------- một QR cho cả đơn: quét bất kỳ vé nào → cả đơn (cùng chủ tài khoản, cùng suất) ----------
+create or replace function public.order_tickets(p_token uuid, p_code text)
+returns table (code text, seat text, viewer_name text, status text, need_doc boolean, verified boolean, reason text, aud text)
+language plpgsql stable security definer set search_path = public as $$
+declare t tickets;
+begin
+  perform _need(p_token, array['nhanvien', 'quanly']);
+  select * into t from tickets where tickets.code = p_code;
+  if t.code is null then return; end if;
+  return query select x.code, x.seat, x.viewer_name, x.status, x.need_doc, x.verified, x.reason, x.aud from tickets x
+    where x.show_id = t.show_id and x.status <> 'refunded'
+      and ((t.owner_user is not null and x.owner_user = t.owner_user) or (t.owner_user is null and x.order_id = t.order_id))
+    order by x.seat;
+end $$;
+
+-- Cho vào nhiều vé một lần (mỗi vé vẫn nguyên tử: hai cửa cùng quét thì chỉ một cửa thành công)
+create or replace function public.admit_many_s(p_token uuid, p_codes text[])
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare c text; out jsonb := '{}'::jsonb;
+begin
+  perform _need(p_token, array['nhanvien', 'quanly']);
+  foreach c in array p_codes loop out := out || jsonb_build_object(c, admit_ticket(c)); end loop;
+  return out;
+end $$;
+
 alter table public.verifications drop constraint if exists verifications_kind_check;
 alter table public.verifications add constraint verifications_kind_check
   check (kind in ('faceid', 'vneid', 'nfc', 'passkey', 'doc', 'qr', 'login'));
@@ -232,5 +257,6 @@ grant execute on function public.login(text, text), public.register(text, text, 
   public.link_vneid(uuid, text, text, bigint), public.unlink_vneid(uuid), public.set_pref(uuid, boolean),
   public.login_face(text, float8[], text), public.login_vneid(text, text),
   public.voucher_check(uuid, text), public.my_vouchers(uuid), public.sell_order_u(uuid, text, text, jsonb, text, int),
-  public.refund_ticket_u(uuid, text), public.tickets_by_citizen(uuid, text)
+  public.refund_ticket_u(uuid, text), public.tickets_by_citizen(uuid, text),
+  public.order_tickets(uuid, text), public.admit_many_s(uuid, text[])
   to anon, authenticated;

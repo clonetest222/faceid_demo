@@ -93,7 +93,7 @@ function vSuat() {
 
 /* ---------- Soát vé ---------- */
 const GATE = { method: "cam", stop: null, busy: false, last: "" };
-const SCAN_TXT = { ok: ["Hợp lệ – đã cho vào", "ok"], doc: ["Cần kiểm tra giấy tờ", "warn"], used: ["Vé đã dùng", "bad"], refunded: ["Vé đã hoàn", "bad"], none: ["Không tìm thấy vé", "bad"], expired: ["QR hết hạn", "bad"], forged: ["QR giả / bị sửa", "bad"], static: ["Mã tĩnh – đối chiếu thêm", "warn"], group: ["Vé đoàn", "ok"], rejected: ["Từ chối", "bad"], early: ["Chưa đến giờ vào", "warn"], over: ["Suất đã kết thúc", "bad"] };
+const SCAN_TXT = { ok: ["Hợp lệ – đã cho vào", "ok"], doc: ["Cần kiểm tra giấy tờ", "warn"], used: ["Vé đã dùng", "bad"], refunded: ["Vé đã hoàn", "bad"], none: ["Không tìm thấy vé", "bad"], expired: ["QR hết hạn", "bad"], forged: ["QR giả / bị sửa", "bad"], static: ["Mã tĩnh – đối chiếu thêm", "warn"], group: ["Vé đoàn", "ok"], rejected: ["Từ chối", "bad"], early: ["Chưa đến giờ vào", "warn"], over: ["Suất đã kết thúc", "bad"], order: ["Đơn nhiều vé", "ok"] };
 /* Giờ mở cửa phòng chiếu: trước giờ chiếu 30 phút; sau khi suất kết thúc thì vé hết hiệu lực */
 const GATE_OPEN_MIN = 30;
 function gateRecent() {
@@ -115,6 +115,7 @@ function gateResultCard() {
   const g = S.view.gate || {}, r = g.result;
   if (!r) return "";
   if (r.kind === "group") return groupPanel(r.code);
+  if (r.kind === "order") return orderPanel(r);
   const big = (t, icon, title, lines, actions = "") => `<div class="flex items-start gap-4 rounded-xl border border-border bg-surface p-4 sm:p-5" data-gate-result="${r.kind}">
     <span class="grid size-14 shrink-0 place-items-center rounded-xl ${TONE[t]}">${ic(icon, "size-7")}</span>
     <div class="min-w-0 flex-1"><p class="text-2xl font-semibold ${t === "ok" ? "text-success" : t === "bad" ? "text-err" : "text-warning"}">${title}</p>${lines}${actions ? `<div class="mt-3 flex flex-wrap gap-2">${actions}</div>` : ""}</div></div>`;
@@ -137,6 +138,23 @@ function gateResultCard() {
        <div class="mt-1 flex w-full flex-wrap items-center gap-2 border-t border-border pt-3"><span class="text-sm text-muted">Giấy tờ khác, kiểm bằng mắt:</span><div class="w-full sm:w-56">${selectBox("gate-doc", ["Giấy khai sinh", "Thẻ học sinh", "Hộ chiếu", "Giấy phép lái xe", "Căn cước (không quét được)"].map(x => [x, x]), S.view.gateDoc || "Giấy khai sinh", { act: "gate-doc-type" })}</div><button type="button" class="${B.outline}" data-act="gate-doc" data-code="${t.code}" data-ok="1">Đạt</button><button type="button" class="${B.ghost}" data-act="gate-doc" data-code="${t.code}" data-ok="0">Không đạt</button></div>`);
   }
   return big("bad", "x", r.kind, qline);
+}
+/** Đơn nhiều vé (1 QR cho cả nhóm): vé sẵn sàng tick chọn → cho vào một lần; vé cần kiểm tuổi có nút riêng */
+function orderPanel(r) {
+  const t0 = S.tickets.find(x => x.code === r.code), sh = t0 && show(t0.showId), f = sh && film(sh.filmId);
+  const ready = r.order.filter(x => x.status === "valid" && !x.need_doc), pending = r.order.filter(x => x.status === "valid" && x.need_doc), used = r.order.filter(x => x.status === "used");
+  const row = x => `<label class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-0 ${x.status === "used" ? "opacity-60" : ""}">
+      ${x.status === "valid" && !x.need_doc ? `<input type="checkbox" data-order-code="${x.code}" checked class="size-4 accent-[var(--primary)]">` : `<span class="grid size-4 place-items-center">${x.status === "used" ? ic("check", "size-4 text-success") : ic("id-card", "size-4 text-warning")}</span>`}
+      <span class="w-12 shrink-0 font-mono text-sm font-medium">${esc(x.seat)}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate text-sm">${esc(x.viewer_name || "Người đi cùng")}</span><span class="block text-xs text-muted">${x.code}${x.aud ? " · " + esc(x.aud) : ""}</span></span>
+      ${x.status === "used" ? tone("Đã vào", "neutral") : x.need_doc ? `<button type="button" class="${B.outline} min-h-8 px-3 text-xs" data-act="age-check" data-mode="qr-cam" data-code="${x.code}">${ic("scan-qr-code", "size-3.5")}Kiểm tuổi</button>` : tone(x.verified ? "Đã xác thực" : "Sẵn sàng", "ok")}</label>`;
+  return `<div class="rounded-xl border border-border bg-surface" data-gate-result="order">
+    <div class="flex items-start gap-4 p-4 sm:p-5"><span class="grid size-14 shrink-0 place-items-center rounded-xl ${TONE.ok}">${ic("users", "size-7")}</span>
+      <div class="min-w-0 flex-1"><p class="text-2xl font-semibold text-success">Đơn ${r.order.length} vé${used.length === r.order.length ? " – đã vào hết" : ""}</p>
+        ${f ? `<p class="mt-1 text-sm">${esc(f.title)} ${rate(f.rating)} · ${hhmm(sh.start)} · ${room(sh.roomId).name} · ghế <b>${esc(r.order.map(x => x.seat).join(", "))}</b></p>` : ""}
+        <p class="mt-1 text-xs text-muted">${r.code} · một QR cho cả nhóm${r.qr && r.qr.status === "ok" ? ` · QR ký ${r.qr.age_seconds ?? 0} giây trước` : ""}${r.early ? " · cho vào sớm" : ""}${pending.length ? ` · <span class="text-warning">${pending.length} vé cần kiểm tuổi (phim ${f ? f.rating : ""})</span>` : ""}</p></div></div>
+    <div class="border-t border-border">${r.order.map(row).join("")}</div>
+    <div class="flex flex-wrap items-center gap-2 border-t border-border p-4 sm:px-5"><button type="button" class="${B.primary}" data-act="gate-admit-order" ${ready.length ? "" : "disabled"}>${ic("log-in")}Cho vào ${ready.length ? ready.length + " người" : ""}</button><span class="text-xs text-muted">Bỏ tick vé của người chưa tới – họ dùng QR tách riêng sau. ${used.length ? used.length + " người đã vào." : ""}</span></div></div>`;
 }
 /** Bốn nút kiểm tuổi điện tử – dùng ở cửa soát (data-code = vé) */
 const AGE_METHODS = [["qr-cam", "scan-qr-code", "Quét QR căn cước"], ["qr-img", "image", "Ảnh QR căn cước"], ["chip", "nfc", "Chip căn cước (NFC)"], ["face", "scan-face", "FaceID qua VNeID"]];
