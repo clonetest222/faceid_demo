@@ -475,7 +475,8 @@ const A = {
     if (!d || new Date(d.until) < new Date()) { releaseDraft("Ghế đã hết hạn giữ – giao dịch tự huỷ"); save(); return go("lich"); }
     const sh = show(d.showId), f = film(sh.filmId);
     // vé phim giới hạn tuổi dùng tuổi đã xác thực của tài khoản → chủ tài khoản xác nhận bằng Face ID/vân tay
-    const selfAge = RATINGS[f.rating] > 0 && d.assign.some(a => a.viewer.kind !== "other" && S.user.linked);
+    // vé cho bạn đi cùng dùng tuổi đã xác thực của chính bạn đó → không cần chủ tài khoản xác nhận sinh trắc
+    const selfAge = RATINGS[f.rating] > 0 && d.assign.some(a => a.viewer.kind !== "other" && a.viewer.kind !== "friend" && S.user.linked);
     let pkFallback = false;
     if (selfAge) { const r = await requirePasskey(`Mua vé phim ${f.rating} bằng tuổi đã xác thực`); if (r === "cancel") return; if (r === "fallback") pkFallback = true; }
     else if (S.user.confirmEvery && S.user.passkey) { const r = await Passkey.verify(S.user.passkey); log("passkey", `Xác nhận đặt vé đơn ${d.id}: ${r.ok ? "đạt" : r.message}`, r.ok); if (!r.ok) return toast(r.message, "bad"); }
@@ -491,10 +492,11 @@ const A = {
     if (ON()) { try { ok = await rpcAuth("sell_order", args); } catch (e) { el.disabled = false; if (/companion_/.test(e.message)) return toast(Auth.message(e), "bad"); if (/hold_expired/.test(e.message)) { releaseDraft("Ghế đã hết hạn giữ"); save(); return go("lich"); } return toast(Auth.message(e), "bad"); } }
     else ok = true;
     if (!ok) { releaseDraft(); save(); return go("lich"); }
-    tks.forEach(t => { S.seats[d.showId][t.seat] = { st: "sold" }; const ex = S.tickets.find(x => x.code === t.code); ex ? Object.assign(ex, { ownerUser: t.ownerUser }) : S.tickets.push(t); });
+    // realtime có thể đã chèn vé (chưa có viewer_user – máy chủ gắn bạn đi cùng ở bước sau) → giữ thông tin bạn đi cùng đã biết
+    tks.forEach(t => { S.seats[d.showId][t.seat] = { st: "sold" }; const ex = S.tickets.find(x => x.code === t.code); ex ? Object.assign(ex, { ownerUser: t.ownerUser, viewerUser: ex.viewerUser || t.viewerUser }) : S.tickets.push(t); });
     if (ok && typeof ok === "object" && ok.points != null) { pts = ok.points_earned; S.user.points = ok.points; Auth.setPoints(ok.points); } else S.user.points += pts;
     log("pay", `Thanh toán đơn ${d.id}: ${vnd(ok && ok.paid != null ? ok.paid : d.total)} (${S.view.payMethod || "momo"})`);
-    S.draft = null; S.view.tk = tks[0].code; save(); go("ve"); toast(`Đặt vé thành công · ${ok && ok.discount > 0 ? "giảm " + vnd(ok.discount) + " · " : ""}cộng ${pts} điểm`); },
+    S.draft = null; S.view.tk = tks[0].code; S.view.vouchers = null; save(); go("ve"); toast(`Đặt vé thành công · ${ok && ok.discount > 0 ? "giảm " + vnd(ok.discount) + " · " : ""}cộng ${pts} điểm`); },
   "qr-split"() { S.view.splitQr = !S.view.splitQr; render(); },
   "hist-open"(el) { S.view.tk = el.dataset.code; go("ve"); },
   "ticket-pick"(el) { S.view.tk = el.dataset.code; render(); window.scrollTo({ top: 0, behavior: "smooth" }); },

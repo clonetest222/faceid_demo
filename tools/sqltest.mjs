@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -59,6 +59,8 @@ await q(`select hold_seat('S1','A1','H1',now()+interval '5 min')`); await q(`sel
 const pay = await j(`select sell_order_u($1,'S1','H1','[{"code":"VT01","seat":"A1","price":85000,"channel":"Online"},{"code":"VT02","seat":"A2","price":85000,"channel":"Online"}]'::jsonb,'CHAONHOM05',20) j`, [kh.token]);
 ok("thanh toán: 170.000 − 10% − 20 điểm = 133.000, cộng 6 điểm", +pay.gross === 170000 && +pay.discount === 17000 && pay.points_used === 20 && +pay.paid === 133000 && pay.points_earned === 6 && pay.points === 106, JSON.stringify(pay));
 ok("voucher dùng rồi không dùng lại", /voucher_used/.test(await err(`select voucher_check($1,'CHAONHOM05')`, [kh.token])));
+ok("mã khuyến mãi dùng chung: khách khác vẫn dùng được (007)", (await j(`select voucher_check($1,'CHAONHOM05') j`, [reg.token])).percent === 10);
+ok("my_vouchers: khách đã dùng thấy mã mờ (used_at), khách khác thấy còn hiệu lực", (await q(`select used_at from my_vouchers($1) where code='CHAONHOM05'`, [kh.token]))[0].used_at !== null && (await q(`select used_at from my_vouchers($1) where code='CHAONHOM05'`, [reg.token]))[0].used_at === null);
 ok("điểm lưu trên máy chủ", (await j(`select session_info($1) j`, [kh.token])).points === 106);
 await q(`select hold_seat('S1','A3','H2',now()+interval '5 min')`);
 const pay2 = await j(`select sell_order_u($1,'S1','H2','[{"code":"VT03","seat":"A3","price":85000,"channel":"Online"}]'::jsonb,null,999) j`, [kh.token]);

@@ -84,7 +84,8 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
       await T.setFile("#lf-file", join(FACES, "sheldon2.png"));
       await T.waitFor(`!!Auth.user`, 60000); await sleep(800); await T.ev(H);
       check("Đăng nhập FaceID đúng người → vào thẳng, không cần mật khẩu", (await T.ev(`Auth.user && Auth.user.username`)) === user && (await T.ev(`location.hash`)) === "#/lich");
-      const nLogin = await T.ev(`(S.verifs||[]).filter(v=>v.kind==='login').length`);
+      await T.waitFor(`(S.verifs||[]).filter(v=>v.kind==='login'&&v.detail&&v.detail.user==='${user}').length >= 2`, 10000);
+      const nLogin = await T.ev(`(S.verifs||[]).filter(v=>v.kind==='login'&&v.detail&&v.detail.user==='${user}').length`);
       check("Mỗi lần đăng nhập FaceID (kể cả thất bại) có bản ghi", nLogin >= 2, nLogin + " bản ghi");
       await logout(T); await toLogin(T);
       await T.ev(`$c('[data-act="login-mode"][data-v="vneid"]')`); await sleep(400); await T.ev(H);
@@ -133,8 +134,10 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     check("Nhập tài khoản nhân viên → không tìm thấy (không lộ nhân sự)", !(await T.ev(`!!S.draft.assign[0].viewer.user`)));
     await T.ev(`$v('friend-0','GIAOVIEN');$c('[data-act="friend-check"][data-i="0"]')`); await sleep(1500);
     check("Bạn đã xác thực VNeID → hiện tên, tuổi, 'vé vào thẳng'", await T.ev(`S.draft.assign[0].viewer.user==='giaovien' && S.draft.assign[0].viewer.verified===true && /vào thẳng/.test($t('main'))`), await T.ev(`JSON.stringify(S.draft.assign[0].viewer)`));
-    await T.ev(`$sel('viewer-1','friend')`); await sleep(400); await T.ev(`$v('friend-1','${email}');$c('[data-act="friend-check"][data-i="1"]')`); await sleep(1500);
-    check("Bạn chưa xác thực (tra theo email) → cảnh báo kiểm giấy tờ ở cửa", await T.ev(`S.draft.assign[1].viewer.user==='${user}' && S.draft.assign[1].viewer.verified===false`));
+    const user2 = user + "b", email2 = `kt${uid}b@example.com`;
+    await T.ev(`Remote.rpc('register',{p_user:'${user2}',p_pass:'matkhau1',p_name:'Bạn Chưa Xác Thực',p_email:'${email2}',p_phone:null})`);
+    await T.ev(`$sel('viewer-1','friend')`); await sleep(400); await T.ev(`$v('friend-1','${email2}');$c('[data-act="friend-check"][data-i="1"]')`); await sleep(1500);
+    check("Bạn chưa xác thực (tra theo email) → cảnh báo kiểm giấy tờ ở cửa", await T.ev(`S.draft.assign[1].viewer.user==='${user2}' && S.draft.assign[1].viewer.verified===false && /kiểm tra giấy tờ/.test($t('main'))`), await T.ev(`JSON.stringify(S.draft.assign[1].viewer)`));
     await T.shot("cust_10_ban_di_cung");
     await T.ev(`$c('[data-act="pay-ok"]')`); await T.waitFor(`location.hash==='#/ve'`, 15000); await sleep(1200);
     const fTk = await T.ev(`myTickets().filter(t=>t.viewerUser==='giaovien').map(t=>({code:t.code,verified:t.verified,needDoc:t.needDoc,name:t.viewerName}))`);
@@ -196,6 +199,8 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
         check("Chọn vé → đi qua luật cửa (giờ vào / cho vào)", /Hợp lệ|Chưa đến giờ|Đơn/.test(res), res.split("\n")[0]); }
     }
   } catch (e) { console.log("ABORT:", e.message); await T.shot("cust_abort").catch(() => {}); }
+  // dọn: trả hồ sơ VNeID "cuc" về trạng thái chưa gắn tài khoản để bộ kiểm thử chạy lại được
+  try { await T.ev(`Remote.rpc('login',{p_user:'${user}',p_pass:'matkhau1'}).then(s=>Remote.rpc('unlink_vneid',{p_token:s.token}).then(()=>Remote.rpc('logout',{p_token:s.token})))`); } catch (e) {}
   console.log(`\n${results.filter(r => r.startsWith("PASS")).length} PASS, ${results.filter(r => r.startsWith("FAIL")).length} FAIL`);
   console.log("errors:\n" + [...new Set(errors)].slice(0, 20).join("\n"));
   edge.kill(); process.exit(0);

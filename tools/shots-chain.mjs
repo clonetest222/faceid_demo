@@ -57,7 +57,7 @@ try {
   await shot("chain_07_quyen_chuoi");
   // ---- quản lý rạp (chỉ khi máy chủ có 006; ngoại tuyến hoặc chưa 006 thì tài khoản demo)
   const ql2 = await ev(`Auth.login('quanlyvinh','quanlyvinh123').then(r=>r.ok?true:r.message)`);
-  if (ql2 === true) { await sleep(1200); await ev("location.hash='#/quyen'"); await sleep(1200);
+  if (ql2 === true) { await sleep(800); await ev("location.hash='#/tongquan'"); await sleep(600); await ev("location.hash='#/quyen'"); await sleep(1500); console.log('quanlyvinh:', JSON.stringify(await ev("({u:Auth.user.username,cid:Auth.user.cinemaId,staff:staffCinemaId(),chain:isChainManager(),hash:location.hash})")));
     check("Quản lý rạp 086: không chọn rạp khi tạo nhân viên (cố định Vinh Centre), không có ô đổi rạp", await ev("staffCinemaId()==='086' && !isChainManager()") && await ev("!document.querySelector('[data-select=\"work-cinema\"]')") && await ev("!!document.querySelector('#nu-cinema-fixed')"));
     await shot("chain_08_quyen_rap"); }
   else console.log("SKIP  Quản lý rạp quanlyvinh – máy chủ chưa chạy migration 006: " + ql2);

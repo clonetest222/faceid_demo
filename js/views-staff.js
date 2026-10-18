@@ -221,7 +221,8 @@ function vQuay() {
 /* ---------- Tài khoản & quyền ---------- */
 const PERMS = [["Xem lịch chiếu, mua vé, vé của tôi", 1, 0, 0], ["Vé đoàn (giáo viên)", 1, 0, 1], ["Soát vé, quét QR / NFC", 0, 1, 1], ["Bán tại quầy", 0, 1, 1], ["Thêm suất chiếu", 0, 0, 1], ["Tổng quan doanh thu", 0, 0, 1], ["Kiểm thử, đặt lại dữ liệu", 0, 0, 1], ["Tạo tài khoản nhân viên (rạp mình)", 0, 0, 1], ["Xem mọi rạp, đổi rạp thao tác (quản lý chuỗi)", 0, 0, 1]];
 function vQuyen() {
-  const users = S.view.users;
+  if (S.view.users && S.view.usersFor !== Auth.user.username) S.view.users = null;   // danh sách theo quyền của người đang đăng nhập
+  const users = S.view.users; S.view.usersFor = Auth.user.username;
   if (!users && Remote.v4 && Auth.token && !S.view.usersLoading) { S.view.usersLoading = true; Remote.rpc("list_users", { p_token: Auth.token }).then(r => { S.view.users = r; }).catch(e => { S.view.users = []; toast(Auth.message(e), "bad"); }).finally(() => { S.view.usersLoading = false; render(); }); }
   const list = users || (Remote.v4 ? null : Auth.DEMO.map(d => ({ username: d.username, role: d.role, display_name: d.name })));
   const nu = S.view.nu || (S.view.nu = { role: "nhanvien", cinema: workCinema().id });

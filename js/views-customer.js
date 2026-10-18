@@ -331,7 +331,8 @@ function vDoan() {
 /* ---------- Tài khoản ---------- */
 function vTaiKhoan() {
   const u = S.user, a = Auth.user, v5 = Remote.v5 && a.token;
-  if (v5 && S.view.vouchers === undefined) { S.view.vouchers = null; Remote.rpc("my_vouchers", { p_token: a.token }).then(r => { S.view.vouchers = r; render(); }).catch(() => { S.view.vouchers = []; }); }
+  // null/undefined = cần tải lại (sau khi thanh toán, hoàn vé); cờ loading tránh gọi trùng khi render nhiều lần
+  if (v5 && !S.view.vouchers && !S.view.vouchersLoading) { S.view.vouchersLoading = true; Remote.rpc("my_vouchers", { p_token: a.token }).then(r => { S.view.vouchers = r; }).catch(() => { S.view.vouchers = []; }).finally(() => { S.view.vouchersLoading = false; render(); }); }
   const idCard = u.linked
     ? `<div class="flex items-start gap-3"><span class="grid size-10 place-items-center rounded-lg bg-success-bg text-success">${ic("badge-check", "size-5")}</span><div class="min-w-0"><p class="font-semibold">${esc(u.name)}</p><p class="text-sm text-muted">Sinh ${dmy(u.dob)} · ${ageAt(u.dob, new Date())} tuổi · hạng ${tier()}</p><p class="mt-1 text-xs text-muted">Xác thực lúc ${new Date(u.verifiedAt).toLocaleString("vi-VN")} · ${esc(u.method || "")}${u.faceScore != null ? ` · tương đồng ${u.faceScore}%` : ""}${v5 ? " · lưu trên máy chủ" : " · chỉ trên thiết bị này"}</p></div></div>
        <p class="mt-3 text-pretty text-xs text-muted">Rạp chỉ lưu ngày sinh, mức và thời điểm xác thực – không lưu ảnh khuôn mặt. Đã liên kết thì đăng nhập được bằng FaceID hoặc VNeID.</p>

@@ -47,12 +47,24 @@ const png = async (T, expr, name) => { const d = await T.ev(`qrPng(${expr})`); c
     for (let d = 0; d < Math.max(1, nDays) && !ok; d++) { if (d) { await T.ev(`$c('[data-act="lich-day"]',${d})`); await sleep(500); }
       ok = await T.ev(`(()=>{const b=[...document.querySelectorAll('[data-act="pick-show"]:not([disabled])')].find(b=>S.shows.find(s=>s.id===b.dataset.show&&s.filmId==='f4'));if(!b)return false;b.click();return true})()`); }
     check("Chọn được suất phim T16", ok); await sleep(900); await T.ev(H);
-    for (let k = 0; k < 2; k++) { await T.ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')].filter(b=>b.getAttribute('aria-pressed')==='false');s[Math.floor(s.length/2)].click();return 1})()`); await sleep(1300); }
-    await T.ev(`$c('[data-act="to-checkout"]')`); await sleep(900); await T.ev(H);
-    await T.ev(`$c('[data-act="pay-ok"]')`); await T.waitFor(`location.hash==='#/ve'`, 15000); await sleep(800);
-    const codes = await T.ev(`myTickets().filter(t=>t.status==='valid'&&film(show(t.showId).filmId).rating==='T16').map(t=>({code:t.code,needDoc:t.needDoc}))`);
-    check("2 vé T16 của khách chưa xác thực → phải kiểm tuổi tại cửa", codes.length >= 2 && codes.every(c => c.needDoc), JSON.stringify(codes.slice(-2)));
-    const [tk1, tk2] = codes.slice(-2).map(c => c.code);
+    // hai khách khác nhau, mỗi người 1 vé → soát từng vé (cùng một chủ mua nhiều vé thì đi luồng "một QR cho cả đơn", kiểm ở e2e-customer)
+    const t16Show = await T.ev(`S.draft.showId`), codes = [];
+    const buyOne = async () => {
+      await T.ev(`(()=>{const s=[...document.querySelectorAll('[data-act="toggle-seat"]:not([disabled])')].filter(b=>b.getAttribute('aria-pressed')==='false');s[Math.floor(s.length/2)].click();return 1})()`); await sleep(1300);
+      await T.ev(`$c('[data-act="to-checkout"]')`); await sleep(900); await T.ev(H);
+      await T.ev(`$c('[data-act="pay-ok"]')`); await T.waitFor(`location.hash==='#/ve'`, 15000); await sleep(800);
+      codes.push(...await T.ev(`myTickets().filter(t=>t.status==='valid'&&t.showId==='${t16Show}').map(t=>({code:t.code,needDoc:t.needDoc})).slice(-1)`));
+    };
+    // tài khoản mới cho mỗi vé: tài khoản demo đã có vé cùng suất từ lần chạy trước sẽ gộp thành đơn nhiều vé
+    const freshUser = async k => { const u = "kta" + Date.now().toString(36).slice(-5) + k;
+      await logout(T); await T.ev(`Remote.rpc('register',{p_user:'${u}',p_pass:'matkhau1',p_name:'Khách Kiểm Tuổi',p_email:null,p_phone:null})`);
+      await login(T, u, "matkhau1"); await T.ev(`document.querySelector('[data-m="later"]')?.click()`); await sleep(400);
+      await T.ev(`location.hash='#/lich'`); await sleep(800); await T.ev(H); await T.ev(`A["pick-show"]({dataset:{show:"${t16Show}"}})`); await sleep(1000); await T.ev(H); };
+    await T.ev(`A["cancel-draft"]()`); await sleep(500);
+    await freshUser(1); await buyOne();
+    await freshUser(2); await buyOne();
+    check("2 vé T16 của 2 khách chưa xác thực → phải kiểm tuổi tại cửa", codes.length === 2 && codes.every(c => c.needDoc), JSON.stringify(codes));
+    const [tk1, tk2] = codes.map(c => c.code);
     await logout(T);
     // 2. nhân viên soát vé
     await login(T, "nhanvien", "nhanvien123");
