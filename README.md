@@ -43,7 +43,9 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 |---|---|
 | Cơ sở | **Cơ sở & phòng**: thêm/sửa/xoá cơ sở (mã 3 số, địa chỉ, hotline, hạng giá, tạm ngưng). Quản lý rạp chỉ sửa rạp mình; xoá chỉ khi chưa bán vé |
 | Phòng chiếu | Thêm/sửa/xoá phòng: số hàng × ghế, loại 2D / 3D / GOLD / IMAX (phụ thu theo loại), **tạm ngưng phòng** (không xếp suất). Không thu nhỏ phòng dưới ghế đã bán. Kỹ thuật và quản lý làm được |
-| Sơ đồ ghế (009) | Trong hộp sửa phòng là **sơ đồ ghế giống màn khách chọn ghế**: chọn công cụ Thường / VIP / **Ghế đôi** / **Bảo trì** rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng. Khách thấy ghế đôi (phụ thu, biểu tượng tim) và ghế bảo trì (khoá, bấm vào báo "đang bảo trì – không chọn được") |
+| Sơ đồ ghế (009) | Trong hộp sửa phòng là **sơ đồ ghế giống màn khách chọn ghế**: chọn một loại ghế làm công cụ rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng. Ghế bảo trì: khách bấm vào báo "đang bảo trì – không chọn được" |
+| Loại ghế tự định nghĩa (011) | Thẻ **Loại ghế** (quản lý chuỗi): tạo loại mới – tên, **số người ngồi** (ghế đôi 2, ghế 3, sofa 4…), **phụ thu hạng A / B**, màu, biểu tượng, bán hay không bán. Ghế nhiều chỗ **chiếm n ghế liền trong hàng**: trên sơ đồ là một nút rộng (A1–A2), khách bấm một lần lấy cả n ghế vào đơn; giá nhóm = giá cơ bản × n + phụ thu |
+| Bảng giá riêng (011) | Nút **Bảng giá** trên mỗi cơ sở: 3 loại ngày × 4 đối tượng + phụ thu 3D / GOLD / IMAX / lễ; trống = dùng bảng hạng A/B |
 | Kho phim | **Kho phim** dùng chung: thêm/sửa phim (nhãn tuổi, thời lượng, poster), ngừng chiếu. **Phân phối phim → cơ sở** bằng ma trận; phim chưa phân phối không xếp suất được ở rạp đó (`film_not_at_cinema`) |
 | Suất chiếu | Bấm vào suất trên lưới: ghế bán, vé qua hệ thống, **đổi ngày/giờ/phòng** (đã bán vé thì chỉ đổi giờ – máy chủ kiểm trùng), **huỷ suất** kèm lý do → mọi vé còn hiệu lực hoàn vào thẻ quà tặng của từng khách, ghế nhả, suất ẩn khỏi lịch khách |
 | Tra cứu ghế (010) | Trong hộp suất (hôm qua / hôm nay / ngày mai) và ở quầy có **sơ đồ ghế**: bấm ghế đã bán / đang giữ → máy chủ trả **dữ liệu thật**: mã vé, đơn (mấy vé cùng chủ), người mua (tài khoản, SĐT/email che bớt, đã xác thực VNeID), người xem, kiểm tuổi, giá, kênh, giờ mua, giờ vào phòng, vé đoàn, lịch sử hoàn. Chỉ nhân viên/quản lý của đúng rạp; kỹ thuật không xem được |
@@ -80,13 +82,13 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 
 ## Chạy
 - Online: https://clonetest222.github.io/faceid_demo/
-- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì), `010_seat_info.sql` (tra cứu ghế: vé, người mua, đơn). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
+- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì), `010_seat_info.sql` (tra cứu ghế: vé, người mua, đơn), `011_seat_types.sql` (loại ghế tự định nghĩa, bảng giá riêng từng rạp). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Ghép nối điện thoại: `?pair=MÃ`.
 
 ## Kiểm thử
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
-- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 104 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
+- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 113 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
 - `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 36 bước nghiệp vụ khách hàng, gồm bạn đi cùng có tài khoản và cửa soát đơn nhiều vé (cần 005).
 - `node tools/e2e-more.mjs [URL]`: mua thêm vé cùng suất, một QR cho cả đơn / tách từng vé (10 bước).

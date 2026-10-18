@@ -46,6 +46,7 @@ const Auth = (() => {
     bad_size: "Kích thước phòng: 1–26 hàng, 1–30 ghế mỗi hàng.",
     bad_input: "Thiếu tên hoặc tỉnh/thành.",
     unknown_show: "Không tìm thấy suất chiếu.",
+    builtin_type: "Loại ghế mặc định không xoá được (có thể đổi tên, phụ thu).",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
   };

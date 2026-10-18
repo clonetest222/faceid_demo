@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -131,7 +131,7 @@ ok("chain_stats: doanh thu/ghế theo rạp", cs.length === 2 && cs.find(x => x.
 const kt = await j(`select login('kythuat','kythuat123') j`);
 ok("kỹ thuật đăng nhập: vai trò kythuat gắn rạp 086; nhật ký có bản ghi đăng nhập", kt.role === "kythuat" && kt.cinema_id === "086" && (await q(`select count(*)::int n from audit_logs where type='login' and msg like '@kythuat%'`))[0].n === 1);
 await q(`select save_room_s($1,'{"id":"086-R1","cinema_id":"086","name":"Phòng 1","kind":"2D","rows":8,"cols":12,"vip":[3,4,5],"blocked":["a1","B2"],"active":true}'::jsonb)`, [kt.token]);
-ok("kỹ thuật khoá ghế A1, B2 phòng 086-R1", JSON.stringify((await q(`select blocked from rooms where id='086-R1'`))[0].blocked) === '["A1","B2"]');
+ok("kỹ thuật khoá ghế A1, B2 phòng 086-R1", JSON.stringify((await q(`select blocked from rooms where id='086-R1'`))[0].blocked) === '["A1","B2"]', JSON.stringify((await q(`select blocked, seat_map from rooms where id='086-R1'`))[0]));
 ok("nhân viên không sửa phòng", /forbidden/.test(await err(`select save_room_s($1,'{"id":"086-R1","cinema_id":"086","rows":8,"cols":12}'::jsonb)`, [nvv.token])));
 ok("kỹ thuật rạp 086 không sửa phòng rạp 035", /wrong_cinema/.test(await err(`select save_room_s($1,'{"id":"035-R1","cinema_id":"035","rows":8,"cols":12}'::jsonb)`, [kt.token])));
 await q(`select save_room_s($1,'{"id":"086-R2","cinema_id":"086","name":"Phòng 2","kind":"IMAX","rows":10,"cols":14,"vip":[4,5],"active":true}'::jsonb)`, [qlv.token]);
@@ -168,6 +168,19 @@ await q(`select hold_seat('X3','B1','HOLD-UI',now()+interval '4 min')`);
 ok("010 ghế đang giữ → lock held kèm hold_id; ghế trống → không vé không khoá", (await j(`select seat_info_s($1,'X3','B1') j`, [nvv.token])).lock.hold_id === "HOLD-UI" && !(await j(`select seat_info_s($1,'X3','C1') j`, [nvv.token])).lock);
 ok("010 khách không tra ghế; nhân viên rạp 086 không tra ghế rạp 035; kỹ thuật không xem thông tin khách", /forbidden/.test(await err(`select seat_info_s($1,'X3','A1')`, [kh.token])) && /wrong_cinema/.test(await err(`select seat_info_s($1,'20260101-035-1','A1')`, [nvv.token])) && /forbidden/.test(await err(`select seat_info_s($1,'X3','A1')`, [kt.token])));
 ok("010 show_tickets_s: danh sách vé suất X3 kèm tên người mua", (await q(`select * from show_tickets_s($1,'X3')`, [qlv.token])).some(t => t.code === "VX3" && t.owner_name));
+// ---- loại ghế tự định nghĩa (011)
+ok("011: dữ liệu 009 của 086-R2 được chuyển sang seat_map", JSON.stringify((await q(`select seat_map from rooms where id='086-R2'`))[0].seat_map) === '{"A5":"blocked","E1":"vip","E2":"vip","J13":"couple","J14":"couple"}');
+await q(`select save_seat_type_s($1,'{"id":"sofa4","name":"Sofa 4 người","persons":4,"surcharge_a":120000,"surcharge_b":80000,"color":"violet","icon":"sofa"}'::jsonb)`, [ql.token]);
+ok("quản lý chuỗi tạo loại ghế Sofa 4 người; quản lý rạp không tạo", (await q(`select persons, surcharge_b from seat_types where id='sofa4'`))[0].persons === 4 && /forbidden/.test(await err(`select save_seat_type_s($1,'{"id":"x","name":"X"}'::jsonb)`, [qlv.token])));
+await q(`select save_room_s($1,'{"id":"086-R2","cinema_id":"086","name":"Phòng 2","kind":"IMAX","rows":10,"cols":14,"seat_map":{"j13":"sofa4","J14":"sofa4","A1":"vip","B2":"khongco","A5":"blocked","Z9":"vip"},"active":true}'::jsonb)`, [kt.token]);
+ok("sơ đồ phòng theo loại: giữ loại tồn tại, bỏ loại lạ, ghế ngoài kích thước; cột 009 suy ra tương thích", JSON.stringify((await q(`select seat_map, vip_seats, couple, blocked from rooms where id='086-R2'`))[0]) === '{"seat_map":{"A1":"vip","A5":"blocked","J13":"sofa4","J14":"sofa4"},"vip_seats":["A1"],"couple":[],"blocked":["A5"]}');
+ok("không xoá loại ghế mặc định", /builtin_type/.test(await err(`select delete_seat_type_s($1,'vip')`, [ql.token])));
+await q(`select delete_seat_type_s($1,'sofa4')`, [ql.token]);
+ok("xoá loại tự tạo → ghế mang loại đó về thường, loại biến mất", JSON.stringify((await q(`select seat_map from rooms where id='086-R2'`))[0].seat_map) === '{"A1":"vip","A5":"blocked"}' && (await q(`select count(*)::int n from seat_types where id='sofa4'`))[0].n === 0);
+await q(`select save_cinema_prices_s($1,'086','{"weekday":{"adult":75000,"u22":60000,"child":50000,"senior":50000},"wed":{"adult":65000,"u22":60000,"child":50000,"senior":60000},"weekend":{"adult":90000,"u22":60000,"child":58000,"senior":58000},"s3d":{"weekday":30000,"weekend":30000},"gold":40000,"imax":60000,"holiday":10000}'::jsonb)`, [qlv.token]);
+ok("quản lý rạp đặt bảng giá riêng cho rạp mình; không đặt cho rạp khác; giá người lớn 0 bị chặn", ((await q(`select prices from cinemas where id='086'`))[0].prices.weekday.adult === 75000) && /wrong_cinema/.test(await err(`select save_cinema_prices_s($1,'035','{}'::jsonb)`, [qlv.token])) && /bad_input/.test(await err(`select save_cinema_prices_s($1,'086','{"weekday":{"adult":0,"u22":1,"child":1,"senior":1},"wed":{"adult":1,"u22":1,"child":1,"senior":1},"weekend":{"adult":1,"u22":1,"child":1,"senior":1}}'::jsonb)`, [qlv.token])));
+await q(`select save_cinema_prices_s($1,'086',null)`, [qlv.token]);
+ok("bỏ bảng giá riêng → prices null", (await q(`select prices from cinemas where id='086'`))[0].prices === null);
 ok("xoá phòng còn vé sắp chiếu → room_in_use; quản lý rạp không xoá cơ sở", /room_in_use/.test(await err(`select delete_room_s($1,'086-R1')`, [qlv.token])) && /forbidden/.test(await err(`select delete_cinema_s($1,'099')`, [qlv.token])));
 await q(`select delete_cinema_s($1,'099')`, [ql.token]);
 ok("quản lý chuỗi xoá cơ sở chưa có vé", (await q(`select count(*)::int n from cinemas where id='099'`))[0].n === 0);

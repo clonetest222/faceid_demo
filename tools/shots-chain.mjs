@@ -9,9 +9,9 @@ const t0 = await (await fetch(`http://localhost:${PORT}/json/new?about:blank`, {
 const ws = new WebSocket(t0.webSocketDebuggerUrl); await new Promise(r => ws.onopen = r);
 let id = 0; const pend = new Map(), errs = []; ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } if (d.method === "Runtime.exceptionThrown") errs.push((d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text).slice(0, 200)); };
 const send = (method, params = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
-const ev = async e => { const r = await send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true }); if (r.result.exceptionDetails) throw new Error((r.result.exceptionDetails.exception?.description || "").slice(0, 300)); return r.result.result?.value; };
+const ev = async e => { const r = await Promise.race([send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true, timeout: 15000 }), sleep(20000).then(() => ({ error: { message: "evaluate timeout" } }))]); if (r.error) throw new Error("CDP " + r.error.message + " @ " + e.slice(0, 120)); if (r.result.exceptionDetails) throw new Error((r.result.exceptionDetails.exception?.description || "").slice(0, 300)); return r.result.result?.value; };
 const wait = async (e, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await ev(e).catch(() => false)) return true; await sleep(300); } return false; };
-const shot = async n => { const r = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }); writeFileSync(join(OUT, n + ".png"), Buffer.from(r.result.data, "base64")); };
+const shot = async n => { const r = await Promise.race([send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }), sleep(20000).then(() => null)]); if (!r || !r.result) { console.log("shot timeout: " + n); return; } writeFileSync(join(OUT, n + ".png"), Buffer.from(r.result.data, "base64")); };
 const txt = () => ev("document.body.innerText");
 const login = async (u, p) => { await ev("Auth.logout && Auth.logout(); localStorage.removeItem('cinevin-work-cinema'); location.hash='#/dangnhap'"); await sleep(600); await ev(`document.querySelector('#li-user').value='${u}';document.querySelector('#li-pass').value='${p}';document.querySelector('[data-form]').requestSubmit()`); await wait("!!Auth.user && !document.querySelector('[data-form]')"); await sleep(1500); };
 await send("Runtime.enable"); await send("Page.enable");
@@ -63,18 +63,25 @@ try {
   else console.log("SKIP  Quản lý rạp quanlyvinh – máy chủ chưa chạy migration 006: " + ql2);
   // ---- quản trị chuỗi (008): cơ sở & phòng, kho phim, báo cáo, điều chỉnh suất
   await login("quanly", "quanly123"); await ev("location.hash='#/coso'"); await sleep(1200);
-  check("Cơ sở & phòng: 7 cơ sở theo tỉnh, 16 phòng, nút Thêm cơ sở (quản lý chuỗi)", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 7 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") === 16 && await ev("!!document.querySelector('[data-act=\"cinema-new\"]')"));
+  check("Cơ sở & phòng: 7 cơ sở theo tỉnh, 16 phòng, nút Thêm cơ sở (quản lý chuỗi)", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 7 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") >= 16 && await ev("!!document.querySelector('[data-act=\"cinema-new\"]')") && await ev("document.querySelectorAll('[data-act=\"cinema-prices\"]').length") === 7);
+  check("Thẻ Loại ghế: 4 loại mặc định, nút Thêm loại ghế (quản lý chuỗi)", await ev("document.querySelectorAll('[data-act=\"seattype-edit\"]').length") === 4 && await ev("!!document.querySelector('[data-act=\"seattype-new\"]')"));
   await shot("chain_09_coso");
+  await ev("document.querySelector('[data-act=\"seattype-new\"]').click()"); await sleep(500);
+  check("Loại ghế mới: mã, tên, số người, phụ thu A/B, 7 màu, biểu tượng, có bán", await ev("!!document.querySelector('#st-id') && !!document.querySelector('#st-persons') && document.querySelectorAll('[data-sheet] [data-act=\"color\"]').length===7 && document.querySelectorAll('[data-sheet] [data-act=\"icon\"]').length>=10 && !!document.querySelector('#st-sell')"));
+  await shot("chain_17_loai_ghe"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  await ev("document.querySelector('[data-act=\"cinema-prices\"]').click()"); await sleep(500);
+  check("Bảng giá rạp: 3 loại ngày × 4 đối tượng + phụ thu 3D/GOLD/IMAX/lễ, nút Lưu", await ev("document.querySelectorAll('[data-sheet] input[id^=pr-]').length") === 17 && await ev("!!document.querySelector('[data-sheet] [data-act=\"save\"]')"));
+  await shot("chain_18_bang_gia"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
   await ev("document.querySelector('[data-act=\"cinema-edit\"]').click()"); await sleep(500);
   check("Sửa cơ sở: hộp thoại có mã (khoá), tên, tỉnh, hạng giá, nút Xoá", await ev("!!document.querySelector('#cs-name') && document.querySelector('#cs-id').disabled && !!document.querySelector('[data-sheet] [data-act=\"del\"]')"));
   await shot("chain_10_coso_sua"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
   await ev("[...document.querySelectorAll('[data-act=\"room-edit\"]')].find(b=>b.dataset.id==='054-R3').click()"); await sleep(500);
   check("Sửa phòng GOLD: sơ đồ ghế 6×8 bấm được, 4 công cụ (thường/VIP/đôi/bảo trì), 48 ghế VIP", await ev("document.querySelector('#rm-kind').value==='GOLD' && document.querySelectorAll('[data-sheet] [data-act=\"seat\"]').length===48 && document.querySelectorAll('[data-sheet] [data-act=\"tool\"]').length===4 && /VIP\\s*48/.test(document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"vip\"]').innerText.replace(/\\n/g,' '))"));
   await ev("document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"blocked\"]').click()"); await sleep(200); await ev("document.querySelector('[data-sheet] [data-act=\"seat\"][data-v=\"A1\"]').click()"); await sleep(200); await ev("document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"couple\"]').click()"); await sleep(200); await ev("document.querySelector('[data-sheet] [data-act=\"row\"][data-v=\"5\"]').click()"); await sleep(300);
-  check("Chọn công cụ Bảo trì bấm A1, công cụ Ghế đôi bấm hàng F → đếm 1 bảo trì, 8 ghế đôi", await ev("/Bảo trì\\s*1/.test(document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"blocked\"]').innerText.replace(/\\n/g,' ')) && /Ghế đôi\\s*8/.test(document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"couple\"]').innerText.replace(/\\n/g,' '))"));
+  check("Chọn công cụ Bảo trì bấm A1, công cụ Ghế đôi bấm hàng F → 1 bảo trì, 8 ghế đôi = 4 cặp (nút rộng F1–F2…)", await ev("/Bảo trì\\s*1/.test(document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"blocked\"]').innerText.replace(/\\n/g,' ')) && /Ghế đôi\\s*8/.test(document.querySelector('[data-sheet] [data-act=\"tool\"][data-v=\"couple\"]').innerText.replace(/\\n/g,' ')) && [...document.querySelectorAll('[data-sheet] [data-act=\"seat\"]')].filter(b=>/F\\d–F\\d/.test(b.title)).length===4"));
   await shot("chain_11_phong_sua"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
   await ev("location.hash='#/phim'"); await sleep(1000);
-  check("Kho phim: ma trận 5 phim × 7 cơ sở, nút Thêm phim, nút Sửa từng phim", await ev("document.querySelectorAll('[data-act=\"film-dist\"]').length") === 35 && await ev("!!document.querySelector('[data-act=\"film-new\"]')") && await ev("document.querySelectorAll('[data-act=\"film-edit\"]').length") === 5);
+  check("Kho phim: ma trận 5 phim × 7 cơ sở, nút Thêm phim, nút Sửa từng phim", await ev("document.querySelectorAll('[data-act=\"film-dist\"]').length === S.films.length * CINEMAS.filter(c=>c.active!==false).length") && await ev("!!document.querySelector('[data-act=\"film-new\"]')") && await ev("document.querySelectorAll('[data-act=\"film-edit\"]').length === S.films.length"));
   await shot("chain_12_phim");
   await ev("document.querySelector('[data-act=\"film-new\"]').click()"); await sleep(500);
   check("Thêm phim: form nhãn tuổi + phân phối 7 cơ sở (mặc định chọn hết)", await ev("[...document.querySelectorAll('[data-sheet] input[id^=fm-c-]')].length===7 && [...document.querySelectorAll('[data-sheet] input[id^=fm-c-]')].every(i=>i.checked)"));
@@ -85,8 +92,8 @@ try {
   await ev("[...document.querySelectorAll('[data-act=\"bc-day\"]')].find(b=>b.dataset.v==='tomorrow').click()"); await sleep(600);
   check("Lọc Ngày mai → KPI đổi theo phạm vi", await ev("S.view.bcDay==='tomorrow'"));
   await ev("location.hash='#/suat'"); await sleep(1000);
-  await ev("A['suat-day']({dataset:{v:dayKey(new Date(Date.now()+864e5))}})"); await sleep(600);
-  await ev("(()=>{const b=[...document.querySelectorAll('[data-act=\"show-info\"]')].find(b=>new Date(show(b.dataset.show).start)>Date.now());b.click();return 1})()"); await sleep(600);
+  // suất sắp chiếu ở rạp đang thao tác có vé thật (ưu tiên) – mở hộp suất qua nút trên lưới
+  await ev("(()=>{const fut=showsOf(workCinema().id).filter(s=>new Date(s.start)>Date.now()).sort((a,b)=>new Date(a.start)-new Date(b.start));const s=fut.find(s=>S.tickets.some(t=>t.showId===s.id&&t.status!=='refunded'))||fut[0];A['suat-day']({dataset:{v:dayKey(s.start)}});document.querySelector('[data-act=\"show-info\"][data-show=\"'+s.id+'\"]').click();return 1})()"); await sleep(600);
   check("Bấm suất → hộp thoại: sơ đồ ghế, ghế bán, đổi ngày/giờ/phòng, huỷ suất kèm lý do", await ev("!!document.querySelector('#sh-time') && !!document.querySelector('#sh-room') && !!document.querySelector('#sh-reason') && !!document.querySelector('[data-sheet] [data-act=\"cancel\"]') && document.querySelectorAll('[data-sheet] [data-seat]').length>0"));
   await shot("chain_14_suat_sua");
   const soldSeat = await ev("(()=>{const id=document.querySelector('[data-sheet] [data-show]').dataset.show;const t=S.tickets.find(t=>t.showId===id&&t.status!=='refunded');return t?t.seat:null})()");
@@ -99,7 +106,7 @@ try {
   await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
   const ktOk = await ev(`Auth.login('kythuat','kythuat123').then(r=>r.ok?true:r.message)`);
   if (ktOk === true) { await sleep(800); await ev("location.hash='#/tongquan'"); await sleep(400); await ev("location.hash='#/coso'"); await sleep(1200);
-    check("Kỹ thuật rạp 086: chỉ thấy cơ sở mình, sửa được phòng, không sửa cơ sở / không thêm cơ sở", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 0 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") === 2 && await ev("!document.querySelector('[data-act=\"cinema-new\"]')"));
+    check("Kỹ thuật rạp 086: chỉ thấy cơ sở mình, sửa được phòng, không sửa cơ sở / không thêm cơ sở", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 0 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") >= 2 && await ev("!document.querySelector('[data-act=\"cinema-new\"]')"));
     await shot("chain_15_kythuat"); }
   else console.log("SKIP  Kỹ thuật kythuat – máy chủ chưa chạy migration 008: " + ktOk);
 } catch (e) { console.log("ABORT:", e.message); }

@@ -448,15 +448,17 @@ const A = {
   "lich-day"(el) { S.view.day = el.dataset.v; save(); render(); },
   "buy-more"(el) { const sh = show(el.dataset.show); if (!sh || new Date(sh.start) <= new Date()) return toast("Suất này đã chiếu – chọn suất khác", "bad"); releaseDraft(); S.draft = { id: rid("D"), showId: sh.id, seats: [], until: null, more: true }; save(); go("ghe"); toast("Ghế bạn đã mua hiện màu xanh – chọn thêm ghế cho người đi cùng"); },
   "pick-show"(el) { releaseDraft(); S.draft = { id: rid("D"), showId: el.dataset.show, seats: [], until: null }; save(); go("ghe"); },
-  async "toggle-seat"(el) { const d = S.draft, sid = el.dataset.seat, i = d.seats.indexOf(sid);
-    if (i >= 0) { d.seats.splice(i, 1); delete S.seats[d.showId][sid]; call("release_seat", { p_show: d.showId, p_seat: sid, p_hold: d.id }); }
+  // ghế nhóm (đôi, ghế 3, sofa…): một nút = cả nhóm ghế → giữ / nhả tất cả thành viên, đơn có đủ n ghế
+  async "toggle-seat"(el) { const d = S.draft, list = el.dataset.group ? el.dataset.group.split(",") : [el.dataset.seat];
+    if (list.some(sid => d.seats.includes(sid))) { list.forEach(sid => { const i = d.seats.indexOf(sid); if (i >= 0) d.seats.splice(i, 1); delete S.seats[d.showId][sid]; call("release_seat", { p_show: d.showId, p_seat: sid, p_hold: d.id }); }); }
     else {
-      if (d.seats.length >= S.params.maxTickets) return toast(`Tối đa ${S.params.maxTickets} vé mỗi đơn`); if (seatState(d.showId, sid)) return toast("Ghế vừa có người giữ");
+      if (d.seats.length + list.length > S.params.maxTickets) return toast(`Tối đa ${S.params.maxTickets} vé mỗi đơn`); if (list.some(sid => seatState(d.showId, sid))) return toast("Ghế vừa có người giữ");
       const until = d.until || new Date(Date.now() + S.params.holdMin * 60000).toISOString();
-      el.disabled = true;
-      const ok = await call("hold_seat", { p_show: d.showId, p_seat: sid, p_hold: d.id, p_until: until });
-      if (!ok) { if (ok === false) toast("Ghế vừa có người khác giữ"); return render(); }
-      d.until = until; d.seats.push(sid); (S.seats[d.showId] ||= {})[sid] = { st: "held", by: d.id, until };
+      el.disabled = true; const got = [];
+      for (const sid of list) { const ok = await call("hold_seat", { p_show: d.showId, p_seat: sid, p_hold: d.id, p_until: until });
+        if (!ok) { got.forEach(g => call("release_seat", { p_show: d.showId, p_seat: g, p_hold: d.id })); if (ok === false) toast(list.length > 1 ? "Ghế trong nhóm vừa có người khác giữ" : "Ghế vừa có người khác giữ"); return render(); } got.push(sid); }
+      d.until = until; list.forEach(sid => { d.seats.push(sid); (S.seats[d.showId] ||= {})[sid] = { st: "held", by: d.id, until }; });
+      if (list.length > 1) toast(`${seatType(seatKind(room(show(d.showId).roomId), list[0])).name}: đã lấy ${list.length} ghế ${list.join(", ")}`);
     }
     d.assign = null; save(); render(); },
   /* quản trị chuỗi: cơ sở, phòng, phim, suất */
@@ -464,6 +466,9 @@ const A = {
   "cinema-edit"(el) { cinemaSheet(cinema(el.dataset.id)); },
   "room-new"(el) { roomSheet(el.dataset.cinema, null); },
   "room-edit"(el) { const r = room(el.dataset.id); roomSheet(r.cinemaId, r); },
+  "seattype-new"() { seatTypeSheet(null); },
+  "cinema-prices"(el) { pricesSheet(cinema(el.dataset.id)); },
+  "seattype-edit"(el) { seatTypeSheet(SEAT_TYPES[el.dataset.id]); },
   "film-new"() { filmSheet(null); },
   "film-edit"(el) { filmSheet(film(el.dataset.id)); },
   async "film-dist"(el) {
@@ -558,11 +563,11 @@ const A = {
     ex ? Object.assign(ex, grp, { students: ex.students.length ? ex.students : students }) : S.groups.push(grp);
     log("group", `Phát hành vé đoàn ${code}: ${g.students.length} HS, cam kết bởi ${S.teacher.name}`); S.view.gdraft = null; S.view.lastGroup = code; save(); render(); toast("Đã phát hành vé đoàn " + code); },
   /* quầy */
-  async "pos-seat"(el) { const p = S.view.pos, sid = el.dataset.seat, i = p.seats.indexOf(sid), hold = "POS-" + Remote.DEVICE;
-    if (i >= 0) { p.seats.splice(i, 1); delete S.seats[p.showId][sid]; call("release_seat", { p_show: p.showId, p_seat: sid, p_hold: hold }); }
-    else { if (seatState(p.showId, sid)) return; const until = new Date(Date.now() + 600000).toISOString();
-      const ok = await call("hold_seat", { p_show: p.showId, p_seat: sid, p_hold: hold, p_until: until }); if (!ok) { if (ok === false) toast("Ghế vừa có người khác giữ"); return render(); }
-      p.seats.push(sid); S.seats[p.showId][sid] = { st: "held", by: hold, until }; }
+  async "pos-seat"(el) { const p = S.view.pos, list = el.dataset.group ? el.dataset.group.split(",") : [el.dataset.seat], hold = "POS-" + Remote.DEVICE;
+    if (list.some(sid => p.seats.includes(sid))) { list.forEach(sid => { const i = p.seats.indexOf(sid); if (i >= 0) p.seats.splice(i, 1); delete S.seats[p.showId][sid]; call("release_seat", { p_show: p.showId, p_seat: sid, p_hold: hold }); }); }
+    else { if (list.some(sid => seatState(p.showId, sid))) return; const until = new Date(Date.now() + 600000).toISOString(); const got = [];
+      for (const sid of list) { const ok = await call("hold_seat", { p_show: p.showId, p_seat: sid, p_hold: hold, p_until: until }); if (!ok) { got.forEach(g => call("release_seat", { p_show: p.showId, p_seat: g, p_hold: hold })); if (ok === false) toast("Ghế vừa có người khác giữ"); return render(); } got.push(sid); }
+      list.forEach(sid => { p.seats.push(sid); S.seats[p.showId][sid] = { st: "held", by: hold, until }; }); }
     save(); render(); },
   "pos-docok"(el) { const sid = el.dataset.seat, type = selVal("pos-doc-" + sid); if (!type) return toast("Chọn loại giấy tờ trước"); S.view.pos.docs[sid] = { type, ok: el.dataset.ok === "1" }; log("doc", `Quầy – ghế ${sid}: ${type} – ${el.dataset.ok === "1" ? "đạt" : "không đạt"}`, el.dataset.ok === "1"); save(); render(); },
   async "pos-pay"(el) { const p = S.view.pos, sh = show(p.showId), f = film(sh.filmId);
@@ -778,19 +783,31 @@ function cinemaSheet(c) {
 }
 function roomSheet(cid, r) {
   const isNew = !r, c = cinema(cid), n = roomsOf(cid).length;
-  r = r || { id: `${cid}-R${n + 1}`, name: `Phòng ${n + 1}`, kind: "2D", rows: 8, cols: 12, vip: [3, 4, 5], vipSeats: [], couple: [], blocked: [], active: true, note: "" };
-  // trạng thái trình sửa: loại từng ghế (chỉ ghi ghế khác "thường"); công cụ đang chọn áp lên ghế / cả hàng
-  const ed = { rows: r.rows, cols: r.cols, tool: "vip", types: {} };
+  r = r || { id: `${cid}-R${n + 1}`, name: `Phòng ${n + 1}`, kind: "2D", rows: 8, cols: 12, vip: [3, 4, 5], vipSeats: [], couple: [], blocked: [], seatMap: {}, active: true, note: "" };
+  // trạng thái trình sửa: loại từng ghế (chỉ ghi ghế khác "thường"); công cụ = một loại ghế trong danh mục (kể cả loại tự tạo)
+  const ed = { rows: r.rows, cols: r.cols, tool: "vip", types: {}, groups: {} };
   for (let i = 0; i < r.rows; i++) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j), k = seatKind(r, sid); if (k !== "std") ed.types[sid] = k; }
-  const TOOLS = [["std", "Thường", "square", "border-border-strong bg-surface"], ["vip", "VIP", "crown", "border-warning/60 bg-warning-bg text-warning"], ["couple", "Ghế đôi", "heart", "border-[var(--primary)]/50 bg-primary-light text-primary"], ["blocked", "Bảo trì", "wrench", "border-dashed border-border bg-background text-muted"]];
-  const count = () => { const o = { std: 0, vip: 0, couple: 0, blocked: 0 }; for (let i = 0; i < ed.rows; i++) for (let j = 0; j < ed.cols; j++) o[ed.types[seatId(i, j)] || "std"]++; return o; };
-  const grid = () => { const half = Math.ceil(ed.cols / 2), cnt = count(); let h = `<div class="mb-2 flex flex-wrap items-center gap-2"><span class="text-sm font-medium">Loại ghế – chọn công cụ rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng</span></div>
-      <div class="mb-3 flex flex-wrap gap-2">${TOOLS.map(([k, l, ic_, cls]) => `<button type="button" data-act="tool" data-v="${k}" aria-pressed="${ed.tool === k}" class="flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-sm ${cls} ${ed.tool === k ? "ring-2 ring-focus" : ""}">${ic(ic_, "size-4")}${l}<span class="tabular-nums opacity-70">${cnt[k]}</span></button>`).join("")}</div>
+  seatGroups(r).forEach((members, sid) => ed.groups[sid] = members);
+  // bỏ nhóm chứa ghế: mọi thành viên về thường
+  const ungroup = sid => { const g = ed.groups[sid]; if (!g) return; g.forEach(m => { delete ed.types[m]; delete ed.groups[m]; }); };
+  // áp loại ghế tại một ghế: loại nhiều chỗ lấy n ghế liền bên phải (hết hàng thì ngắn lại); loại 1 chỗ chỉ ghế đó
+  const applyAt = (i, j, tid) => { const ty = seatType(tid), n = ty.sellable && ty.persons > 1 ? Math.min(ty.persons, ed.cols - j) : 1, members = [];
+    for (let jj = j; jj < j + n; jj++) { const m = seatId(i, jj); ungroup(m); members.push(m); }
+    members.forEach(m => { if (tid === "std") delete ed.types[m]; else ed.types[m] = tid; });
+    if (n > 1) members.forEach(m => ed.groups[m] = members); return n; };
+  const tools = () => seatTypeList();
+  const toolCls = t => t.sellable ? seatColor(t, "tool") : "border-dashed border-border bg-background text-muted";
+  const count = () => { const o = {}; tools().forEach(t => o[t.id] = 0); for (let i = 0; i < ed.rows; i++) for (let j = 0; j < ed.cols; j++) { const k = ed.types[seatId(i, j)] || "std"; o[k] = (o[k] || 0) + 1; } return o; };
+  const tierSur = t => Number(c.tier === "A" ? t.surchargeA : t.surchargeB) || 0;
+  const grid = () => { const half = Math.ceil(ed.cols / 2), cnt = count(), T = tools(); let h = `<div class="mb-2 flex flex-wrap items-center justify-between gap-2"><span class="text-sm font-medium">Loại ghế – chọn công cụ rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng</span>${isChainManager() ? `<button type="button" class="${B.ghost} min-h-8 px-2 text-xs" data-act="newtype">${ic("plus", "size-3.5")}Loại ghế mới</button>` : ""}</div>
+      <div class="mb-3 flex flex-wrap gap-2">${T.map(t => `<button type="button" data-act="tool" data-v="${t.id}" aria-pressed="${ed.tool === t.id}" title="${esc(t.name)}${t.sellable ? ` · ${t.persons} người · phụ thu ${vnd(tierSur(t))}` : " · không bán"}" class="flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-sm ${toolCls(t)} ${ed.tool === t.id ? "ring-2 ring-focus" : ""}">${ic(t.icon || "square", "size-4")}${esc(t.name)}<span class="tabular-nums opacity-70">${cnt[t.id] || 0}</span></button>`).join("")}</div>
       <div class="mx-auto mb-3 max-w-[420px]"><div class="h-1 rounded-full bg-foreground/20"></div><p class="mt-1 text-center text-xs text-muted">Màn hình</p></div><div class="overflow-x-auto pb-1"><div class="mx-auto grid w-max gap-1">`;
-    for (let i = 0; i < ed.rows; i++) { const L = String.fromCharCode(65 + i); h += `<div class="flex items-center gap-1"><button type="button" data-act="row" data-v="${i}" title="Áp ${SEAT_KIND_TXT[ed.tool]} cho cả hàng ${L}" class="grid size-7 cursor-pointer place-items-center rounded-md text-xs font-medium text-muted hover:bg-item-hover">${L}</button>`;
-      for (let j = 0; j < ed.cols; j++) { const sid = seatId(i, j), k = ed.types[sid] || "std", t = TOOLS.find(x => x[0] === k); h += `<button type="button" data-act="seat" data-v="${sid}" title="${sid} · ${t[1]}" class="grid size-7 cursor-pointer place-items-center rounded-md border text-[10px] tabular-nums hover:ring-2 hover:ring-focus ${t[3]}">${k === "std" ? j + 1 : ic(t[2], "size-3")}</button>${j === half - 1 ? '<span class="w-2"></span>' : ""}`; }
+    for (let i = 0; i < ed.rows; i++) { const L = String.fromCharCode(65 + i); h += `<div class="flex items-center gap-1"><button type="button" data-act="row" data-v="${i}" title="Áp ${esc(seatType(ed.tool).name)} cho cả hàng ${L}" class="grid size-7 cursor-pointer place-items-center rounded-md text-xs font-medium text-muted hover:bg-item-hover">${L}</button>`;
+      for (let j = 0; j < ed.cols; j++) { const sid = seatId(i, j), g = ed.groups[sid]; if (g && g[0] !== sid) continue; const n = g ? g.length : 1, k = ed.types[sid] || "std", t = seatType(k), label = n > 1 ? `${g[0]}–${g[n - 1]}` : sid;
+        h += `<button type="button" data-act="seat" data-v="${sid}" title="${label} · ${esc(t.name)}${n > 1 ? ` (${n} ghế)` : ""}" ${n > 1 ? `style="width:calc(${n} * 1.75rem + ${n - 1} * 0.25rem)"` : ""} class="grid size-7 cursor-pointer place-items-center rounded-md border text-[10px] tabular-nums hover:ring-2 hover:ring-focus ${toolCls(t)}">${k === "std" ? j + 1 : n > 1 ? `<span class="flex items-center gap-1">${ic(t.icon || "square", "size-3")}${label}</span>` : ic(t.icon || "square", "size-3")}</button>${j + n - 1 === half - 1 ? '<span class="w-2"></span>' : ""}`; j += n - 1; }
       h += `</div>`; }
-    return h + `</div></div><p class="mt-2 text-xs text-muted">${cnt.vip + cnt.couple + cnt.blocked + cnt.std} ghế · bán được ${cnt.std + cnt.vip + cnt.couple}. Ghế đôi phụ thu ${vnd(PRICE_TIERS[c.tier].couple)}, VIP +${vnd(PRICE_TIERS[c.tier].vip)}; ghế bảo trì hiện khoá trên sơ đồ của khách.</p>`; };
+    const total = Object.values(cnt).reduce((a, b) => a + b, 0), sellable = T.filter(t => t.sellable).reduce((a, t) => a + (cnt[t.id] || 0), 0), units = new Set(Object.values(ed.groups).map(g => g[0])).size + T.filter(t => t.sellable && t.persons === 1).reduce((a, t) => a + (cnt[t.id] || 0), 0);
+    return h + `</div></div><p class="mt-2 text-xs text-muted">${total} ghế · bán được ${sellable} ghế = ${units} nút chọn (ghế đôi / ghế 3 / sofa chiếm n ghế liền, khách bấm một lần lấy cả nhóm). Giá nhóm = giá cơ bản × số ghế + phụ thu (rạp hạng ${c.tier}${c.prices ? ", bảng giá riêng" : ""}).</p>`; };
   const html = `${sheetHead(isNew ? `Thêm phòng · ${esc(c.name)}` : `Sửa ${esc(r.name)} · ${esc(c.name)}`, "Ghế = hàng (A, B, C…) × số ghế. Phòng tạm ngưng không xếp suất.")}
     <div class="grid gap-3 sm:grid-cols-2">${field("Mã phòng", input("rm-id", r.id, `${isNew ? "" : "disabled"} placeholder="${cid}-R${n + 1}"`), isNew ? `Dạng ${cid}-R1` : "")}${field("Tên phòng", input("rm-name", r.name, 'placeholder="Phòng 3 · IMAX"'))}${field("Công nghệ / loại phòng", sel("rm-kind", ROOM_KINDS.map(k => [k, ROOM_KIND_TXT[k]]), r.kind), "Phụ thu theo loại: 3D, GOLD, IMAX.")}<div class="grid grid-cols-2 gap-3">${field("Số hàng", input("rm-rows", r.rows, 'type="number" min="1" max="26" inputmode="numeric"'))}${field("Ghế mỗi hàng", input("rm-cols", r.cols, 'type="number" min="1" max="30" inputmode="numeric"'))}</div></div>
     <div id="rm-grid" class="rounded-xl border border-border p-3">${grid()}</div>
@@ -799,19 +816,22 @@ function roomSheet(cid, r) {
   const redraw = () => { $("#rm-grid").innerHTML = grid(); };
   const sh = adminSheet(html, {
     tool(b) { ed.tool = b.dataset.v; redraw(); },
-    seat(b) { const sid = b.dataset.v; ed.tool === "std" ? delete ed.types[sid] : ed.types[sid] = ed.tool; redraw(); },
-    row(b) { const i = +b.dataset.v; for (let j = 0; j < ed.cols; j++) { const sid = seatId(i, j); ed.tool === "std" ? delete ed.types[sid] : ed.types[sid] = ed.tool; } redraw(); },
+    newtype() { seatTypeSheet(null, () => roomSheet(cid, { ...r, rows: ed.rows, cols: ed.cols, seatMap: { ...ed.types }, vipSeats: [], couple: [], blocked: [], vip: [] })); },
+    seat(b) { const sid = b.dataset.v, i = sid.charCodeAt(0) - 65, j = +sid.slice(1) - 1; if (ed.tool !== "std" && ed.types[sid] === ed.tool && !(ed.groups[sid] && ed.groups[sid][0] !== sid)) { ungroup(sid); delete ed.types[sid]; } else applyAt(i, j, ed.tool); redraw(); },
+    row(b) { const i = +b.dataset.v; for (let j = 0; j < ed.cols;) j += applyAt(i, j, ed.tool); redraw(); },
     async save(b, sh) {
       const rows = ed.rows, cols = ed.cols, id = isNew ? v("rm-id").toUpperCase() : r.id;
-      const pick = k => Object.keys(ed.types).filter(sid => ed.types[sid] === k && sid.charCodeAt(0) - 65 < rows && +sid.slice(1) <= cols).sort();
-      const vipSeats = pick("vip"), couple = pick("couple"), blocked = pick("blocked");
-      const p = { id, cinema_id: cid, name: v("rm-name") || id, kind: v("rm-kind") || "2D", rows, cols, vip: [], vip_seats: vipSeats, couple, blocked, active: $("#rm-active").checked, note: v("rm-note") };
+      const inside = sid => sid.charCodeAt(0) - 65 < rows && +sid.slice(1) <= cols;
+      const seatMap = {}; Object.keys(ed.types).filter(inside).sort().forEach(sid => { if (SEAT_TYPES[ed.types[sid]]) seatMap[sid] = ed.types[sid]; });
+      const pick = k => Object.keys(seatMap).filter(sid => seatMap[sid] === k);
+      const vipSeats = pick("vip"), couple = pick("couple"), blocked = Object.keys(seatMap).filter(sid => isBlockedKind(seatMap[sid]));
+      const p = { id, cinema_id: cid, name: v("rm-name") || id, kind: v("rm-kind") || "2D", rows, cols, vip: [], vip_seats: vipSeats, couple, blocked, seat_map: seatMap, active: $("#rm-active").checked, note: v("rm-note") };
       if (!new RegExp(`^${cid}-[A-Z0-9]{1,6}$`).test(id)) return toast(Auth.message({ message: "bad_room_id" }), "bad");
       if (!(rows >= 1 && rows <= 26 && cols >= 1 && cols <= 30)) return toast(Auth.message({ message: "bad_size" }), "bad");
       if (isNew && ROOMS.some(x => x.id === id)) return toast("Mã phòng đã tồn tại", "bad");
-      try { await adminCall("save_room_s", { p }, () => { const i = ROOMS.findIndex(x => x.id === id); const obj = { id, cinemaId: cid, name: p.name, kind: p.kind, rows, cols, vip: [], vipSeats, couple, blocked, active: p.active, note: p.note }; i >= 0 ? Object.assign(ROOMS[i], obj) : ROOMS.push(obj); }); }
+      try { await adminCall("save_room_s", { p }, () => { const i = ROOMS.findIndex(x => x.id === id); const obj = { id, cinemaId: cid, name: p.name, kind: p.kind, rows, cols, vip: [], vipSeats, couple, blocked, seatMap, active: p.active, note: p.note }; i >= 0 ? Object.assign(ROOMS[i], obj) : ROOMS.push(obj); }); }
       catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008/009" : Auth.message(e), "bad"); }
-      log("admin", `${isNew ? "Thêm" : "Sửa"} phòng ${id} (${p.kind}, ${rows}×${cols}, VIP ${vipSeats.length}, đôi ${couple.length}, bảo trì ${blocked.length}${p.active ? "" : ", tạm ngưng"})`); sh.close(); save(); render(); toast(`Đã lưu ${p.name}`); },
+      log("admin", `${isNew ? "Thêm" : "Sửa"} phòng ${id} (${p.kind}, ${rows}×${cols}, ${Object.keys(seatMap).length} ghế đặc biệt${p.active ? "" : ", tạm ngưng"})`); sh.close(); save(); render(); toast(`Đã lưu ${p.name}`); },
     async del(b, sh) {
       if (!confirm(`Xoá ${r.name} (${r.id})? Chỉ xoá được khi không còn vé của suất sắp chiếu.`)) return;
       try { await adminCall("delete_room_s", { p_id: r.id }, () => { const i = ROOMS.findIndex(x => x.id === r.id); if (i >= 0) ROOMS.splice(i, 1); S.shows = S.shows.filter(s => s.roomId !== r.id); }); }
@@ -820,6 +840,68 @@ function roomSheet(cid, r) {
   }, { label: "Phòng chiếu", wide: true });
   // đổi số hàng / ghế mỗi hàng → vẽ lại sơ đồ (giữ loại ghế đã đánh dấu còn nằm trong kích thước mới)
   sh.el.addEventListener("input", e => { if (e.target.id === "rm-rows" || e.target.id === "rm-cols") { const rows = Math.min(26, Math.max(1, +$("#rm-rows").value || 1)), cols = Math.min(30, Math.max(1, +$("#rm-cols").value || 1)); ed.rows = rows; ed.cols = cols; redraw(); } });
+}
+/** Thêm / sửa loại ghế tự định nghĩa (quản lý chuỗi): tên, số người, phụ thu A/B, màu, biểu tượng, có bán */
+/** Bảng giá riêng của một rạp: giá cơ bản theo loại ngày × đối tượng, phụ thu phòng. Trống = dùng bảng theo hạng A/B. */
+function pricesSheet(c) {
+  const base = PRICE_TIERS[c.tier] || PRICE_TIERS.B, cur = c.prices && c.prices.weekday ? c.prices : base, own = !!(c.prices && c.prices.weekday);
+  const DAYS = [["weekday", "Ngày thường (T2–T5)"], ["wed", "Thứ Tư vui vẻ"], ["weekend", "Cuối tuần (T6–CN)"]], AUD = [["adult", "Người lớn"], ["u22", "U22"], ["child", "Trẻ em"], ["senior", "Người cao tuổi"]];
+  const num = (id, val) => `<input id="${id}" value="${val}" type="number" min="0" step="1000" inputmode="numeric" class="${INPUT} !h-9 text-right tabular-nums">`;
+  const html = `${sheetHead(`Bảng giá · ${esc(c.name)}`, `${own ? "Đang dùng bảng giá riêng." : `Đang dùng bảng giá hạng ${c.tier}.`} Giá cơ bản theo loại ngày × đối tượng; đối tượng lấy từ tuổi đã xác thực VNeID. Phụ thu ghế VIP / đôi… đặt ở Loại ghế.`)}
+    <div class="-mx-2 overflow-x-auto"><table class="w-full min-w-[520px] text-sm"><thead><tr class="text-left text-xs text-muted"><th class="px-2 py-1.5 font-medium">Đối tượng</th>${DAYS.map(([k, l]) => `<th class="px-2 py-1.5 font-medium">${l}</th>`).join("")}</tr></thead>
+      <tbody>${AUD.map(([a, al]) => `<tr><td class="px-2 py-1.5">${al}</td>${DAYS.map(([d]) => `<td class="px-2 py-1.5">${num(`pr-${d}-${a}`, cur[d][a])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <div class="grid gap-3 sm:grid-cols-2">${field("Phụ thu 3D ngày thường", num("pr-s3d-weekday", cur.s3d.weekday))}${field("Phụ thu 3D cuối tuần", num("pr-s3d-weekend", cur.s3d.weekend))}${field("Phụ thu phòng GOLD", num("pr-gold", cur.gold))}${field("Phụ thu phòng IMAX", num("pr-imax", cur.imax ?? cur.gold))}${field("Phụ thu ngày lễ", num("pr-holiday", cur.holiday))}</div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu bảng giá riêng</button>${own ? `<button type="button" class="${B.outline}" data-act="reset">${ic("rotate-ccw")}Dùng lại bảng hạng ${c.tier}</button>` : ""}</div>`;
+  const push = async p => {
+    if (Remote.v11 && Auth.token) { await Remote.rpc("save_cinema_prices_s", { p_token: Auth.token, p_cinema: c.id, p }); await Remote.reloadCatalog(); }
+    else if (ON()) throw new Error("need_011");
+    else c.prices = p;
+  };
+  adminSheet(html, {
+    async save(b, sh) {
+      const g = id => Math.max(0, Math.round(+v(id) || 0)); const p = { s3d: { weekday: g("pr-s3d-weekday"), weekend: g("pr-s3d-weekend") }, gold: g("pr-gold"), imax: g("pr-imax"), holiday: g("pr-holiday"), vip: base.vip, couple: base.couple };
+      DAYS.forEach(([d]) => { p[d] = {}; AUD.forEach(([a]) => p[d][a] = g(`pr-${d}-${a}`)); });
+      if (DAYS.some(([d]) => p[d].adult <= 0)) return toast("Giá người lớn phải lớn hơn 0", "bad");
+      try { await push(p); } catch (e) { return toast(e.message === "need_011" ? "Máy chủ chưa chạy migration 011" : Auth.message(e), "bad"); }
+      log("admin", `Bảng giá riêng ${c.name}: người lớn ${vnd(p.weekday.adult)} / ${vnd(p.wed.adult)} / ${vnd(p.weekend.adult)}`); sh.close(); save(); render(); toast("Đã lưu bảng giá " + c.name); },
+    async reset(b, sh) {
+      try { await push(null); } catch (e) { return toast(e.message === "need_011" ? "Máy chủ chưa chạy migration 011" : Auth.message(e), "bad"); }
+      log("admin", `${c.name}: dùng lại bảng giá hạng ${c.tier}`); sh.close(); save(); render(); toast("Đã bỏ bảng giá riêng"); },
+  }, { label: "Bảng giá", wide: true });
+}
+function seatTypeSheet(t, after) {
+  const isNew = !t; t = t || { id: "", name: "", persons: 1, surchargeA: 0, surchargeB: 0, color: "sky", icon: "sofa", sellable: true, sort: 10 };
+  const swatch = (k, on) => `<button type="button" data-act="color" data-v="${k}" aria-pressed="${on}" class="grid size-9 cursor-pointer place-items-center rounded-lg border ${SEAT_COLORS[k].tool} ${on ? "ring-2 ring-focus" : ""}" title="${k}">${on ? ic("check", "size-4") : ""}</button>`;
+  const iconBtn = (k, on) => `<button type="button" data-act="icon" data-v="${k}" aria-pressed="${on}" class="grid size-9 cursor-pointer place-items-center rounded-lg border ${on ? "border-foreground bg-foreground text-surface" : "border-border bg-surface hover:bg-button-hover"}" title="${k || "không biểu tượng"}">${k ? ic(k, "size-4") : `<span class="text-xs">–</span>`}</button>`;
+  const st = { color: t.color, icon: t.icon || "" };
+  const html = `${sheetHead(isNew ? "Loại ghế mới" : `Sửa loại ghế · ${esc(t.name)}`, "Dùng chung toàn chuỗi. Ví dụ: Ghế 3 người, Sofa 4, Ghế trẻ em, Lối đi (không bán).")}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Mã", input("st-id", t.id, `placeholder="sofa4" autocapitalize="none" ${isNew ? "" : "disabled"}`), isNew ? "chữ thường, số, gạch dưới" : "")}${field("Tên hiển thị", input("st-name", t.name, 'placeholder="Sofa 4 người"'))}${field("Số người ngồi", input("st-persons", t.persons, 'type="number" min="1" max="8" inputmode="numeric"'), "Giá ghế = giá cơ bản × số người + phụ thu")}<div class="grid grid-cols-2 gap-3">${field("Phụ thu hạng A", input("st-sa", t.surchargeA, 'type="number" min="0" step="1000" inputmode="numeric"'))}${field("Phụ thu hạng B", input("st-sb", t.surchargeB, 'type="number" min="0" step="1000" inputmode="numeric"'))}</div>
+      <div><p class="mb-1.5 text-sm font-medium">Màu trên sơ đồ</p><div id="st-colors" class="flex flex-wrap gap-2">${Object.keys(SEAT_COLORS).map(k => swatch(k, k === st.color)).join("")}</div></div>
+      <div><p class="mb-1.5 text-sm font-medium">Biểu tượng</p><div id="st-icons" class="flex flex-wrap gap-2">${iconBtn("", !st.icon)}${SEAT_ICONS.map(k => iconBtn(k, k === st.icon)).join("")}</div></div>
+      <div class="flex items-end pb-2 sm:col-span-2">${chk("st-sell", "Bán được (bỏ chọn = loại không bán: bảo trì, lối đi, ghế hỏng…)", t.sellable !== false)}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button>${!isNew && !t.builtin ? `<button type="button" class="${B.ghost} ml-auto text-err" data-act="del">${ic("trash-2")}Xoá loại ghế</button>` : ""}</div>`;
+  const done = () => { save(); render(); after && after(); };
+  adminSheet(html, {
+    color(b) { st.color = b.dataset.v; $("#st-colors").innerHTML = Object.keys(SEAT_COLORS).map(k => swatch(k, k === st.color)).join(""); },
+    icon(b) { st.icon = b.dataset.v; $("#st-icons").innerHTML = iconBtn("", !st.icon) + SEAT_ICONS.map(k => iconBtn(k, k === st.icon)).join(""); },
+    async save(b, sh) {
+      const id = isNew ? v("st-id").toLowerCase() : t.id, p = { id, name: v("st-name"), persons: Math.min(8, Math.max(1, +v("st-persons") || 1)), surcharge_a: +v("st-sa") || 0, surcharge_b: +v("st-sb") || 0, color: st.color, icon: st.icon || null, sellable: $("#st-sell").checked, sort: t.sort ?? 10, active: true };
+      if (!/^[a-z0-9_]{1,16}$/.test(id)) return toast("Mã: 1–16 ký tự chữ thường, số, gạch dưới", "bad");
+      if (!p.name) return toast("Nhập tên loại ghế", "bad");
+      if (isNew && SEAT_TYPES[id]) return toast("Mã loại ghế đã có", "bad");
+      const local = () => { SEAT_TYPES[id] = { id, name: p.name, persons: p.persons, surchargeA: p.surcharge_a, surchargeB: p.surcharge_b, color: p.color, icon: p.icon, sellable: p.sellable, sort: p.sort, builtin: !!t.builtin, active: true }; };
+      if (Remote.v11 && Auth.token) { try { await Remote.rpc("save_seat_type_s", { p_token: Auth.token, p }); await Remote.reloadCatalog(); } catch (e) { return toast(Auth.message(e), "bad"); } }
+      else if (ON() && Remote.v8) return toast("Máy chủ chưa chạy migration 011 (loại ghế)", "bad");
+      else if (ON()) return toast("Máy chủ chưa chạy migration 008", "bad");
+      else local();
+      log("admin", `${isNew ? "Thêm" : "Sửa"} loại ghế ${p.name} (${p.persons} người, phụ thu A ${vnd(p.surcharge_a)} / B ${vnd(p.surcharge_b)}${p.sellable ? "" : ", không bán"})`); sh.close(); done(); toast(`Đã lưu loại ghế ${p.name}`); },
+    async del(b, sh) {
+      if (!confirm(`Xoá loại ghế ${t.name}? Ghế đang mang loại này sẽ thành ghế thường.`)) return;
+      if (Remote.v11 && Auth.token) { try { await Remote.rpc("delete_seat_type_s", { p_token: Auth.token, p_id: t.id }); await Remote.reloadCatalog(); } catch (e) { return toast(Auth.message(e), "bad"); } }
+      else if (ON()) return toast("Máy chủ chưa chạy migration 011", "bad");
+      else { delete SEAT_TYPES[t.id]; ROOMS.forEach(r => { if (r.seatMap) for (const k in r.seatMap) if (r.seatMap[k] === t.id) delete r.seatMap[k]; }); }
+      log("admin", `Xoá loại ghế ${t.name}`); sh.close(); done(); toast("Đã xoá loại ghế"); },
+  }, { label: "Loại ghế", wide: true });
 }
 function filmSheet(f) {
   const isNew = !f; f = f || { id: "f" + Date.now().toString(36).slice(-5), title: "", rating: "P", dur: 100, genre: "", img: "", active: true };
@@ -840,7 +922,7 @@ function filmSheet(f) {
 /** Tra cứu một ghế: dữ liệu thật từ máy chủ (010: vé, người mua, người xem, đơn, khoá ghế, vé đoàn, lịch sử hoàn); chưa có 010 → dữ liệu đã tải */
 async function seatDetail(sh, sid, back) {
   const f = film(sh.filmId), r = room(sh.roomId);
-  const head = sheetHead(`Ghế ${sid}${seatKind(r, sid) !== "std" ? " · " + SEAT_KIND_TXT[seatKind(r, sid)] : ""}`, `${esc(f.title)} ${f.rating} · ${dayLabel(sh.start)} ${hhmm(sh.start)} · ${esc(placeOf(sh))}`);
+  const head = sheetHead(`Ghế ${sid}${seatKind(r, sid) !== "std" ? " · " + esc(seatType(seatKind(r, sid)).name) : ""}`, `${esc(f.title)} ${f.rating} · ${dayLabel(sh.start)} ${hhmm(sh.start)} · ${esc(placeOf(sh))}`);
   const sheet = openSheet(`${head}<div class="grid gap-2">${skelRows(4, "h-8")}</div>`, { label: "Tra cứu ghế " + sid });
   const row = (k, v) => `<div class="flex items-start justify-between gap-4 border-b border-border py-2 text-sm last:border-0"><span class="shrink-0 text-muted">${k}</span><span class="min-w-0 text-right">${v}</span></div>`;
   let info = null, body = "", src = "máy chủ (thời gian thực)";

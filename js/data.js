@@ -49,7 +49,7 @@ const ROOM_PLAN = {
 const ROOM_KIND_TXT = { "2D": "2D Phụ đề", "3D": "3D Phụ đề", GOLD: "2D Phụ đề · Phòng GOLD", IMAX: "IMAX 2D" };
 const ROOM_KINDS = ["2D", "3D", "GOLD", "IMAX"];
 const ROOMS = [];
-for (const cid in ROOM_PLAN) ROOM_PLAN[cid].forEach(([r, kind, rows, cols, vip], i) => ROOMS.push({ id: `${cid}-${r}`, cinemaId: cid, name: `Phòng ${i + 1}${kind === "2D" ? "" : " · " + kind}`, kind, rows, cols, vip, vipSeats: [], couple: [], blocked: [], active: true, note: "" }));
+for (const cid in ROOM_PLAN) ROOM_PLAN[cid].forEach(([r, kind, rows, cols, vip], i) => ROOMS.push({ id: `${cid}-${r}`, cinemaId: cid, name: `Phòng ${i + 1}${kind === "2D" ? "" : " · " + kind}`, kind, rows, cols, vip, vipSeats: [], couple: [], blocked: [], seatMap: {}, active: true, note: "" }));
 /* Lịch chiếu cố định theo ngày (hôm nay + 2 ngày tới): mọi máy sinh ra cùng một lịch với cùng mã suất,
    nên khi nối Supabase chỉ máy đầu tiên tạo, các máy sau dùng chung. Ghế "đã bán sẵn" sinh theo hạt giống cố định. */
 function buildSchedule() {
@@ -127,16 +127,17 @@ const cities = () => [...new Set(CINEMAS.filter(c => c.active !== false).map(c =
 const DIST = new Set();   // cặp "rạp|phim" đã bị bỏ phân phối
 const SEED_ORDER = CINEMAS.map(c => c.id);   // giữ thứ tự hiển thị như dữ liệu mẫu (rạp nhà trước), rạp mới thêm xếp sau theo mã
 const seedRank = id => { const i = SEED_ORDER.indexOf(id); return i < 0 ? 1000 + Number(id) : i; };
-function applyCatalog({ cinemas, rooms, films, cinemaFilms } = {}) {
-  if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", active: c.active !== false })); }
-  if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
+function applyCatalog({ cinemas, rooms, films, cinemaFilms, seatTypes } = {}) {
+  if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", prices: c.prices && c.prices.weekday ? c.prices : null, active: c.active !== false })); }
+  if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], seatMap: r.seat_map || {}, active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
   if (films && films.length) { FILMS.length = 0; films.forEach(f => FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false })); S.films = FILMS; }
+  if (seatTypes && seatTypes.length) setSeatTypes(seatTypes.map(t => ({ id: t.id, name: t.name, persons: t.persons || 1, surchargeA: Number(t.surcharge_a) || 0, surchargeB: Number(t.surcharge_b) || 0, color: t.color || "gray", icon: t.icon || null, sellable: t.sellable !== false, sort: t.sort ?? 100, builtin: !!t.builtin, active: t.active !== false })));
   if (cinemaFilms) { DIST.clear(); cinemaFilms.forEach(x => { if (!x.active) DIST.add(x.cinema_id + "|" + x.film_id); }); }
 }
 const filmAt = (cid, fid) => !DIST.has(cid + "|" + fid);
 /** Phim đang chiếu được tại một rạp: còn hoạt động và được phân phối */
 const filmsAt = cid => S.films.filter(f => f.active !== false && filmAt(cid, f.id));
-const isBlocked = (r, sid) => !!(r.blocked && r.blocked.includes(sid));
+const isBlocked = (r, sid) => isBlockedKind(seatKind(r, sid));
 const cinemasIn = city => CINEMAS.filter(c => c.city === city);
 /** Rạp khách đang xem (nhớ trên thiết bị). Mặc định rạp đầu tiên của chuỗi. */
 const CINEMA_KEY = "cinevin-cinema";
@@ -154,7 +155,15 @@ const formatOf = sh => sh.format || ROOM_KIND_TXT[(room(sh.roomId) || {}).kind] 
 /** "CineVin Vinh Centre · Phòng 2 · 3D" – nơi chiếu in trên vé, lịch, quầy */
 const placeOf = sh => `${cinemaOf(sh).name} · ${room(sh.roomId).name}`;
 /** Giá thường / VIP (người lớn) của một suất, cho chú giải sơ đồ ghế */
-function priceLegend(sh) { const r = room(sh.roomId), out = {}; for (let i = 0; i < r.rows; i++) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j), k = seatKind(r, sid); if (k !== "blocked" && out[k] == null) out[k] = seatPrice(sh, sid); } const t = PRICE_TIERS[cinemaOf(sh).tier] || PRICE_TIERS.B, base = out.std ?? out.vip ?? out.couple ?? 0; return { std: base, vip: out.vip ?? base + t.vip, couple: out.couple ?? base + t.couple, hasVip: out.vip != null, hasCouple: out.couple != null }; }
+/** Giá từng loại ghế có trong phòng của suất: { std, vip, …, types: [{ id, name, price, n }] } */
+function priceLegend(sh) {
+  const r = room(sh.roomId), out = {}, n = {};
+  for (let i = 0; i < r.rows; i++) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j), k = seatKind(r, sid); n[k] = (n[k] || 0) + 1; if (!isBlockedKind(k) && out[k] == null) out[k] = seatPrice(sh, sid); }
+  // loại nhiều chỗ: giá hiện cho cả nhóm (ví dụ ghế đôi = 2 ghế)
+  const types = seatTypeList().filter(t => n[t.id]).map(t => { let price = out[t.id] ?? null; if (price != null && t.persons > 1) { const first = (() => { for (let i = 0; i < r.rows; i++) for (let j = 0; j < r.cols; j++) { const sid = seatId(i, j); if (seatKind(r, sid) === t.id) return sid; } })(); const unit = seatUnit(r, first); price = unit.reduce((a, m) => a + seatPrice(sh, m), 0); return { ...t, price, n: n[t.id], unitSize: unit.length }; } return { ...t, price, n: n[t.id], unitSize: 1 }; });
+  const base = out.std ?? (types.find(t => t.price != null) || {}).price ?? 0;
+  return { ...out, std: base, types, hasVip: out.vip != null, hasCouple: out.couple != null };
+}
 const show = id => S.shows.find(s => s.id === id);
 const ON = () => Remote.online;
 /** Vé của tôi: tôi mua, hoặc bạn mua cho tôi (viewer_user) */
@@ -190,19 +199,65 @@ async function logVerif(kind, ok, { key = null, method = "", detail = {} } = {})
 function tier() { if (S.user.linked && ageAt(S.user.dob, new Date()) <= 22) return "U22"; return S.user.points >= 4000 ? "VIP" : "Member"; }
 
 /* ---------- giá & độ tuổi ---------- */
-/** Loại ghế: blocked (bảo trì, không bán) · couple (ghế đôi, phụ thu) · vip · std. VIP theo hàng (006) hoặc theo ghế (009). */
-const seatKind = (r, sid) => (r.blocked || []).includes(sid) ? "blocked" : (r.couple || []).includes(sid) ? "couple" : ((r.vipSeats || []).includes(sid) || (r.vip || []).includes(sid.charCodeAt(0) - 65)) ? "vip" : "std";
+/* ---------- loại ghế: danh mục tự định nghĩa (011), mặc định 4 loại; mỗi loại: số người ngồi, phụ thu theo hạng rạp, màu, biểu tượng, có bán hay không ---------- */
+const SEAT_TYPES = {};
+const SEAT_TYPE_DEFAULTS = [
+  { id: "std", name: "Thường", persons: 1, surchargeA: 0, surchargeB: 0, color: "gray", icon: null, sellable: true, sort: 1, builtin: true },
+  { id: "vip", name: "VIP", persons: 1, surchargeA: 5500, surchargeB: 5500, color: "amber", icon: "crown", sellable: true, sort: 2, builtin: true },
+  { id: "couple", name: "Ghế đôi", persons: 2, surchargeA: 26000, surchargeB: 16000, color: "rose", icon: "heart", sellable: true, sort: 3, builtin: true },
+  { id: "blocked", name: "Bảo trì", persons: 1, surchargeA: 0, surchargeB: 0, color: "gray", icon: "wrench", sellable: false, sort: 99, builtin: true },
+];
+function setSeatTypes(list) { for (const k in SEAT_TYPES) delete SEAT_TYPES[k]; list.forEach(t => SEAT_TYPES[t.id] = { ...t }); }
+setSeatTypes(SEAT_TYPE_DEFAULTS);
+const seatTypeList = () => Object.values(SEAT_TYPES).filter(t => t.active !== false).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+const seatType = id => SEAT_TYPES[id] || SEAT_TYPES.std;
+/** Màu loại ghế → lớp CSS: sơ đồ khách (seat), nút công cụ (tool), chú giải (dot) */
+const SEAT_COLORS = {
+  gray: { seat: "bg-surface border-border-strong text-foreground hover:bg-button-hover", tool: "border-border-strong bg-surface", dot: "border-border-strong bg-surface" },
+  amber: { seat: "bg-surface border-warning/60 text-foreground hover:bg-warning-bg", tool: "border-warning/60 bg-warning-bg text-warning", dot: "border-warning/60 bg-surface" },
+  rose: { seat: "bg-surface border-[var(--primary)]/50 text-foreground hover:bg-primary-light", tool: "border-[var(--primary)]/50 bg-primary-light text-primary", dot: "border-[var(--primary)]/50 bg-surface" },
+  sky: { seat: "bg-surface border-sky-400 text-foreground hover:bg-sky-50", tool: "border-sky-400 bg-sky-50 text-sky-700", dot: "border-sky-400 bg-surface" },
+  violet: { seat: "bg-surface border-violet-400 text-foreground hover:bg-violet-50", tool: "border-violet-400 bg-violet-50 text-violet-700", dot: "border-violet-400 bg-surface" },
+  green: { seat: "bg-surface border-success/60 text-foreground hover:bg-success-bg", tool: "border-success/60 bg-success-bg text-success", dot: "border-success/60 bg-surface" },
+  orange: { seat: "bg-surface border-orange-400 text-foreground hover:bg-orange-50", tool: "border-orange-400 bg-orange-50 text-orange-700", dot: "border-orange-400 bg-surface" },
+};
+const seatColor = (t, part) => (SEAT_COLORS[t.color] || SEAT_COLORS.gray)[part];
+const SEAT_ICONS = ["crown", "heart", "sofa", "armchair", "users", "star", "gem", "sparkles", "baby", "accessibility", "wrench", "ban"];
+/** Loại ghế của một ghế: sơ đồ theo ghế (011) → mảng 009 → hàng VIP (006) → thường. Loại đã xoá → thường. */
+function seatKind(r, sid) {
+  const m = r.seatMap && r.seatMap[sid]; if (m && SEAT_TYPES[m]) return m;
+  if ((r.blocked || []).includes(sid)) return "blocked";
+  if ((r.couple || []).includes(sid)) return "couple";
+  if ((r.vipSeats || []).includes(sid) || (r.vip || []).includes(sid.charCodeAt(0) - 65)) return "vip";
+  return "std";
+}
+const isBlockedKind = k => seatType(k).sellable === false;
+/** Ghế nhiều chỗ (đôi 2, ghế 3, sofa 4…) chiếm n ghế liền nhau trong hàng: trả về Map ghế → các ghế cùng nhóm (ghế đầu đứng trước) */
+function seatGroups(r) {
+  const key = `${r.rows}x${r.cols}|${JSON.stringify(r.seatMap || {})}|${(r.couple || []).join()}|${Object.keys(SEAT_TYPES).join()}`;
+  if (r._gk === key && r._g instanceof Map) return r._g;
+  const g = new Map();
+  for (let i = 0; i < r.rows; i++) { let j = 0; while (j < r.cols) { const sid = seatId(i, j), k = seatKind(r, sid), ty = seatType(k);
+    if (ty.persons > 1 && ty.sellable) { const members = [sid]; let jj = j + 1; while (jj < r.cols && members.length < ty.persons && seatKind(r, seatId(i, jj)) === k) { members.push(seatId(i, jj)); jj++; } members.forEach(m => g.set(m, members)); j = jj; }
+    else j++; } }
+  r._gk = key; r._g = g; return g;
+}
+/** Các ghế đi cùng một nút trên sơ đồ: ghế nhóm → cả nhóm, ghế thường → chính nó */
+const seatUnit = (r, sid) => seatGroups(r).get(sid) || [sid];
+/** Bảng giá của rạp: bảng riêng (quản lý tự đặt) hoặc bảng theo hạng A/B */
+const tierOf = c => (c && c.prices && c.prices.weekday) ? c.prices : (PRICE_TIERS[(c || {}).tier] || PRICE_TIERS.B);
 const isVip = (r, sid) => seatKind(r, sid) === "vip";
 const isCouple = (r, sid) => seatKind(r, sid) === "couple";
-const SEAT_KIND_TXT = { std: "Thường", vip: "VIP", couple: "Ghế đôi", blocked: "Bảo trì" };
+const SEAT_KIND_TXT = new Proxy({}, { get: (_, k) => seatType(k).name });
 /** Loại ngày của suất: thứ Tư vui vẻ · cuối tuần (T6, T7, CN) · ngày thường */
 function dayType(sh) { const d = new Date(sh.start).getDay(); return d === 3 ? "wed" : (d === 0 || d === 5 || d === 6) ? "weekend" : "weekday"; }
 /** Giá một ghế = bảng giá của rạp [loại ngày][đối tượng] + phụ thu ghế VIP + phụ thu 3D / phòng GOLD */
 function seatPrice(sh, sid, aud = "adult") {
-  const r = room(sh.roomId), c = cinemaOf(sh), t = PRICE_TIERS[c.tier] || PRICE_TIERS.B, dt = dayType(sh);
+  const r = room(sh.roomId), c = cinemaOf(sh), t = tierOf(c), dt = dayType(sh);
   let p = t[dt][aud] ?? t[dt].adult;
-  if (isVip(r, sid)) p += t.vip;
-  if (isCouple(r, sid)) p += t.couple;
+  // loại ghế: ghế nhiều chỗ (đôi, ghế 3, sofa…) chiếm n ghế liền – mỗi ghế thành viên = giá cơ bản + phụ thu chia đều; cả nhóm = giá cơ bản × n + phụ thu
+  const ty = seatType(seatKind(r, sid)), sur = Number(c.tier === "A" ? ty.surchargeA : ty.surchargeB) || 0;
+  p += ty.persons > 1 ? Math.round(sur / seatUnit(r, sid).length) : sur;
   if (r.kind === "3D") p += t.s3d[dt === "weekend" ? "weekend" : "weekday"];
   if (r.kind === "GOLD") p += t.gold;
   if (r.kind === "IMAX") p += t.imax || t.gold;

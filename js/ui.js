@@ -10,7 +10,8 @@ const B = {
   danger: `${BTN} bg-transparent text-[var(--danger)] hover:bg-[var(--danger-bg)]`,
   icon: "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-muted outline-hidden hover:bg-foreground/5 hover:text-foreground",
 };
-const ic = (n, c = "size-4") => `<i data-lucide="${n}" class="${c} shrink-0" aria-hidden="true"></i>`;
+// tên rỗng → không sinh thẻ (lucide không thay được thẻ rỗng → MutationObserver gọi lại vô hạn)
+const ic = (n, c = "size-4") => n ? `<i data-lucide="${n}" class="${c} shrink-0" aria-hidden="true"></i>` : "";
 const badge = (txt, cls) => `<span class="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-xs font-medium ${cls}">${txt}</span>`;
 const TONE = { ok: "bg-success-bg text-success", warn: "bg-warning-bg text-warning", bad: "bg-err-bg text-err", neutral: "bg-neutral-bg text-neutral", info: "bg-neutral-bg text-neutral" };
 const tone = (txt, t) => badge(txt, TONE[t] || TONE.neutral);

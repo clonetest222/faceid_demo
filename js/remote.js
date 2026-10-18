@@ -4,13 +4,13 @@
 "use strict";
 const Remote = (() => {
   const cfg = window.CINEVIN_CONFIG || {};
-  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null, v8 = null, catTimer = null;
+  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null, v8 = null, v11 = false, catTimer = null;
   /** Danh mục rạp/phòng (006) và phim/phân phối (008) từ máy chủ → thay dữ liệu mẫu trong app */
   async function reloadCatalog() {
     if (!sb || !v6) return;
     const [c, r] = await Promise.all([sb.from("cinemas").select("*").order("id"), sb.from("rooms").select("*").order("id")]);
     const cat = { cinemas: c.error ? null : c.data, rooms: r.error ? null : r.data };
-    if (v8) { const [f, cf] = await Promise.all([sb.from("films").select("*").order("created_at"), sb.from("cinema_films").select("*")]); cat.films = f.error ? null : f.data; cat.cinemaFilms = cf.error ? null : cf.data; }
+    if (v8) { const [f, cf, st] = await Promise.all([sb.from("films").select("*").order("created_at"), sb.from("cinema_films").select("*"), sb.from("seat_types").select("*")]); cat.films = f.error ? null : f.data; cat.cinemaFilms = cf.error ? null : cf.data; v11 = !st.error; cat.seatTypes = st.error ? null : st.data; }
     applyCatalog(cat);
   }
   const DEVICE = (() => { try { let d = localStorage.getItem("cinevin-device"); if (!d) { d = rid("DV", 8); localStorage.setItem("cinevin-device", d); } return d; } catch (e) { return rid("DV", 8); } })();
@@ -34,7 +34,7 @@ const Remote = (() => {
       else sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
       await rpc("ensure_schedule", { p_shows: schedule.rows, p_sold: schedule.sold });
       // migration 006: danh mục rạp/phòng của chuỗi (không có hàm → máy chủ chưa chạy 006, chạy theo mã phòng)
-      if (v6 === null && typeof CINEMAS !== "undefined") { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip, blocked: r.blocked, vip_seats: r.vipSeats, couple: r.couple })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
+      if (v6 === null && typeof CINEMAS !== "undefined") { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip, blocked: r.blocked, vip_seats: r.vipSeats, couple: r.couple, seat_map: r.seatMap || {} })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
       // migration 008: kho phim dùng chung + phân phối
       if (v6 && v8 === null && typeof FILMS !== "undefined") { try { await rpc("ensure_films", { p_films: FILMS.map(f => ({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre, img: f.img })) }); v8 = true; } catch (e) { v8 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
       await reloadCatalog();
@@ -75,7 +75,7 @@ const Remote = (() => {
     const ch = sb.channel("cinevin-db");
     on("shows", p => { if (p.eventType === "DELETE") { S.shows = S.shows.filter(s => s.id !== p.old.id); return; } const s = mapShow(p.new), i = S.shows.findIndex(x => x.id === s.id); i >= 0 ? S.shows[i] = s : S.shows.push(s); S.seats[s.id] ||= {}; });
     // chỉ đăng ký bảng đã có trên máy chủ: kênh realtime có bảng không tồn tại sẽ lỗi cả kênh (mất cả seat_locks)
-    for (const t of [...(v6 ? ["cinemas"] : []), ...(v8 ? ["rooms", "films", "cinema_films"] : [])]) on(t, () => { clearTimeout(catTimer); catTimer = setTimeout(() => reloadCatalog().then(() => onChange(t)).catch(() => {}), 400); });
+    for (const t of [...(v6 ? ["cinemas"] : []), ...(v8 ? ["rooms", "films", "cinema_films"] : []), ...(v11 ? ["seat_types"] : [])]) on(t, () => { clearTimeout(catTimer); catTimer = setTimeout(() => reloadCatalog().then(() => onChange(t)).catch(() => {}), 400); });
     on("seat_locks", p => { if (p.eventType === "DELETE") { if (S.seats[p.old.show_id]) delete S.seats[p.old.show_id][p.old.seat]; return; } const l = p.new; (S.seats[l.show_id] ||= {})[l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp }; });
     on("tickets", p => { if (p.eventType === "DELETE") { S.tickets = S.tickets.filter(t => t.code !== p.old.code); return; } const t = mapTicket(p.new), i = S.tickets.findIndex(x => x.code === t.code); i >= 0 ? S.tickets[i] = { ...t, ownerUser: t.ownerUser || S.tickets[i].ownerUser, viewerUser: t.viewerUser || S.tickets[i].viewerUser } : S.tickets.push(t); });
     on("groups", p => { if (p.eventType === "DELETE") { S.groups = S.groups.filter(g => g.code !== p.old.code); return; } const old = S.groups.find(x => x.code === p.new.code); const g = mapGroup(p.new, []); g.students = old ? old.students : []; old ? Object.assign(old, g) : S.groups.push(g); });
@@ -116,7 +116,7 @@ const Remote = (() => {
 
   return {
     init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, hasV5, DEVICE,
-    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, reloadCatalog, get hasClient() { return !!sb; },
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, get v11() { return !!v11; }, reloadCatalog, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();
