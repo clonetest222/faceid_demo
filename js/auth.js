@@ -1,6 +1,8 @@
-/* Auth – đăng nhập tài khoản/mật khẩu và vai trò.
-   Có migration 004: máy chủ kiểm mật khẩu (bcrypt), cấp token phiên; mọi hàm nhạy cảm kiểm vai trò bằng token.
-   Chưa có 004 / mất mạng: dùng tài khoản demo kiểm tra trên trình duyệt (chỉ để thử giao diện, không an toàn). */
+/* Auth – đăng nhập / đăng ký / hồ sơ tài khoản.
+   Máy chủ (migration 004 + 005): mật khẩu bcrypt, token phiên 7 ngày; đăng nhập bằng tên đăng nhập, email hoặc SĐT;
+   đăng nhập FaceID (so khớp khuôn mặt ở máy chủ với hồ sơ VNeID đã liên kết) và VNeID (mô phỏng).
+   Hồ sơ VNeID, điểm thưởng, tuỳ chọn lưu trên máy chủ → đổi thiết bị vẫn còn.
+   Chưa có máy chủ: tài khoản demo trên trình duyệt, chỉ để thử giao diện. */
 "use strict";
 const Auth = (() => {
   const KEY = "cinevin-session", LOCAL = "cinevin-local-users";
@@ -12,11 +14,21 @@ const Auth = (() => {
   ];
   const ROLE_TXT = { khach: "Khách hàng", nhanvien: "Nhân viên", quanly: "Quản lý" };
   const ERR = {
-    invalid_login: "Sai tên đăng nhập hoặc mật khẩu.",
+    invalid_login: "Sai tài khoản hoặc mật khẩu.",
     username_taken: "Tên đăng nhập đã có người dùng.",
+    email_taken: "Email này đã đăng ký tài khoản khác.",
+    phone_taken: "Số điện thoại này đã đăng ký tài khoản khác.",
     weak_password: "Mật khẩu cần ít nhất 6 ký tự.",
     bad_username: "Tên đăng nhập 3–32 ký tự: chữ thường không dấu, số, dấu chấm hoặc gạch dưới.",
     bad_name: "Nhập họ tên.",
+    bad_email: "Email không đúng định dạng.",
+    bad_phone: "Số điện thoại 10 số, bắt đầu bằng 0 (hoặc +84).",
+    citizen_taken: "Hồ sơ VNeID này đã liên kết với một tài khoản khác. Mỗi người chỉ có một tài khoản đã xác thực.",
+    face_not_linked: "Tài khoản chưa liên kết VNeID nên chưa có khuôn mặt để đối chiếu – đăng nhập bằng mật khẩu rồi liên kết ở Tài khoản.",
+    face_not_enrolled: "Hồ sơ chưa có ảnh gốc trên máy chủ – xác thực lại VNeID bằng mật khẩu trước.",
+    face_mismatch: "Khuôn mặt không khớp với chủ tài khoản.",
+    vneid_not_linked: "Hồ sơ VNeID này chưa gắn với tài khoản nào – đăng ký rồi liên kết VNeID ở Tài khoản.",
+    voucher_unknown: "Không có mã này.", voucher_used: "Mã đã dùng rồi.", voucher_expired: "Mã đã hết hạn.", voucher_not_yours: "Thẻ quà tặng này của tài khoản khác.", voucher_invalid: "Mã giảm giá không còn hợp lệ.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
   };
@@ -24,45 +36,70 @@ const Auth = (() => {
   let user = null;
   try { user = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
   const store = u => { user = u; try { u ? localStorage.setItem(KEY, JSON.stringify(u)) : localStorage.removeItem(KEY); } catch (e) {} };
-  const fromServer = r => ({ token: r.token, username: r.username, role: r.role, name: r.name, offline: false });
+  const fromServer = r => ({ token: r.token, username: r.username, role: r.role, name: r.name, email: r.email || null, phone: r.phone || null,
+    citizenKey: r.citizen_key || null, dob: r.dob || null, vneidAt: r.vneid_verified_at || null, vneidMethod: r.vneid_method || null,
+    points: r.points == null ? null : r.points, confirmEvery: !!r.confirm_every, offline: false });
   const localUsers = () => { let extra = []; try { extra = JSON.parse(localStorage.getItem(LOCAL)) || []; } catch (e) {} return [...DEMO, ...extra]; };
   const okUser = u => /^[a-z0-9_.]{3,32}$/.test(u);
+  const norm = s => String(s || "").trim();
 
-  async function login(username, pass) {
-    const u = String(username || "").trim().toLowerCase();
+  async function login(id, pass) {
+    const u = norm(id).toLowerCase();
     if (await Remote.hasV4()) {
       try { store(fromServer(await Remote.rpc("login", { p_user: u, p_pass: pass }))); return { ok: true }; }
       catch (e) { return { ok: false, message: message(e) }; }
     }
-    const d = localUsers().find(x => x.username === u && x.pass === pass);
+    const d = localUsers().find(x => (x.username === u || x.email === u || x.phone === u) && x.pass === pass);
     if (!d) return { ok: false, message: ERR.invalid_login };
-    store({ token: null, username: d.username, role: d.role, name: d.name, offline: true });
+    store({ token: null, username: d.username, role: d.role, name: d.name, email: d.email || null, phone: d.phone || null, offline: true });
     return { ok: true };
   }
-  async function register(username, pass, name) {
-    const u = String(username || "").trim().toLowerCase();
+  /** Đăng nhập FaceID: trình duyệt chỉ gửi vector 128 số, máy chủ so với ảnh gốc của hồ sơ VNeID đã liên kết */
+  async function loginFace(id, descriptor) {
+    if (!(await Remote.hasV5())) return { ok: false, message: "Máy chủ chưa bật đăng nhập FaceID (migration 005)." };
+    try {
+      const r = await Remote.rpc("login_face", { p_user: norm(id).toLowerCase(), p_descriptor: descriptor, p_device: Remote.DEVICE });
+      if (!r || !r.ok) return { ok: false, message: ERR.face_mismatch, score: r && r.score, dist: r && r.distance };
+      store(fromServer(r)); return { ok: true, score: r.score };
+    } catch (e) { return { ok: false, message: message(e) }; }
+  }
+  /** Đăng nhập VNeID (mô phỏng cổng VNeID trả về hồ sơ người dùng đã đồng ý chia sẻ) */
+  async function loginVneid(key) {
+    if (!(await Remote.hasV5())) return { ok: false, message: "Máy chủ chưa bật đăng nhập VNeID (migration 005)." };
+    try { store(fromServer(await Remote.rpc("login_vneid", { p_key: key, p_device: Remote.DEVICE }))); return { ok: true }; }
+    catch (e) { return { ok: false, message: message(e) }; }
+  }
+  async function register({ username, pass, name, email = "", phone = "" }) {
+    const u = norm(username).toLowerCase(), em = norm(email).toLowerCase(), ph = norm(phone).replace(/[^\d+]/g, "");
+    if (norm(name).length < 2) return { ok: false, message: ERR.bad_name, field: "name" };
+    if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return { ok: false, message: ERR.bad_email, field: "email" };
+    if (ph && !/^(\+84|0)\d{9}$/.test(ph)) return { ok: false, message: ERR.bad_phone, field: "phone" };
     if (!okUser(u)) return { ok: false, message: ERR.bad_username, field: "user" };
     if (String(pass || "").length < 6) return { ok: false, message: ERR.weak_password, field: "pass" };
-    if (String(name || "").trim().length < 2) return { ok: false, message: ERR.bad_name, field: "name" };
     if (await Remote.hasV4()) {
-      try { store(fromServer(await Remote.rpc("register", { p_user: u, p_pass: pass, p_name: name.trim() }))); return { ok: true }; }
-      catch (e) { return { ok: false, message: message(e), field: /username_taken/.test(e.message) ? "user" : "" }; }
+      const args = { p_user: u, p_pass: pass, p_name: norm(name) };
+      if (await Remote.hasV5()) { args.p_email = em || null; args.p_phone = ph || null; }   // máy chủ cũ (004) chỉ nhận 3 tham số
+      try { store(fromServer(await Remote.rpc("register", args))); return { ok: true }; }
+      catch (e) { const m = e.message || ""; return { ok: false, message: message(e), field: /username_taken/.test(m) ? "user" : /email/.test(m) ? "email" : /phone/.test(m) ? "phone" : "" }; }
     }
     if (localUsers().some(x => x.username === u)) return { ok: false, message: ERR.username_taken, field: "user" };
-    const extra = localUsers().slice(DEMO.length); extra.push({ username: u, pass, role: "khach", name: name.trim() });
+    const extra = localUsers().slice(DEMO.length); extra.push({ username: u, pass, role: "khach", name: norm(name), email: em || null, phone: ph || null });
     try { localStorage.setItem(LOCAL, JSON.stringify(extra)); } catch (e) {}
-    store({ token: null, username: u, role: "khach", name: name.trim(), offline: true });
+    store({ token: null, username: u, role: "khach", name: norm(name), email: em || null, phone: ph || null, offline: true });
     return { ok: true };
   }
   function logout() { if (user && user.token) Remote.rpc("logout", { p_token: user.token }).catch(() => {}); store(null); }
+  /** Cập nhật phiên từ JSON máy chủ trả về (sau liên kết VNeID, đổi tuỳ chọn, thanh toán…) */
+  function refresh(r) { if (r && r.username) store(fromServer(r)); }
+  function setPoints(p) { if (user && p != null) store({ ...user, points: p }); }
   /** Kiểm lại phiên với máy chủ. Trả về false nếu phiên không còn (cần đăng nhập lại). */
   async function check() {
     if (!user) return false;
     const v4 = await Remote.hasV4();
     if (!v4) return true;
-    if (!user.token) { store(null); return false; }      // phiên ngoại tuyến cũ – máy chủ đã có đăng nhập thật
+    if (!user.token) { store(null); return false; }
     try { const r = await Remote.rpc("session_info", { p_token: user.token }); if (!r) { store(null); return false; } store(fromServer(r)); } catch (e) {}
     return true;
   }
-  return { get user() { return user; }, get token() { return user && user.token; }, login, register, logout, check, message, DEMO, ROLE_TXT };
+  return { get user() { return user; }, get token() { return user && user.token; }, login, loginFace, loginVneid, register, logout, refresh, setPoints, check, message, DEMO, ROLE_TXT };
 })();

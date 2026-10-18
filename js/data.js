@@ -80,6 +80,13 @@ function bindProfile() {
   const u = Auth.user; if (!u) return;
   const p = S.profiles[u.username] || (S.profiles[u.username] = newProfile(u.name));
   if (!p.user.linked) p.user.name = u.name;
+  // có migration 005: liên kết VNeID, điểm, tuỳ chọn là của máy chủ (đổi thiết bị vẫn còn); passkey, người phụ thuộc, vai giáo viên vẫn theo thiết bị
+  if (Remote.v5 && u.token) {
+    if (u.citizenKey) Object.assign(p.user, { linked: true, key: u.citizenKey, name: u.name, dob: u.dob, verifiedAt: u.vneidAt, method: u.vneidMethod || p.user.method });
+    else Object.assign(p.user, { linked: false, key: null, dob: null, verifiedAt: null, name: u.name });
+    if (u.points != null) p.user.points = u.points;
+    p.user.confirmEvery = !!u.confirmEvery;
+  }
   S.user = p.user; S.teacher = p.teacher; S.dependents = p.dependents;
 }
 const film = id => S.films.find(f => f.id === id) || { id, title: "Phim mới", rating: "P", dur: 100, genre: "", img: null };

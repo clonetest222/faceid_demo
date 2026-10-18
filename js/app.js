@@ -53,28 +53,74 @@ let LOGIN = { err: "", field: "", busy: false, show: false };
 function vLogin(reg) {
   const demo = Auth.DEMO.map(d => `<button type="button" data-act="demo-login" data-u="${d.username}" class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-item-hover">${avatar(d.name)}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">${esc(d.note)}</span><span class="block font-mono text-xs text-muted">${d.username} / ${d.pass}</span></span>${ic("arrow-right", "size-4 text-muted")}</button>`).join("");
   const err = LOGIN.err ? `<p class="text-sm text-[var(--error-text)]" role="alert" id="login-err">${esc(LOGIN.err)}</p>` : "";
-  const pass = `<div class="relative">${`<input id="li-pass" type="${LOGIN.show ? "text" : "password"}" autocomplete="${reg ? "new-password" : "current-password"}" placeholder="${reg ? "Ít nhất 6 ký tự" : "Mật khẩu"}" class="${INPUT} !h-12 pr-12" ${LOGIN.field === "pass" ? 'aria-invalid="true"' : ""}>`}<button type="button" class="${B.icon} absolute right-1 top-1" data-act="toggle-pass" aria-label="${LOGIN.show ? "Ẩn" : "Hiện"} mật khẩu">${ic(LOGIN.show ? "eye-off" : "eye")}</button></div>`;
-  const form = reg
-    ? `<form class="grid gap-4" data-form="register" novalidate>${field("Họ và tên", `<input id="li-name" autocomplete="name" placeholder="Nguyễn Văn A" class="${INPUT} !h-12" ${LOGIN.field === "name" ? 'aria-invalid="true"' : ""}>`)}${field("Tên đăng nhập", `<input id="li-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="vd: nguyenvana" class="${INPUT} !h-12" ${LOGIN.field === "user" ? 'aria-invalid="true"' : ""}>`, "Chữ thường không dấu, số, dấu chấm hoặc gạch dưới.")}${field("Mật khẩu", pass)}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang tạo…" : "Tạo tài khoản khách"}</button></form>
-       <p class="text-center text-sm text-muted">Đã có tài khoản? <a href="#/dangnhap" class="font-medium text-foreground underline underline-offset-2">Đăng nhập</a></p>`
-    : `<form class="grid gap-4" data-form="login" novalidate>${field("Tên đăng nhập", `<input id="li-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Tên đăng nhập" class="${INPUT} !h-12" ${LOGIN.field ? 'aria-invalid="true"' : ""}>`)}${field("Mật khẩu", pass)}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang đăng nhập…" : "Đăng nhập"}</button></form>
-       <p class="text-center text-sm text-muted">Chưa có tài khoản? <a href="#/dangky" class="font-medium text-foreground underline underline-offset-2">Tạo tài khoản khách</a></p>`;
+  const inv = f => LOGIN.field === f ? 'aria-invalid="true"' : "";
+  const pass = `<div class="relative"><input id="li-pass" type="${LOGIN.show ? "text" : "password"}" autocomplete="${reg ? "new-password" : "current-password"}" placeholder="${reg ? "Ít nhất 6 ký tự" : "Mật khẩu"}" class="${INPUT} !h-12 pr-12" ${inv("pass")}><button type="button" class="${B.icon} absolute right-1 top-1" data-act="toggle-pass" aria-label="${LOGIN.show ? "Ẩn" : "Hiện"} mật khẩu">${ic(LOGIN.show ? "eye-off" : "eye")}</button></div>`;
+  const idField = field("Tài khoản", `<input id="li-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Tên đăng nhập, email hoặc số điện thoại" class="${INPUT} !h-12" ${inv("user")}>`);
+  let form;
+  if (reg) form = `<form class="grid gap-4" data-form="register" novalidate>
+      ${field("Họ và tên", `<input id="li-name" autocomplete="name" placeholder="Nguyễn Văn A" class="${INPUT} !h-12" ${inv("name")}>`)}
+      <div class="grid gap-4 sm:grid-cols-2">${field("Email", `<input id="li-email" type="email" autocomplete="email" placeholder="ban@example.com" class="${INPUT} !h-12" ${inv("email")}>`)}${field("Số điện thoại", `<input id="li-phone" type="tel" autocomplete="tel" inputmode="numeric" placeholder="0912 345 678" class="${INPUT} !h-12" ${inv("phone")}>`)}</div>
+      ${field("Tên đăng nhập", `<input id="li-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="vd: nguyenvana" class="${INPUT} !h-12" ${inv("user")}>`, "Chữ thường không dấu, số, dấu chấm hoặc gạch dưới.")}
+      ${field("Mật khẩu", pass)}${err}
+      <button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang tạo…" : "Tạo tài khoản"}</button>
+      <p class="text-pretty text-center text-xs text-muted">Sau khi tạo, bạn được mời xác thực VNeID + FaceID để mua vé theo độ tuổi và vào thẳng phim T13–T18. Có thể làm sau.</p></form>
+      <p class="text-center text-sm text-muted">Đã có tài khoản? <a href="#/dangnhap" class="font-medium text-foreground underline underline-offset-2">Đăng nhập</a></p>`;
+  else {
+    const m = LOGIN.mode || "pass";
+    const tabs = seg([["pass", "Mật khẩu", "key-round"], ["face", "FaceID", "scan-face"], ["vneid", "VNeID", "badge-check"]], m, "login-mode");
+    const inner = m === "pass" ? `<form class="grid gap-4" data-form="login" novalidate>${idField}${field("Mật khẩu", pass)}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang đăng nhập…" : "Đăng nhập"}</button></form>`
+      : m === "face" ? `<form class="grid gap-4" data-form="login-face" novalidate>${idField}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${ic("scan-face")}Quét khuôn mặt để đăng nhập</button>
+          <p class="text-pretty text-xs text-muted">Dùng được sau khi tài khoản đã liên kết VNeID. Camera xử lý trên thiết bị, máy chủ chỉ nhận vector 128 số để đối chiếu với ảnh gốc – không nhận ảnh.</p></form>`
+      : `<div class="grid gap-4">${banner("info", "Mô phỏng ứng dụng VNeID", "Thực tế: web chuyển sang app VNeID, bạn quét Face ID trong app và đồng ý chia sẻ; VNeID gửi hồ sơ về rạp. Ở bản demo, chọn hồ sơ bên dưới.")}
+          ${field("Hồ sơ dân cư", selectBox("li-vneid", IDENTITIES.map(i => [i.key, `${i.name} – ${i.note}`]), LOGIN.vneid || "an"))}${err}
+          <button type="button" class="${B.primary} min-h-12" data-act="login-vneid" ${LOGIN.busy ? "disabled" : ""}>${ic("badge-check")}Đồng ý chia sẻ và đăng nhập</button></div>`;
+    form = `<div class="flex justify-center">${tabs}</div>${inner}<p class="text-center text-sm text-muted">Chưa có tài khoản? <a href="#/dangky" class="font-medium text-foreground underline underline-offset-2">Tạo tài khoản</a></p>`;
+  }
   return `<main class="grid min-h-screen place-items-center p-4">
-    <div class="grid w-full max-w-[400px] gap-6">
+    <div class="grid w-full max-w-[440px] gap-6">
       <div class="grid justify-items-center gap-3 text-center">${LOGO}<div><h1 class="text-xl font-semibold">${reg ? "Tạo tài khoản" : "Đăng nhập"}</h1><p class="mt-1 text-sm text-muted">Hệ thống bán vé xem phim CineVin</p></div></div>
       <section class="grid gap-4 rounded-2xl border border-border bg-surface p-5 sm:p-6">${form}</section>
       ${reg ? "" : `<section class="rounded-2xl border border-border bg-surface p-2"><p class="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-muted">Tài khoản demo – bấm để vào</p>${demo}</section>`}
-      <p class="text-center text-xs text-muted">${Remote.v4 ? "Mật khẩu kiểm tra trên máy chủ (bcrypt)." : Remote.status === "connecting" ? "Đang kết nối máy chủ…" : "Máy chủ chưa bật đăng nhập (migration 004) – đang dùng tài khoản demo trên trình duyệt."}</p>
+      <p class="text-center text-xs text-muted">${Remote.v5 ? "Mật khẩu bcrypt, FaceID và VNeID kiểm tra trên máy chủ." : Remote.v4 ? "Mật khẩu kiểm tra trên máy chủ (bcrypt). Chạy migration 005 để bật FaceID / VNeID." : Remote.status === "connecting" ? "Đang kết nối máy chủ…" : "Máy chủ chưa bật đăng nhập (migration 004) – đang dùng tài khoản demo trên trình duyệt."}</p>
     </div></main>`;
+}
+function afterLogin(msg) {
+  LOGIN = { err: "", field: "", busy: false, show: false, mode: LOGIN.mode };
+  bindProfile(); save(); location.hash = "#/" + HOME[Auth.user.role]; render(); toast(msg || `Xin chào ${Auth.user.name}`);
 }
 async function doLogin(u, p) {
   LOGIN = { ...LOGIN, busy: true, err: "", field: "" }; render();
   const r = await Auth.login(u, p);
   LOGIN.busy = false;
   if (!r.ok) { LOGIN.err = r.message; LOGIN.field = "user"; render(); const x = $("#li-user"); if (x) x.value = u; return; }
-  LOGIN = { err: "", field: "", busy: false, show: false };
-  bindProfile(); save(); location.hash = "#/" + HOME[Auth.user.role]; render();
-  toast(`Xin chào ${Auth.user.name}`);
+  afterLogin();
+}
+/** Đăng nhập bằng khuôn mặt: camera (hoặc ảnh khi không có camera) → máy chủ so với ảnh gốc của hồ sơ VNeID đã liên kết */
+function doLoginFace(id) {
+  if (!id) { LOGIN.err = "Nhập tên đăng nhập, email hoặc số điện thoại trước."; LOGIN.field = "user"; return render(); }
+  FaceKit.preload();
+  let stop = null;
+  const sh = openSheet("", { label: "Đăng nhập FaceID", onClose: () => { stop && stop(); } });
+  const serverMatch = async desc => { const r = await Auth.loginFace(id, desc); return { ok: r.ok, score: r.score, dist: r.dist, message: r.message, session: r.ok }; };
+  const done = r => { stop = null;
+    if (r.ok && r.session) { sh.close(); return afterLogin(`Đăng nhập bằng khuôn mặt · tương đồng ${r.score}%`); }
+    sh.set(`${sheetHead("Không đăng nhập được")}${banner("bad", "", esc(r.message || "Khuôn mặt không khớp."))}${r.dist ? `<p class="text-sm text-muted">Khoảng cách đặc trưng ${String(r.dist).replace(".", ",")} > ngưỡng 0,5.</p>` : ""}<div class="grid gap-2"><button type="button" class="${B.primary}" data-m="cam">Thử lại</button><label class="${B.outline}">Dùng ảnh<input type="file" accept="image/*" capture="user" id="lf-file" class="sr-only"></label><button type="button" class="${B.ghost}" data-m="close">Đăng nhập bằng mật khẩu</button></div>`); };
+  const cam = async () => {
+    if (!(await FaceKit.hasCamera())) return sh.set(`${sheetHead("Đăng nhập FaceID", "Máy này không có camera")}<p class="text-sm text-muted">Chọn ảnh khuôn mặt để đối chiếu (không kiểm tra được người thật).</p><label class="${B.primary}">Chọn ảnh<input type="file" accept="image/*" capture="user" id="lf-file" class="sr-only"></label><button type="button" class="${B.ghost}" data-m="close">Huỷ</button>`);
+    sh.set(`${sheetHead("Đăng nhập FaceID", esc(id))}<div id="fk-host" class="grid gap-4"></div><button type="button" class="${B.ghost}" data-m="close">Huỷ</button>`);
+    stop = FaceKit.runCamera($("#fk-host", sh.el), { refKey: null, ref: null, serverMatch, onResult: done });
+  };
+  sh.el.onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m === "close") { stop && stop(); sh.close(); } if (m === "cam") { stop && stop(); cam(); } };
+  sh.el.onchange = e => { if (e.target.id === "lf-file" && e.target.files[0]) { stop && stop(); stop = null; sh.set(`${sheetHead("Đăng nhập FaceID")}<div id="fk-host" class="grid gap-4"></div>`); FaceKit.runImage($("#fk-host", sh.el), e.target.files[0], { refKey: null, ref: null, serverMatch, onResult: done }); } };
+  cam();
+}
+/** Sau khi đăng ký: mời xác thực VNeID ngay (có thể làm sau) */
+function offerVneid() {
+  const sh = openSheet(`${sheetHead("Tài khoản đã tạo", `Chào ${esc(Auth.user.name)}`)}
+    <div class="rounded-xl border border-border p-4 text-sm"><p class="font-medium">Xác thực VNeID + FaceID một lần để:</p><ul class="mt-2 grid gap-1 pl-5 text-muted" style="list-style:disc"><li>Mua vé theo độ tuổi (trẻ em, U22, người cao tuổi) đúng giá</li><li>Vào thẳng phim T13–T18 không cần giấy tờ ở cửa</li><li>Đăng nhập bằng khuôn mặt hoặc qua VNeID</li></ul></div>
+    <div class="grid gap-2"><button type="button" class="${B.primary}" data-m="now">${ic("badge-check")}Xác thực VNeID ngay</button><button type="button" class="${B.outline}" data-m="later">Để sau – xem lịch chiếu</button></div>
+    <p class="text-pretty text-xs text-muted">Chưa xác thực vẫn mua được vé; vé phim có giới hạn tuổi sẽ kiểm giấy tờ tại cửa.</p>`, { label: "Xác thực VNeID" });
+  sh.el.onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (!m) return; sh.close(); if (m === "now") A["vneid-self"](); };
 }
 
 /* ============================ Passkey (Face ID của thiết bị) ============================ */
@@ -351,8 +397,37 @@ const A = {
     if (ON()) await Remote.init(S, buildSchedule(), scheduleRender); save(); render(); toast("Đã đặt lại dữ liệu demo");
   },
   "reset-local"() { S = Store.reset(); bindProfile(); render(); },
-  "vneid-self"() { verifyFace({ who: "self", title: "Liên kết VNeID", onDone(id, r) { Object.assign(S.user, { linked: true, key: id.key, name: id.name, dob: id.dob, verifiedAt: new Date().toISOString(), faceScore: r.score, method: r.method }); log("vneid", `Liên kết VNeID: ${id.name}, ${ageAt(id.dob, new Date())} tuổi, qua ${r.method}`); } }); },
-  unlink() { Object.assign(S.user, { linked: false, dob: null, key: null, name: Auth.user.name, passkey: null }); S.dependents.length = 0; save(); render(); },
+  "vneid-self"() { verifyFace({ who: "self", title: "Liên kết VNeID", async onDone(id, r) {
+      Object.assign(S.user, { linked: true, key: id.key, name: id.name, dob: id.dob, verifiedAt: new Date().toISOString(), faceScore: r.score, method: r.method });
+      if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("link_vneid", { p_token: Auth.token, p_key: id.key, p_method: r.method, p_face_record: r.recordId || null })); bindProfile(); }
+        catch (e) { Object.assign(S.user, { linked: false, key: null, dob: null, verifiedAt: null, name: Auth.user.name }); toast(Auth.message(e), "bad"); } }
+      log("vneid", `Liên kết VNeID: ${id.name}, ${ageAt(id.dob, new Date())} tuổi, qua ${r.method}`); save(); } }); },
+  async unlink() { if (!confirm("Huỷ liên kết VNeID? Vé mới sẽ phải kiểm giấy tờ ở cửa; đăng nhập FaceID/VNeID tắt.")) return;
+    if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("unlink_vneid", { p_token: Auth.token })); } catch (e) { return toast(Auth.message(e), "bad"); } }
+    Object.assign(S.user, { linked: false, dob: null, key: null, name: Auth.user.name, passkey: null }); S.dependents.length = 0; bindProfile(); save(); render(); },
+  "login-mode"(el) { LOGIN.mode = el.dataset.v; LOGIN.err = ""; render(); },
+  async "login-vneid"() { LOGIN.busy = true; LOGIN.err = ""; LOGIN.vneid = selVal("li-vneid") || "an"; render(); const r = await Auth.loginVneid(LOGIN.vneid); LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; return render(); } afterLogin("Đăng nhập qua VNeID"); },
+  async "pref-confirm"(el) { const on = el.getAttribute("aria-checked") !== "true"; S.user.confirmEvery = on;
+    if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("set_pref", { p_token: Auth.token, p_confirm_every: on })); } catch (e) { toast(Auth.message(e), "bad"); } }
+    save(); render(); },
+  async "voucher-apply"() { const d = S.draft, code = ($("#voucher").value || "").trim().toUpperCase(); if (!code) { d.voucher = null; save(); return render(); }
+    if (!Remote.v5 || !Auth.token) return toast("Máy chủ chưa bật voucher (migration 005)", "bad");
+    try { const v = await Remote.rpc("voucher_check", { p_token: Auth.token, p_code: code }); d.voucher = v; toast(`Áp dụng ${v.kind === "gift" ? "thẻ quà tặng " + vnd(v.amount) : "giảm " + v.percent + "%"}`); }
+    catch (e) { d.voucher = null; toast(Auth.message(e), "bad"); }
+    save(); render(); },
+  "voucher-clear"() { S.draft.voucher = null; save(); render(); },
+  "points-use"(el) { const d = S.draft, max = Math.min(S.user.points || 0, Math.floor(Math.max(0, (d.gross || 0) - (d.discount || 0)) / 1000)); d.points = el.dataset.v === "max" ? max : 0; save(); render(); },
+  async "gate-noticket"() {
+    verifyFace({ who: "gate-viewer", title: "Khách quên vé – xác thực để tìm vé", async onDone(id) {
+      let list = [];
+      try { list = await Remote.rpc("tickets_by_citizen", { p_token: Auth.token, p_key: id.key }); } catch (e) { return toast(Auth.message(e), "bad"); }
+      list.forEach(t => { if (!S.tickets.some(x => x.code === t.code)) S.tickets.push({ code: t.code, showId: t.show_id, seat: t.seat, viewerName: t.viewer_name, status: t.status, needDoc: t.need_doc, ownerUser: t.owner_user, owner: "other", price: 0, verified: true, channel: "Online" }); });
+      setTimeout(() => {
+        const sh = openSheet(`${sheetHead("Vé của " + esc(id.name), "Hôm nay · theo hồ sơ VNeID đã xác thực khuôn mặt")}${list.length ? `<div class="grid gap-2">${list.map(t => { const s = show(t.show_id), f = s && film(s.filmId); return `<button type="button" data-m="pick" data-code="${t.code}" class="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border-strong p-3 text-left hover:bg-button-hover"><span class="min-w-0 flex-1"><span class="block font-medium">${f ? esc(f.title) : t.show_id} · ghế ${esc(t.seat)}</span><span class="block text-xs text-muted">${s ? hhmm(s.start) + " · " + room(s.roomId).name : ""} · ${t.code}${t.need_doc ? " · cần kiểm tuổi" : ""}</span></span>${ic("arrow-right", "size-4 text-muted")}</button>`; }).join("")}</div>` : banner("warn", "Không có vé hôm nay", "Tài khoản này không có vé hợp lệ cho suất trong 12 giờ tới.")}<button type="button" class="${B.ghost}" data-m="close">Đóng</button>`, { label: "Vé theo hồ sơ" });
+        sh.el.onclick = async e => { const a = e.target.closest("[data-m]"); if (!a) return; if (a.dataset.m === "close") return sh.close();
+          sh.close(); const t = S.tickets.find(x => x.code === a.dataset.code); S.view.gate = {}; await gateTicketFlow(t, { status: "ok", age_seconds: 0 }, "FaceID không cần vé", false); save(); gateRefresh(); };
+      }, 50);
+    } }); },
   "add-dep"() { openAddDep(); },
   "del-dep"(el) { const i = S.dependents.findIndex(x => x.id === el.dataset.id); if (i >= 0) S.dependents.splice(i, 1); save(); render(); },
   "lich-day"(el) { S.view.day = el.dataset.v; save(); render(); },
@@ -380,24 +455,29 @@ const A = {
     const selfAge = RATINGS[f.rating] > 0 && d.assign.some(a => a.viewer.kind !== "other" && S.user.linked);
     let pkFallback = false;
     if (selfAge) { const r = await requirePasskey(`Mua vé phim ${f.rating} bằng tuổi đã xác thực`); if (r === "cancel") return; if (r === "fallback") pkFallback = true; }
+    else if (S.user.confirmEvery && S.user.passkey) { const r = await Passkey.verify(S.user.passkey); log("passkey", `Xác nhận đặt vé đơn ${d.id}: ${r.ok ? "đạt" : r.message}`, r.ok); if (!r.ok) return toast(r.message, "bad"); }
     const chk = checkOrder(sh, d.assign); let pts = 0;
     chk.res.forEach((r, i) => log("age", `Đơn ${d.id} ghế ${d.seats[i]} – ${f.rating} – ${r.name}: ${r.block ? r.reason : r.needDoc || (pkFallback && r.verified) ? "cần kiểm tra giấy tờ" : "đạt"}`, !r.block));
     const tks = d.seats.map((sid, i) => { const r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid) * (1 - aud.disc); pts += Math.round(price * 0.05 / 1000);
       const nd = r.needDoc || (pkFallback && r.verified && RATINGS[f.rating] > 0);
       return { code: rid("V"), orderId: d.id, owner: "user", ownerUser: Auth.user.username, showId: d.showId, seat: sid, viewerName: r.name, aud: aud.label, verified: r.verified, needDoc: nd, reason: pkFallback && r.verified && !r.needDoc ? "Thiết bị không xác nhận chính chủ bằng sinh trắc – kiểm tra giấy tờ tại cửa" : r.reason, price, status: "valid", channel: "Online" }; });
     el.disabled = true;
-    const ok = await call("sell_order", { p_show: d.showId, p_hold: d.id, p_tickets: tks.map(t => ({ code: t.code, order_id: t.orderId, device_id: Remote.DEVICE, seat: t.seat, viewer_name: t.viewerName, aud: t.aud, verified: t.verified, need_doc: t.needDoc, reason: t.reason, price: t.price, channel: t.channel })) });
+    const args = { p_show: d.showId, p_hold: d.id, p_tickets: tks.map(t => ({ code: t.code, order_id: t.orderId, device_id: Remote.DEVICE, seat: t.seat, viewer_name: t.viewerName, aud: t.aud, verified: t.verified, need_doc: t.needDoc, reason: t.reason, price: t.price, channel: t.channel })) };
+    if (Remote.v5) { args.p_voucher = d.voucher ? d.voucher.code : null; args.p_points = d.points || 0; }
+    const ok = await call("sell_order", args);
     if (!ok) { releaseDraft(); save(); return go("lich"); }
     tks.forEach(t => { S.seats[d.showId][t.seat] = { st: "sold" }; const ex = S.tickets.find(x => x.code === t.code); ex ? Object.assign(ex, { ownerUser: t.ownerUser }) : S.tickets.push(t); });
-    S.user.points += pts; log("pay", `Thanh toán đơn ${d.id}: ${vnd(d.total)} (${S.view.payMethod || "momo"})`);
-    S.draft = null; S.view.tk = tks[0].code; save(); go("ve"); toast(`Đặt vé thành công · cộng ${pts} điểm`); },
+    if (ok && typeof ok === "object" && ok.points != null) { pts = ok.points_earned; S.user.points = ok.points; Auth.setPoints(ok.points); } else S.user.points += pts;
+    log("pay", `Thanh toán đơn ${d.id}: ${vnd(ok && ok.paid != null ? ok.paid : d.total)} (${S.view.payMethod || "momo"})`);
+    S.draft = null; S.view.tk = tks[0].code; save(); go("ve"); toast(`Đặt vé thành công · ${ok && ok.discount > 0 ? "giảm " + vnd(ok.discount) + " · " : ""}cộng ${pts} điểm`); },
+  "hist-open"(el) { S.view.tk = el.dataset.code; go("ve"); },
   "ticket-pick"(el) { S.view.tk = el.dataset.code; render(); window.scrollTo({ top: 0, behavior: "smooth" }); },
   async refund(el) { const t = S.tickets.find(x => x.code === el.dataset.code), mins = (new Date(show(t.showId).start) - new Date()) / 60000;
     if (mins < S.params.refundMin) return toast(`Chỉ hoàn trước giờ chiếu ${S.params.refundMin} phút (còn ${Math.max(0, Math.round(mins))} phút)`);
     if (S.user.refunds >= S.params.refundLimit[tier()]) return toast("Đã hết lượt hoàn vé tháng này");
     if (!confirm(`Hoàn vé ${t.code}? Tiền vào thẻ quà tặng.`)) return;
-    const ok = await call("refund_ticket", { p_code: t.code }); if (!ok) { if (ok === false) toast("Vé đã được sử dụng hoặc đã hoàn"); return; }
-    t.status = "refunded"; delete S.seats[t.showId][t.seat]; S.user.refunds++; const g = { code: rid("GC"), amount: t.price }; S.gifts.push(g); log("refund", `Hoàn vé ${t.code} → thẻ quà tặng ${g.code}`); save(); render(); toast("Đã hoàn vào thẻ quà tặng " + g.code); },
+    const ok = await call("refund_ticket", { p_code: t.code }); if (!ok) { if (ok === false || ok === null) toast("Vé đã được sử dụng hoặc đã hoàn"); return; }
+    t.status = "refunded"; delete S.seats[t.showId][t.seat]; S.user.refunds++; const g = ok && ok.gift ? { code: ok.gift, amount: Number(ok.amount) } : { code: rid("GC"), amount: t.price }; if (!ok.gift) S.gifts.push(g); S.view.vouchers = null; log("refund", `Hoàn vé ${t.code} → thẻ quà tặng ${g.code}`); save(); render(); toast("Đã hoàn vào thẻ quà tặng " + g.code); },
   async "pk-create"() { await setupPasskey(); render(); },
   async "pk-test"() { const r = await Passkey.verify(S.user.passkey); toast(r.ok ? `Xác thực ${S.user.passkey.label} thành công – chữ ký hợp lệ` : r.message, r.ok ? "" : "bad"); log("passkey", `Thử passkey: ${r.ok ? "đạt" : r.message}`, r.ok); },
   "pk-del"() { S.user.passkey = null; save(); render(); toast("Đã tắt passkey trên tài khoản"); },
@@ -651,11 +731,15 @@ document.addEventListener("dragleave", e => { const d = e.target.closest("[data-
 document.addEventListener("drop", e => { const d = e.target.closest("[data-drop]"); if (!d) return; e.preventDefault(); d.removeAttribute("data-over"); const f = e.dataTransfer.files[0]; if (f) gateImage(f); });
 document.addEventListener("submit", e => {
   const f = e.target.closest("[data-form]"); if (!f) return; e.preventDefault();
-  const u = $("#li-user").value, p = $("#li-pass").value;
-  if (f.dataset.form === "login") { if (!u || !p) { LOGIN.err = "Nhập tên đăng nhập và mật khẩu."; LOGIN.field = "user"; render(); return; } doLogin(u, p); }
-  else { const n = $("#li-name").value; LOGIN.busy = true; LOGIN.err = ""; render(); $("#li-user").value = u; $("#li-pass").value = p; $("#li-name").value = n;
-    Auth.register(u, p, n).then(r => { LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; LOGIN.field = r.field || ""; render(); $("#li-user").value = u; $("#li-pass").value = p; $("#li-name").value = n; return; }
-      LOGIN = { err: "", field: "", busy: false, show: false }; bindProfile(); save(); location.hash = "#/lich"; render(); toast("Đã tạo tài khoản – chào mừng " + Auth.user.name); }); }
+  const v = id => ($("#" + id) || {}).value || "";
+  const u = v("li-user"), p = v("li-pass");
+  if (f.dataset.form === "login") { if (!u || !p) { LOGIN.err = "Nhập tài khoản và mật khẩu."; LOGIN.field = "user"; render(); $("#li-user").value = u; return; } return doLogin(u, p); }
+  if (f.dataset.form === "login-face") return doLoginFace(u.trim());
+  const vals = { username: u, pass: p, name: v("li-name"), email: v("li-email"), phone: v("li-phone") };
+  const refill = () => { for (const [k, id] of [["username", "li-user"], ["pass", "li-pass"], ["name", "li-name"], ["email", "li-email"], ["phone", "li-phone"]]) { const x = $("#" + id); if (x) x.value = vals[k]; } };
+  LOGIN.busy = true; LOGIN.err = ""; render(); refill();
+  Auth.register(vals).then(r => { LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; LOGIN.field = r.field || ""; render(); refill(); const x = $("#li-" + ({ user: "user", pass: "pass", name: "name", email: "email", phone: "phone" }[r.field] || "user")); x && x.focus(); return; }
+    LOGIN = { err: "", field: "", busy: false, show: false }; bindProfile(); save(); location.hash = "#/lich"; render(); offerVneid(); });
 });
 document.addEventListener("input", e => {
   if (e.target.id === "ns-time") { let v = e.target.value.replace(/[^\d:]/g, ""); if (/^\d{3,4}$/.test(v)) v = v.slice(0, v.length - 2) + ":" + v.slice(-2); S.view.ns.time = v;

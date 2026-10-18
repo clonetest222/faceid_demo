@@ -4,7 +4,7 @@
 "use strict";
 const Remote = (() => {
   const cfg = window.CINEVIN_CONFIG || {};
-  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null;
+  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null;
   const DEVICE = (() => { try { let d = localStorage.getItem("cinevin-device"); if (!d) { d = rid("DV", 8); localStorage.setItem("cinevin-device", d); } return d; } catch (e) { return rid("DV", 8); } })();
   const emit = () => listeners.forEach(f => f(status));
 
@@ -44,7 +44,7 @@ const Remote = (() => {
       // bảng nhật ký xác thực (migration 002) – có thì tải, chưa có thì bỏ qua
       const vf = await sb.from("verifications").select("*").order("id", { ascending: false }).limit(60);
       v2 = !vf.error; S.verifs = v2 ? vf.data : [];
-      await hasV4();
+      await hasV4(); await hasV5();
       subscribe(S, onChange);
       online = true; status = "online"; emit();
       return true;
@@ -75,6 +75,14 @@ const Remote = (() => {
     catch (e) { v4 = null; return false; }   // chưa có hàm (PGRST202) hoặc mất mạng: thử lại lần sau
     return v4;
   }
+  /** Đã chạy migration 005 (hồ sơ khách, FaceID/VNeID login, voucher) chưa */
+  async function hasV5() {
+    if (v5 !== null) return v5;
+    if (!(await hasV4())) return false;
+    try { await rpc("my_vouchers", { p_token: "00000000-0000-0000-0000-000000000000" }); v5 = true; }
+    catch (e) { v5 = /not_logged_in/.test(e.message || "") ? true : (/PGRST202|Could not find/.test((e.message || "") + (e.code || "")) ? false : null); }
+    return !!v5;
+  }
   /** Chỉ tạo client (trang điện thoại ghép nối không cần tải toàn bộ dữ liệu) */
   function ensureClient() {
     if (sb) return true;
@@ -88,8 +96,8 @@ const Remote = (() => {
   async function fetchGroup(code) { const { data } = await sb.from("groups").select("*, group_members(*)").eq("code", code).maybeSingle(); return data ? mapGroup(data, data.group_members || []) : null; }
 
   return {
-    init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, DEVICE,
-    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get hasClient() { return !!sb; },
+    init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, hasV5, DEVICE,
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();

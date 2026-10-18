@@ -165,7 +165,7 @@ function vSoat() {
   const body = `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4"><div><div class="overflow-x-auto scrollbar-clean">${seg(methods, GATE.method, "gate-method")}</div></div><div id="gate-input">${gateInput()}</div><div id="gate-result">${gateResultCard()}</div></div>
       <section><div class="mb-3 flex items-center justify-between"><h2 class="text-lg font-semibold">Vừa quét</h2><span class="text-sm text-muted">Hôm nay ${(S.view.gateLog || []).length} lượt</span></div><div id="gate-recent">${gateRecent()}</div></section></div>`;
-  return staffShell("soat", "Soát vé", "Mọi cửa dùng chung dữ liệu realtime", "", body);
+  return staffShell("soat", "Soát vé", "Mọi cửa dùng chung dữ liệu realtime", Remote.v5 ? `<button type="button" class="${B.outline}" data-act="gate-noticket">${ic("scan-face")}<span class="hidden sm:inline">Khách quên vé</span></button>` : "", body);
 }
 
 /* ---------- Bán tại quầy ---------- */
