@@ -56,17 +56,19 @@ function vLich() {
 }
 
 /* ---------- Chọn ghế ---------- */
-function seatMap(sh, selected, act) {
-  const r = room(sh.roomId), half = Math.ceil(r.cols / 2);
+/** opts.mine: ghế khách này đã mua (Set) · opts.inspect: nhân viên bấm ghế đã bán / đang giữ để tra cứu */
+function seatMap(sh, selected, act, opts = {}) {
+  const r = room(sh.roomId), half = Math.ceil(r.cols / 2), mine = opts.mine || new Set();
   let h = `<div class="mx-auto mb-6 max-w-[520px]"><div class="h-1.5 rounded-full bg-foreground/20"></div><p class="mt-2 text-center text-xs text-muted">Màn hình</p></div><div class="overflow-x-auto pb-1"><div class="mx-auto grid w-max gap-0.5 sm:gap-1.5">`;
   for (let i = 0; i < r.rows; i++) {
     const L = String.fromCharCode(65 + i);
     h += `<div class="flex items-center gap-0.5 sm:gap-1.5"><span class="hidden w-4 text-center text-xs text-muted sm:block">${L}</span>`;
     for (let j = 0; j < r.cols; j++) {
       const sid = seatId(i, j), st = seatState(sh.id, sid), pick = selected.includes(sid), vip = r.vip.includes(i);
-      const sold = st && st.st === "sold", held = st && st.st === "held" && !pick;
-      const cls = pick ? "bg-primary text-primary-foreground border-primary" : sold ? "bg-secondary text-muted/60 border-secondary" : held ? "bg-background text-muted border-dashed border-muted/50" : vip ? "bg-surface border-warning/60 text-foreground hover:bg-warning-bg" : "bg-surface border-border-strong text-foreground hover:bg-button-hover";
-      h += `<button type="button" data-act="${act}" data-seat="${sid}" ${sold || held ? "disabled" : ""} aria-pressed="${pick}" aria-label="Ghế ${sid}${vip ? " VIP" : ""}${sold ? ", đã bán" : held ? ", người khác đang giữ" : ""}" class="grid size-6 cursor-pointer place-items-center rounded-md border text-xs tabular-nums disabled:cursor-not-allowed sm:size-9 ${cls}">${sold ? ic("x", "size-3") : `<span class="hidden sm:inline">${j + 1}</span>`}</button>${j === half - 1 ? '<span class="w-1 sm:w-3"></span>' : ""}`;
+      const own = mine.has(sid), sold = st && st.st === "sold" && !own, held = st && st.st === "held" && !pick;
+      const look = opts.inspect && (sold || held || own);
+      const cls = own ? "bg-success-bg text-success border-success/50" : pick ? "bg-primary text-primary-foreground border-primary" : sold ? "bg-secondary text-muted/60 border-secondary" : held ? "bg-background text-muted border-dashed border-muted/50" : vip ? "bg-surface border-warning/60 text-foreground hover:bg-warning-bg" : "bg-surface border-border-strong text-foreground hover:bg-button-hover";
+      h += `<button type="button" data-act="${look ? "seat-info" : act}" data-seat="${sid}" ${(sold || held || own) && !look ? "disabled" : ""} aria-pressed="${pick}" aria-label="Ghế ${sid}${vip ? " VIP" : ""}${own ? ", ghế của bạn (đã mua)" : sold ? ", đã bán" : held ? ", người khác đang giữ" : ""}${look ? " – bấm để xem" : ""}" class="grid size-6 cursor-pointer place-items-center rounded-md border text-xs tabular-nums disabled:cursor-not-allowed sm:size-9 ${cls} ${look ? "hover:ring-2 hover:ring-focus" : ""}">${own ? ic("check", "size-3") : sold ? ic("x", "size-3") : `<span class="hidden sm:inline">${j + 1}</span>`}</button>${j === half - 1 ? '<span class="w-1 sm:w-3"></span>' : ""}`;
     }
     h += `</div>`;
   }
@@ -75,7 +77,9 @@ function seatMap(sh, selected, act) {
     <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-warning/60 bg-surface"></i>VIP ${vnd(S.prices.vip)}</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-primary"></i>Bạn chọn</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-muted/50 bg-background"></i>Người khác đang giữ</span>
-    <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span></div>`;
+    <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span>
+    ${mine.size ? `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-success/50 bg-success-bg"></i>Ghế của bạn</span>` : ""}</div>
+    ${opts.inspect ? `<p class="mt-3 text-center text-xs text-muted">Bấm ghế đã bán hoặc đang giữ để xem vé, người mua, đã vào phòng chưa.</p>` : ""}`;
 }
 function orderSummary(sh, seats, withNote = true) {
   const f = film(sh.filmId), r = room(sh.roomId), total = seats.reduce((a, s) => a + seatPrice(sh, s), 0);
@@ -92,8 +96,9 @@ function vGhe() {
   const d = S.draft; if (!d || !show(d.showId)) return vLich();
   const sh = show(d.showId), f = film(sh.filmId);
   const head = `<button type="button" data-act="cancel-draft" class="mb-3 inline-flex h-8 cursor-pointer items-center gap-1 text-sm text-muted hover:text-foreground">${ic("chevron-left")}Lịch chiếu</button>
+    ${myTickets().some(t => t.showId === sh.id && t.status !== "refunded") ? `<div class="mb-4">${banner("info", "", `Bạn đã có vé suất này: ghế <b>${esc(myTickets().filter(t => t.showId === sh.id && t.status !== "refunded").map(t => t.seat).join(", "))}</b> (hiện màu xanh). Chọn thêm nếu muốn mua thêm vé.`, `<a href="#/ve" class="${B.outline} shrink-0">Xem vé</a>`)}</div>` : ""}
     <div class="mb-4 flex items-center gap-3">${poster(f, "h-16 w-11 shrink-0")}<div class="min-w-0"><div class="flex items-center gap-2"><h1 class="truncate text-xl font-semibold">${esc(f.title)}</h1>${rate(f.rating)}</div><p class="text-sm text-muted">${showLine(sh)}</p></div></div>`;
-  const map = freeSeats(sh) === 0 && !d.seats.length ? card(emptyState("armchair", "Suất này đã hết ghế", "Tất cả ghế đã bán. Chọn suất khác cùng phim.", `<button class="${B.outline}" data-act="cancel-draft">Chọn suất khác</button>`)) : card(seatMap(sh, d.seats, "toggle-seat"), "!p-3 sm:!p-5");
+  const map = freeSeats(sh) === 0 && !d.seats.length ? card(emptyState("armchair", "Suất này đã hết ghế", "Tất cả ghế đã bán. Chọn suất khác cùng phim.", `<button class="${B.outline}" data-act="cancel-draft">Chọn suất khác</button>`)) : card(seatMap(sh, d.seats, "toggle-seat", { mine: new Set(myTickets().filter(t => t.showId === sh.id && t.status !== "refunded").map(t => t.seat)) }), "!p-3 sm:!p-5");
   const go = `<button type="button" class="${B.primary} mt-1 w-full" data-act="to-checkout" ${d.seats.length ? "" : "disabled"}>Tiếp tục thanh toán</button>`;
   const total = d.seats.reduce((a, s) => a + seatPrice(sh, s), 0);
   const body = head + `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_320px]"><div class="min-w-0">${map}</div>

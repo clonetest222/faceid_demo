@@ -84,10 +84,11 @@ const Remote = (() => {
 
   /** Tìm một vé chưa có trong bộ nhớ (ví dụ vừa bán ở máy khác, realtime chưa kịp tới). */
   async function fetchTicket(code) { const { data } = await sb.from("tickets").select("*").eq("code", code).maybeSingle(); return data ? mapTicket(data) : null; }
+  async function fetchSeatTicket(show, seat) { const { data } = await sb.from("tickets").select("*").eq("show_id", show).eq("seat", seat).neq("status", "refunded").order("created_at", { ascending: false }).limit(1); return data && data[0] ? mapTicket(data[0]) : null; }
   async function fetchGroup(code) { const { data } = await sb.from("groups").select("*, group_members(*)").eq("code", code).maybeSingle(); return data ? mapGroup(data, data.group_members || []) : null; }
 
   return {
-    init, rpc, fetchTicket, fetchGroup, ensureClient, hasV4, DEVICE,
+    init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, DEVICE,
     get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };

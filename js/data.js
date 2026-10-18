@@ -153,5 +153,13 @@ setInterval(() => {
   if (left <= 0) { releaseDraft("Hết thời gian giữ ghế – ghế đã được nhả"); log("hold", "Nhả ghế quá hạn đơn " + d.id); save(); go("lich"); return; }
   $$("[data-hold-timer]").forEach(el => el.textContent = pad(Math.floor(left / 60000)) + ":" + pad(Math.floor(left / 1000) % 60));
 }, 500);
+/* Ghế người khác giữ mà bỏ dở (đóng trình duyệt, không trả tiền): máy chủ hết giữ sau 5 phút.
+   Màn hình đang mở sơ đồ ghế phải tự trả ghế đó về trống – không thì nút vẫn khoá, không ai chọn được. */
+setInterval(() => {
+  const ids = [S.draft && S.draft.showId, S.view.pos && S.view.pos.showId].filter(Boolean), now = Date.now();
+  let changed = false;
+  ids.forEach(id => { const m = S.seats[id] || {}; for (const sid in m) if (m[sid].st === "held" && new Date(m[sid].until).getTime() < now) { delete m[sid]; changed = true; } });
+  if (changed && typeof scheduleRender === "function") scheduleRender();
+}, 1000);
 const endOf = s => s.end ? new Date(s.end) : new Date(new Date(s.start).getTime() + (film(s.filmId).dur + 15) * 60000);
 const dayKey = d => new Date(d).toDateString();

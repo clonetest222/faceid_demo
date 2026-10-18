@@ -34,6 +34,7 @@ Mật khẩu băm bcrypt trên máy chủ; mỗi hàm nhạy cảm nhận token 
 | QR vé chống chụp màn hình | Mã `CV1.<vé>.<khung 15 giây>.<HMAC>` do máy chủ ký; watermark sọc chạy + đồng hồ giây + vòng đếm ngược; vé T13+ mở QR bằng passkey |
 | Soát vé | Camera (quét liên tục), **chọn ảnh QR** / kéo thả, NFC, gõ mã. Phân biệt: hợp lệ, hết hạn, giả/bị sửa, mã tĩnh, đã dùng, chưa đến giờ (mở cửa trước 30 phút), suất đã kết thúc |
 | Kiểm tuổi tại cửa / quầy | Vé chưa xác thực tuổi: **quét QR mặt sau căn cước** (camera hoặc ảnh), chip căn cước NFC (mô phỏng), FaceID qua VNeID, hoặc giấy tờ khác bằng mắt. Tự tính tuổi tại ngày chiếu so với nhãn phim, so tên giấy tờ với tên trên vé (chống mượn vé) |
+| Ghế | Giữ 5 phút, người khác thấy "đang giữ"; bỏ dở thì ghế tự trống lại trên mọi màn hình; trả tiền sau khi hết giữ bị máy chủ từ chối; ghế đã mua hiện "ghế của bạn"; quầy bấm ghế để tra vé, người mua, đã vào chưa |
 | Bằng chứng thanh tra | Tổng quan → Nhật ký kiểm tra độ tuổi → **Xuất CSV** (không có ảnh hay số giấy tờ) |
 | NFC | Web NFC (Chrome Android) đọc/ghi thẻ NDEF; chip CCCD là mô phỏng (cần BAC/PACE – chỉ app gốc làm được) |
 | Lưu kết quả | Mọi lần quét FaceID / VNeID / QR / NFC / passkey ghi vào bảng `verifications`, trang Kiểm thử hiện realtime kèm mã bản ghi |
@@ -51,6 +52,7 @@ Mật khẩu băm bcrypt trên máy chủ; mỗi hàm nhạy cảm nhận token 
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
 - SQL (PGlite): 46 ca – đăng nhập, phân quyền, QR hợp lệ/hết hạn/giả/tĩnh, chủ vé, hoàn vé.
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
+- `node tools/e2e-seats.mjs [URL]`: 13 bước với 2 trình duyệt cùng tranh một suất (đang giữ, đã bán, huỷ, hết hạn giữ, trả tiền muộn, đăng xuất, tra cứu ghế ở quầy).
 - `node tools/e2e-age.mjs [URL]`: 16 bước nghiệp vụ kiểm tuổi tại cửa (QR căn cước 22 tuổi cho vào, 15 tuổi từ chối, mã không phải căn cước, chip, giờ vào cửa, xuất CSV).
 
 ## Kiểm thử tải (Supabase gói miễn phí)

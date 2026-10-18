@@ -185,7 +185,7 @@ function vQuay() {
     const pending = need.filter(sid => !p.docs[sid]);
     summary = `${rows}<div class="mt-3 flex items-center justify-between border-t border-border pt-3"><span class="font-medium">Tổng</span><span class="text-lg font-semibold tabular-nums">${vnd(total)}</span></div>${pending.length ? `<p class="mt-2 text-xs text-muted">${pending.length} vé chưa ghi nhận giấy tờ (không lưu ảnh giấy tờ).</p>` : ""}
       <div class="mt-3 grid grid-cols-2 gap-2"><button type="button" class="${B.outline}" data-act="pos-pay" data-m="Tiền mặt" ${pending.length ? "disabled" : ""}>Tiền mặt</button><button type="button" class="${B.primary}" data-act="pos-pay" data-m="Thẻ/ví" ${pending.length ? "disabled" : ""}>Thẻ / ví</button></div>`; }
-  body += `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start"><div class="min-w-0">${card(seatMap(sh, p.seats, "pos-seat"), "!p-3 sm:!p-5")}</div>${card(`<h2 class="mb-1 text-base font-semibold">Đơn tại quầy</h2><p class="mb-2 text-sm text-muted">${esc(f.title)} ${f.rating} · ${hhmm(sh.start)} · ${room(sh.roomId).name}</p>${summary}`)}</div>`;
+  body += `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start"><div class="min-w-0">${card(seatMap(sh, p.seats, "pos-seat", { inspect: true }), "!p-3 sm:!p-5")}</div>${card(`<h2 class="mb-1 text-base font-semibold">Đơn tại quầy</h2><p class="mb-2 text-sm text-muted">${esc(f.title)} ${f.rating} · ${hhmm(sh.start)} · ${room(sh.roomId).name}</p>${summary}`)}</div>`;
   return staffShell("quay", "Bán tại quầy", "Dùng chung sơ đồ ghế với kênh trực tuyến", "", body);
 }
 

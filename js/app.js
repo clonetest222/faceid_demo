@@ -489,6 +489,28 @@ const A = {
         if (/FaceID/.test(r.method)) mark("c-face", true, note);
         render(); } }); },
   "lab-age-rating"(el) { LAB.ageRating = el.dataset.v; render(); },
+  async "seat-info"(el) {
+    const p = S.view.pos, sh = show(p.showId), sid = el.dataset.seat, st = seatState(sh.id, sid), f = film(sh.filmId);
+    const head = sheetHead(`Ghế ${sid}`, `${esc(f.title)} ${f.rating} · ${dayLabel(sh.start)} ${hhmm(sh.start)} · ${room(sh.roomId).name}`);
+    const sheet = openSheet(`${head}<div class="grid gap-2">${skelRows(3, "h-8")}</div>`, { label: "Tra cứu ghế " + sid });
+    const row = (k, v) => `<div class="flex items-start justify-between gap-4 border-b border-border py-2 text-sm last:border-0"><span class="text-muted">${k}</span><span class="text-right">${v}</span></div>`;
+    let body = "";
+    if (!st) body = banner("ok", "Ghế trống", "Ghế vừa được nhả – có thể bán.");
+    else if (st.st === "held") {
+      const left = Math.max(0, Math.round((new Date(st.until) - Date.now()) / 1000));
+      body = `${row("Trạng thái", tone("Đang giữ – chưa thanh toán", "warn"))}${row("Ai giữ", String(st.by || "").startsWith("POS-") ? (st.by === "POS-" + Remote.DEVICE ? "Quầy này" : "Quầy khác") : "Khách đặt online")}${row("Tự nhả sau", `<span class="tabular-nums">${pad(Math.floor(left / 60))}:${pad(left % 60)}</span>`)}
+        <p class="mt-2 text-pretty text-xs text-muted">Khách chưa trả tiền thì hết hạn giữ ghế tự trống lại cho người khác. Không bán chồng được: máy chủ khoá theo suất + ghế.</p>`;
+    } else {
+      let t = S.tickets.find(x => x.showId === sh.id && x.seat === sid && x.status !== "refunded");
+      if (!t && ON()) { try { t = await Remote.fetchSeatTicket(sh.id, sid); if (t && !S.tickets.some(x => x.code === t.code)) S.tickets.push(t); } catch (e) {} }
+      const grp = S.groups.find(g => g.showId === sh.id && (g.seats || []).includes(sid));
+      if (t) body = `${row("Trạng thái", t.status === "used" ? tone("Đã vào phòng", "neutral") : tone("Đã bán – chưa vào", "ok"))}${row("Mã vé", `<span class="font-mono">${t.code}</span>`)}${row("Người mua", t.ownerUser ? "@" + esc(t.ownerUser) : t.channel === "Quầy" ? "Khách tại quầy" : "—")}${row("Người xem", esc(t.viewerName || "—"))}${row("Đối tượng · giá", `${esc(t.aud || "")} · ${vnd(t.price)}`)}${row("Kênh", esc(t.channel || ""))}${row("Tuổi", t.needDoc ? tone("Phải kiểm tại cửa", "warn") : t.verified ? tone("Đã xác thực VNeID", "ok") : RATINGS[f.rating] ? "—" : "Không giới hạn")}
+        <p class="mt-2 text-pretty text-xs text-muted">Hai khách cùng nhận một ghế: đối chiếu mã vé trên app với mã ở đây. Mỗi ghế chỉ có một vé hợp lệ.</p>`;
+      else if (grp) body = `${row("Trạng thái", tone("Vé đoàn", "ok"))}${row("Mã đoàn", `<span class="font-mono">${grp.code}</span>`)}${row("Phụ trách", esc(grp.teacher))}${row("Sĩ số", `${grp.students.length} học sinh + 1`)}`;
+      else body = `${row("Trạng thái", tone("Đã bán", "neutral"))}<p class="mt-2 text-pretty text-xs text-muted">Ghế bán trước khi mở hệ thống (dữ liệu mẫu của lịch chiếu) – không có vé điện tử.</p>`;
+    }
+    sheet.set(head + `<div>${body}</div>`); sheet.el.onclick = e => { if (e.target.closest('[data-m="close"]')) sheet.close(); };
+  },
   "gate-face"(el) { const grp = S.groups.find(x => x.code === el.dataset.code); verifyFace({ who: "gate-teacher", title: "Đối chiếu người phụ trách", fixedKey: grp.teacherKey || "gv", onDone(id, r) { grp.faceOk = true; grp.faceScore = r.score; call("group_update", { p_code: grp.code, p_counted: null, p_face_ok: true, p_face_score: r.score, p_finish: false }); log("gate", `Đối chiếu khuôn mặt ${grp.teacher}: ${r.score ?? "ảnh gốc mới"}%`); } }); },
   "gate-count"(el) { const grp = S.groups.find(x => x.code === S.view.gate.result.code); grp.counted = Math.max(0, Math.min(grp.students.length, (grp.counted || 0) + Number(el.dataset.d))); if (grp.counted === grp.students.length && Number(el.dataset.d) > 0) toast("Đã đủ số học sinh – người tiếp theo bị chặn"); call("group_update", { p_code: grp.code, p_counted: grp.counted, p_face_ok: null, p_face_score: null, p_finish: false }); save(); gateRefresh(); },
   "gate-card-camera"() { openScanner("Quét thẻ học sinh", code => scanCard(code.trim().toUpperCase())); },
