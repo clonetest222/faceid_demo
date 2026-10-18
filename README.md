@@ -21,6 +21,7 @@ Bản HTML để sửa: `docs/nghiep-vu.html` → xuất lại ảnh bằng `nod
 | `khach` | `khach123` | Khách hàng | Lịch chiếu, chọn ghế, thanh toán, vé của tôi, vé đoàn, tài khoản |
 | `giaovien` | `giaovien123` | Khách hàng | như trên (dùng để thử vé đoàn) |
 | `nhanvien` | `nhanvien123` | Nhân viên · rạp 086 Vinh Centre | Soát vé, bán tại quầy (chỉ suất của rạp mình) |
+| `kythuat` | `kythuat123` | Kỹ thuật · 086 Vinh Centre | Phòng chiếu: kích thước, loại phòng, ghế bảo trì, tạm ngưng phòng (chỉ rạp mình) |
 | `quanlyvinh` | `quanlyvinh123` | Quản lý rạp · 086 Vinh Centre | Tổng quan, suất chiếu, quầy, soát vé, tạo nhân viên **cho rạp mình** |
 | `quanly` | `quanly123` | Quản lý chuỗi | Mọi rạp: bảng toàn chuỗi theo tỉnh → rạp, đổi rạp đang thao tác, tạo tài khoản cho rạp bất kỳ |
 
@@ -36,6 +37,16 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 | Mã suất, mã phòng | `YYYYMMDD-<rạp>-n`, phòng `<rạp>-R1` → mọi suất, vé, QR đều mang mã rạp; máy chủ chưa chạy 006 vẫn suy ra rạp từ mã phòng |
 | Nhân viên gắn rạp | `app_users.cinema_id`; soát vé / quầy / thêm suất ở rạp khác → máy chủ trả `wrong_cinema`; màn soát vé báo "Vé của rạp khác" kèm tên rạp đúng |
 | Quản lý chuỗi | `cinema_id = null`: tổng quan toàn chuỗi (suất, ghế bán, lấp đầy, doanh thu theo tỉnh → rạp), ô đổi rạp đang thao tác trên thanh tiêu đề; `chain_stats(ngày)` tính ở máy chủ |
+
+## Quản trị chuỗi (migration 008)
+| Việc | Cách làm |
+|---|---|
+| Cơ sở | **Cơ sở & phòng**: thêm/sửa/xoá cơ sở (mã 3 số, địa chỉ, hotline, hạng giá, tạm ngưng). Quản lý rạp chỉ sửa rạp mình; xoá chỉ khi chưa bán vé |
+| Phòng chiếu | Thêm/sửa/xoá phòng: số hàng × ghế, loại 2D / 3D / GOLD / IMAX (phụ thu theo loại), hàng VIP, **ghế bảo trì** (sơ đồ hiện khoá, không bán, trừ khỏi sức chứa), **tạm ngưng phòng** (không xếp suất). Không thu nhỏ phòng dưới ghế đã bán. Kỹ thuật và quản lý làm được |
+| Kho phim | **Kho phim** dùng chung: thêm/sửa phim (nhãn tuổi, thời lượng, poster), ngừng chiếu. **Phân phối phim → cơ sở** bằng ma trận; phim chưa phân phối không xếp suất được ở rạp đó (`film_not_at_cinema`) |
+| Suất chiếu | Bấm vào suất trên lưới: ghế bán, vé qua hệ thống, **đổi ngày/giờ/phòng** (đã bán vé thì chỉ đổi giờ – máy chủ kiểm trùng), **huỷ suất** kèm lý do → mọi vé còn hiệu lực hoàn vào thẻ quà tặng của từng khách, ghế nhả, suất ẩn khỏi lịch khách |
+| Báo cáo | **Báo cáo & phân tích**: doanh thu/ghế bán/lấp đầy theo phim, giờ cao điểm, ghế VIP so ghế thường, suất đông nhất, theo kênh, theo cơ sở; lọc toàn chuỗi / rạp, hôm nay / ngày mai |
+| Nhật ký | `audit_logs` ghi **đăng nhập** và **thao tác quản trị** (cơ sở, phòng, phim, suất, tài khoản) ở máy chủ; xem và lọc trong Báo cáo |
 
 ## Nghiệp vụ khách hàng (migration 005)
 | Bước | Cách làm |
@@ -67,13 +78,13 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 
 ## Chạy
 - Online: https://clonetest222.github.io/faceid_demo/
-- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
+- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Ghép nối điện thoại: `?pair=MÃ`.
 
 ## Kiểm thử
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
-- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 71 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp).
+- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 94 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
 - `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 36 bước nghiệp vụ khách hàng, gồm bạn đi cùng có tài khoản và cửa soát đơn nhiều vé (cần 005).
 - `node tools/e2e-more.mjs [URL]`: mua thêm vé cùng suất, một QR cho cả đơn / tách từng vé (10 bước).

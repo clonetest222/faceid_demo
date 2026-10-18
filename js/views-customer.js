@@ -71,10 +71,10 @@ function vLich() {
     // Theo phim: chọn phim → ngày → tỉnh/thành → từng rạp (kể cả nhiều cơ sở cùng thành phố) → suất
     const fid = S.films.some(f => f.id === S.view.lichFilm) ? S.view.lichFilm : S.films[0].id, f = film(fid);
     const filmRow = `<div class="-mx-4 mb-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2">${S.films.map(x => `<button type="button" data-act="lich-film" data-v="${x.id}" aria-pressed="${x.id === fid}" class="flex h-[72px] w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-xl border p-2 text-left ${x.id === fid ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${poster(x, "h-14 w-10 shrink-0")}<span class="min-w-0"><span class="line-clamp-2 text-sm font-medium leading-tight">${esc(x.title)}</span><span class="block text-xs ${x.id === fid ? "text-surface/70" : "text-muted"}">${x.rating} · ${x.dur} phút</span></span></button>`).join("")}</div></div>`;
-    const ss = S.shows.filter(s => s.filmId === fid && dayKey(s.start) === cur);
-    const cities = CITIES.filter(ct => ss.some(s => cinemaOf(s).city === ct));
-    const city = cities.includes(S.view.lichCity) ? S.view.lichCity : (cities.includes(c.city) ? c.city : cities[0]);
-    const cityRow = cities.length ? `<div class="mb-3 flex flex-wrap gap-2">${cities.map(ct => `<button type="button" data-act="lich-city" data-v="${esc(ct)}" aria-pressed="${ct === city}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${ct === city ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(ct)} <span class="${ct === city ? "text-surface/70" : "text-muted"}">${cinemasIn(ct).filter(x => ss.some(s => cinemaOf(s).id === x.id)).length}</span></button>`).join("")}</div>` : "";
+    const ss = S.shows.filter(s => s.status !== "cancelled" && s.filmId === fid && dayKey(s.start) === cur);
+    const cityList = cities().filter(ct => ss.some(s => cinemaOf(s).city === ct));
+    const city = cityList.includes(S.view.lichCity) ? S.view.lichCity : (cityList.includes(c.city) ? c.city : cityList[0]);
+    const cityRow = cityList.length ? `<div class="mb-3 flex flex-wrap gap-2">${cityList.map(ct => `<button type="button" data-act="lich-city" data-v="${esc(ct)}" aria-pressed="${ct === city}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${ct === city ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(ct)} <span class="${ct === city ? "text-surface/70" : "text-muted"}">${cinemasIn(ct).filter(x => ss.some(s => cinemaOf(s).id === x.id)).length}</span></button>`).join("")}</div>` : "";
     let list;
     if (loading) list = `<div class="grid gap-3">${skelRows(3, "h-28")}</div>`;
     else if (!ss.length) list = card(emptyState("calendar-x", "Không rạp nào chiếu phim này trong ngày", "Chọn ngày khác hoặc phim khác."));
@@ -87,9 +87,9 @@ function vLich() {
 }
 /** Bảng chọn rạp: Tỉnh/Thành → các cơ sở (Nghệ An có 2 cơ sở cùng TP Vinh). */
 function cinemaSheetHtml(city) {
-  const c = curCinema(), ct = CITIES.includes(city) ? city : c.city;
+  const c = curCinema(), ct = cities().includes(city) ? city : c.city;
   return `${sheetHead("Chọn rạp", "Tỉnh/Thành → Rạp. Lịch, giá vé và vé của bạn hiện theo rạp đã chọn.")}
-    <div class="mb-3 flex flex-wrap gap-2">${CITIES.map(x => `<button type="button" data-act="cinema-city" data-v="${esc(x)}" aria-pressed="${x === ct}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${x === ct ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(x)} <span class="${x === ct ? "text-surface/70" : "text-muted"}">${cinemasIn(x).length}</span></button>`).join("")}</div>
+    <div class="mb-3 flex flex-wrap gap-2">${cities().map(x => `<button type="button" data-act="cinema-city" data-v="${esc(x)}" aria-pressed="${x === ct}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${x === ct ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(x)} <span class="${x === ct ? "text-surface/70" : "text-muted"}">${cinemasIn(x).length}</span></button>`).join("")}</div>
     <div class="grid gap-2">${cinemasIn(ct).map(x => `<button type="button" data-act="cinema-set" data-v="${x.id}" aria-pressed="${x.id === c.id}" class="flex w-full cursor-pointer items-start gap-3 rounded-xl border p-3 text-left ${x.id === c.id ? "border-foreground" : "border-border hover:bg-surface-hover"}"><span class="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary font-mono text-xs">${x.id}</span><span class="min-w-0 flex-1"><span class="block font-medium">${esc(x.name)}</span><span class="block text-xs text-muted">${esc(x.district)} · ${esc(x.address)}</span><span class="mt-1 block text-xs text-muted">${roomsOf(x.id).length} phòng · ${roomsOf(x.id).map(r => r.kind).filter((v, i, a) => a.indexOf(v) === i).join(", ")} · giá từ ${vnd(PRICE_TIERS[x.tier].weekday.u22)}</span></span>${x.id === c.id ? ic("check", "size-4 shrink-0 mt-1") : ""}</button>`).join("")}</div>`;
 }
 
@@ -103,10 +103,10 @@ function seatMap(sh, selected, act, opts = {}) {
     h += `<div class="flex items-center gap-0.5 sm:gap-1.5"><span class="hidden w-4 text-center text-xs text-muted sm:block">${L}</span>`;
     for (let j = 0; j < r.cols; j++) {
       const sid = seatId(i, j), st = seatState(sh.id, sid), pick = selected.includes(sid), vip = r.vip.includes(i);
-      const own = mine.has(sid), sold = st && st.st === "sold" && !own, held = st && st.st === "held" && !pick;
-      const look = opts.inspect && (sold || held || own);
-      const cls = own ? "bg-success-bg text-success border-success/50" : pick ? "bg-primary text-primary-foreground border-primary" : sold ? "bg-secondary text-muted/60 border-secondary" : held ? "bg-background text-muted border-dashed border-muted/50" : vip ? "bg-surface border-warning/60 text-foreground hover:bg-warning-bg" : "bg-surface border-border-strong text-foreground hover:bg-button-hover";
-      h += `<button type="button" data-act="${look ? "seat-info" : act}" data-seat="${sid}" ${(sold || held || own) && !look ? "disabled" : ""} aria-pressed="${pick}" aria-label="Ghế ${sid}${vip ? " VIP" : ""}${own ? ", ghế của bạn (đã mua)" : sold ? ", đã bán" : held ? ", người khác đang giữ" : ""}${look ? " – bấm để xem" : ""}" class="grid size-6 cursor-pointer place-items-center rounded-md border text-xs tabular-nums disabled:cursor-not-allowed sm:size-9 ${cls} ${look ? "hover:ring-2 hover:ring-focus" : ""}">${own ? ic("check", "size-3") : sold ? ic("x", "size-3") : `<span class="hidden sm:inline">${j + 1}</span>`}</button>${j === half - 1 ? '<span class="w-1 sm:w-3"></span>' : ""}`;
+      const own = mine.has(sid), sold = st && st.st === "sold" && !own, held = st && st.st === "held" && !pick, blk = isBlocked(r, sid);
+      const look = opts.inspect && !blk && (sold || held || own);
+      const cls = blk ? "bg-background text-muted/40 border-border border-dashed" : own ? "bg-success-bg text-success border-success/50" : pick ? "bg-primary text-primary-foreground border-primary" : sold ? "bg-secondary text-muted/60 border-secondary" : held ? "bg-background text-muted border-dashed border-muted/50" : vip ? "bg-surface border-warning/60 text-foreground hover:bg-warning-bg" : "bg-surface border-border-strong text-foreground hover:bg-button-hover";
+      h += `<button type="button" data-act="${look ? "seat-info" : act}" data-seat="${sid}" ${blk || ((sold || held || own) && !look) ? "disabled" : ""} aria-pressed="${pick}" aria-label="Ghế ${sid}${vip ? " VIP" : ""}${blk ? ", ghế bảo trì – không bán" : own ? ", ghế của bạn (đã mua)" : sold ? ", đã bán" : held ? ", người khác đang giữ" : ""}${look ? " – bấm để xem" : ""}" class="grid size-6 cursor-pointer place-items-center rounded-md border text-xs tabular-nums disabled:cursor-not-allowed sm:size-9 ${cls} ${look ? "hover:ring-2 hover:ring-focus" : ""}">${blk ? ic("wrench", "size-3") : own ? ic("check", "size-3") : sold ? ic("x", "size-3") : `<span class="hidden sm:inline">${j + 1}</span>`}</button>${j === half - 1 ? '<span class="w-1 sm:w-3"></span>' : ""}`;
     }
     h += `</div>`;
   }
@@ -116,6 +116,7 @@ function seatMap(sh, selected, act, opts = {}) {
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-primary"></i>Bạn chọn</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-muted/50 bg-background"></i>Người khác đang giữ</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span>
+    ${(r.blocked || []).length ? `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-border bg-background"></i>Bảo trì (${r.blocked.length})</span>` : ""}
     ${mine.size ? `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-success/50 bg-success-bg"></i>Ghế của bạn</span>` : ""}</div>
     ${opts.inspect ? `<p class="mt-3 text-center text-xs text-muted">Bấm ghế đã bán hoặc đang giữ để xem vé, người mua, đã vào phòng chưa.</p>` : ""}`;
 }
@@ -297,7 +298,7 @@ function vDoan() {
   else {
     const steps = ["Suất", "Danh sách", "Kiểm tra tuổi", "Phụ huynh", "Cam kết"], sh = g.showId && show(g.showId), f = sh && film(sh.filmId);
     let inner = "";
-    if (g.step === 0) inner = `<div class="grid gap-3 lg:grid-cols-2">${S.films.map(ff => { const ss = S.shows.filter(s => s.filmId === ff.id && new Date(s.start) > new Date()).sort((a, b) => new Date(a.start) - new Date(b.start)); if (!ss.length) return "";
+    if (g.step === 0) inner = `<div class="grid gap-3 lg:grid-cols-2">${S.films.map(ff => { const ss = S.shows.filter(s => s.status !== "cancelled" && s.filmId === ff.id && new Date(s.start) > new Date()).sort((a, b) => new Date(a.start) - new Date(b.start)); if (!ss.length) return "";
       return `<article class="flex gap-4 rounded-xl border border-border p-4">${poster(ff, "h-24 w-16 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-start gap-2"><h3 class="min-w-0 flex-1 truncate font-semibold">${esc(ff.title)}</h3>${rate(ff.rating)}</div><div class="mt-3 flex flex-wrap gap-2">${ss.map(s => `<button type="button" data-act="g-show" data-show="${s.id}" class="grid h-12 cursor-pointer content-center rounded-xl border border-border-strong bg-surface px-3 text-left hover:bg-button-hover"><span class="text-sm font-semibold tabular-nums">${ddmm(s.start)} ${hhmm(s.start)}</span><span class="text-xs text-muted">${esc(cinemaOf(s).name.replace("CineVin ", ""))} · ${freeSeats(s)} ghế trống</span></button>`).join("")}</div></div></article>`; }).join("")}</div>`;
     else if (g.step === 1) inner = `<p class="text-sm">Tải danh sách học sinh (xuất từ phần mềm quản lý của trường). Mỗi dòng: <span class="font-mono">Họ tên, dd/mm/yyyy, Lớp</span>.</p>
       <div class="mt-3 flex flex-wrap gap-2"><button type="button" class="${B.outline}" data-act="g-sample" data-k="4A">Mẫu lớp 4A (50 em, 9–10 tuổi)</button><button type="button" class="${B.outline}" data-act="g-sample" data-k="8A">Mẫu lớp 8A (có 1 em 12 tuổi)</button></div>

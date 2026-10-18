@@ -61,6 +61,37 @@ try {
     check("Quản lý rạp 086: không chọn rạp khi tạo nhân viên (cố định Vinh Centre), không có ô đổi rạp", await ev("staffCinemaId()==='086' && !isChainManager()") && await ev("!document.querySelector('[data-select=\"work-cinema\"]')") && await ev("!!document.querySelector('#nu-cinema-fixed')"));
     await shot("chain_08_quyen_rap"); }
   else console.log("SKIP  Quản lý rạp quanlyvinh – máy chủ chưa chạy migration 006: " + ql2);
+  // ---- quản trị chuỗi (008): cơ sở & phòng, kho phim, báo cáo, điều chỉnh suất
+  await login("quanly", "quanly123"); await ev("location.hash='#/coso'"); await sleep(1200);
+  check("Cơ sở & phòng: 7 cơ sở theo tỉnh, 16 phòng, nút Thêm cơ sở (quản lý chuỗi)", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 7 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") === 16 && await ev("!!document.querySelector('[data-act=\"cinema-new\"]')"));
+  await shot("chain_09_coso");
+  await ev("document.querySelector('[data-act=\"cinema-edit\"]').click()"); await sleep(500);
+  check("Sửa cơ sở: hộp thoại có mã (khoá), tên, tỉnh, hạng giá, nút Xoá", await ev("!!document.querySelector('#cs-name') && document.querySelector('#cs-id').disabled && !!document.querySelector('[data-sheet] [data-act=\"del\"]')"));
+  await shot("chain_10_coso_sua"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  await ev("[...document.querySelectorAll('[data-act=\"room-edit\"]')].find(b=>b.dataset.id==='054-R3').click()"); await sleep(500);
+  check("Sửa phòng GOLD: loại phòng, hàng VIP A,B,C,D,E,F, ô ghế bảo trì", await ev("document.querySelector('#rm-kind').value==='GOLD' && document.querySelector('#rm-vip').value==='A,B,C,D,E,F' && !!document.querySelector('#rm-blocked')"));
+  await shot("chain_11_phong_sua"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  await ev("location.hash='#/phim'"); await sleep(1000);
+  check("Kho phim: ma trận 5 phim × 7 cơ sở, nút Thêm phim, nút Sửa từng phim", await ev("document.querySelectorAll('[data-act=\"film-dist\"]').length") === 35 && await ev("!!document.querySelector('[data-act=\"film-new\"]')") && await ev("document.querySelectorAll('[data-act=\"film-edit\"]').length") === 5);
+  await shot("chain_12_phim");
+  await ev("document.querySelector('[data-act=\"film-new\"]').click()"); await sleep(500);
+  check("Thêm phim: form nhãn tuổi + phân phối 7 cơ sở (mặc định chọn hết)", await ev("[...document.querySelectorAll('[data-sheet] input[id^=fm-c-]')].length===7 && [...document.querySelectorAll('[data-sheet] input[id^=fm-c-]')].every(i=>i.checked)"));
+  await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  await ev("location.hash='#/baocao'"); await sleep(1200);
+  check("Báo cáo: theo phim, giờ cao điểm, VIP, theo cơ sở, nhật ký có bộ lọc", /Doanh thu theo phim/.test(await txt()) && /Giờ cao điểm/.test(await txt()) && /Theo cơ sở/.test(await txt()) && await ev("!!document.querySelector('#log-type')") && await ev("document.querySelectorAll('[data-act=\"bc-day\"]').length") === 3);
+  await shot("chain_13_bao_cao");
+  await ev("[...document.querySelectorAll('[data-act=\"bc-day\"]')].find(b=>b.dataset.v==='tomorrow').click()"); await sleep(600);
+  check("Lọc Ngày mai → KPI đổi theo phạm vi", await ev("S.view.bcDay==='tomorrow'"));
+  await ev("location.hash='#/suat'"); await sleep(1000);
+  await ev("A['suat-day']({dataset:{v:dayKey(new Date(Date.now()+864e5))}})"); await sleep(600);
+  await ev("(()=>{const b=[...document.querySelectorAll('[data-act=\"show-info\"]')].find(b=>new Date(show(b.dataset.show).start)>Date.now());b.click();return 1})()"); await sleep(600);
+  check("Bấm suất → hộp thoại: ghế bán, đổi ngày/giờ/phòng, huỷ suất kèm lý do", await ev("!!document.querySelector('#sh-time') && !!document.querySelector('#sh-room') && !!document.querySelector('#sh-reason') && !!document.querySelector('[data-sheet] [data-act=\"cancel\"]')"));
+  await shot("chain_14_suat_sua"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  const ktOk = await ev(`Auth.login('kythuat','kythuat123').then(r=>r.ok?true:r.message)`);
+  if (ktOk === true) { await sleep(800); await ev("location.hash='#/tongquan'"); await sleep(400); await ev("location.hash='#/coso'"); await sleep(1200);
+    check("Kỹ thuật rạp 086: chỉ thấy cơ sở mình, sửa được phòng, không sửa cơ sở / không thêm cơ sở", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 0 && await ev("document.querySelectorAll('[data-act=\"room-edit\"]').length") === 2 && await ev("!document.querySelector('[data-act=\"cinema-new\"]')"));
+    await shot("chain_15_kythuat"); }
+  else console.log("SKIP  Kỹ thuật kythuat – máy chủ chưa chạy migration 008: " + ktOk);
 } catch (e) { console.log("ABORT:", e.message); }
 console.log(`${results.filter(r => r.startsWith("PASS")).length} PASS, ${results.filter(r => r.startsWith("FAIL")).length} FAIL`); if (errs.length) console.log("errors:\n" + errs.join("\n"));
 edge.kill(); process.exit(0);

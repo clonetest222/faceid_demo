@@ -4,12 +4,20 @@
 "use strict";
 const Remote = (() => {
   const cfg = window.CINEVIN_CONFIG || {};
-  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null;
+  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null, v8 = null, catTimer = null;
+  /** Danh mục rạp/phòng (006) và phim/phân phối (008) từ máy chủ → thay dữ liệu mẫu trong app */
+  async function reloadCatalog() {
+    if (!sb || !v6) return;
+    const [c, r] = await Promise.all([sb.from("cinemas").select("*").order("id"), sb.from("rooms").select("*").order("id")]);
+    const cat = { cinemas: c.error ? null : c.data, rooms: r.error ? null : r.data };
+    if (v8) { const [f, cf] = await Promise.all([sb.from("films").select("*").order("created_at"), sb.from("cinema_films").select("*")]); cat.films = f.error ? null : f.data; cat.cinemaFilms = cf.error ? null : cf.data; }
+    applyCatalog(cat);
+  }
   const DEVICE = (() => { try { let d = localStorage.getItem("cinevin-device"); if (!d) { d = rid("DV", 8); localStorage.setItem("cinevin-device", d); } return d; } catch (e) { return rid("DV", 8); } })();
   const emit = () => listeners.forEach(f => f(status));
 
   // mã rạp: cột cinema_id (006) hoặc suy từ mã phòng "<rạp>-<phòng>"; dữ liệu cũ phòng "R1" → rạp đầu tiên
-  const mapShow = r => ({ id: r.id, filmId: r.film_id, roomId: r.room_id, cinemaId: r.cinema_id || (String(r.room_id).includes("-") ? String(r.room_id).split("-")[0] : "086"), format: r.format || null, start: r.start_at, end: r.end_at });
+  const mapShow = r => ({ id: r.id, filmId: r.film_id, roomId: r.room_id, cinemaId: r.cinema_id || (String(r.room_id).includes("-") ? String(r.room_id).split("-")[0] : "086"), format: r.format || null, start: r.start_at, end: r.end_at, status: r.status || "on", cancelReason: r.cancel_reason || null });
   const mapTicket = r => ({ code: r.code, orderId: r.order_id, ownerUser: r.owner_user || null, viewerUser: r.viewer_user || null, device: r.device_id, owner: r.device_id === DEVICE && r.channel === "Online" ? "user" : "other", showId: r.show_id, seat: r.seat, viewerName: r.viewer_name, aud: r.aud, verified: r.verified, needDoc: r.need_doc, reason: r.reason, price: Number(r.price), status: r.status, channel: r.channel });
   const mapMember = m => ({ id: m.card, card: m.card, idx: m.idx, name: m.name, dob: m.dob, cls: m.cls, entered: m.entered, spot: m.spot });
   const mapGroup = (g, members) => ({ id: g.code, code: g.code, showId: g.show_id, seats: g.seats, teacher: g.teacher, teacherKey: g.teacher_key, org: g.org, total: Number(g.total), status: g.status, counted: g.counted, enteredCount: g.entered_count, faceOk: g.face_ok, faceScore: g.face_score, students: members.map(mapMember).sort((a, b) => a.idx - b.idx) });
@@ -26,7 +34,10 @@ const Remote = (() => {
       else sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
       await rpc("ensure_schedule", { p_shows: schedule.rows, p_sold: schedule.sold });
       // migration 006: danh mục rạp/phòng của chuỗi (không có hàm → máy chủ chưa chạy 006, chạy theo mã phòng)
-      if (v6 === null && window.CINEMAS) { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
+      if (v6 === null && typeof CINEMAS !== "undefined") { try { await rpc("ensure_cinemas", { p_cinemas: CINEMAS, p_rooms: ROOMS.map(r => ({ id: r.id, cinema_id: r.cinemaId, name: r.name, kind: r.kind, rows: r.rows, cols: r.cols, vip: r.vip })) }); v6 = true; } catch (e) { v6 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
+      // migration 008: kho phim dùng chung + phân phối
+      if (v6 && v8 === null && typeof FILMS !== "undefined") { try { await rpc("ensure_films", { p_films: FILMS.map(f => ({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre, img: f.img })) }); v8 = true; } catch (e) { v8 = /PGRST202|not find|does not exist/i.test(e.message || "") ? false : null; } }
+      await reloadCatalog();
       const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 1);
       // PostgREST trả tối đa 1000 dòng/truy vấn: chuỗi 7 rạp có hàng nghìn khoá ghế → tải theo trang
       const all = async build => { const out = []; for (let from = 0; ; from += 1000) { const { data, error } = await build().range(from, from + 999); if (error) throw error; out.push(...data); if (data.length < 1000) return out; } };
@@ -63,6 +74,8 @@ const Remote = (() => {
     const on = (table, fn) => ch.on("postgres_changes", { event: "*", schema: "public", table }, p => { try { fn(p); onChange(table); } catch (e) { console.warn(e); } });
     const ch = sb.channel("cinevin-db");
     on("shows", p => { if (p.eventType === "DELETE") { S.shows = S.shows.filter(s => s.id !== p.old.id); return; } const s = mapShow(p.new), i = S.shows.findIndex(x => x.id === s.id); i >= 0 ? S.shows[i] = s : S.shows.push(s); S.seats[s.id] ||= {}; });
+    // chỉ đăng ký bảng đã có trên máy chủ: kênh realtime có bảng không tồn tại sẽ lỗi cả kênh (mất cả seat_locks)
+    for (const t of [...(v6 ? ["cinemas"] : []), ...(v8 ? ["rooms", "films", "cinema_films"] : [])]) on(t, () => { clearTimeout(catTimer); catTimer = setTimeout(() => reloadCatalog().then(() => onChange(t)).catch(() => {}), 400); });
     on("seat_locks", p => { if (p.eventType === "DELETE") { if (S.seats[p.old.show_id]) delete S.seats[p.old.show_id][p.old.seat]; return; } const l = p.new; (S.seats[l.show_id] ||= {})[l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp }; });
     on("tickets", p => { if (p.eventType === "DELETE") { S.tickets = S.tickets.filter(t => t.code !== p.old.code); return; } const t = mapTicket(p.new), i = S.tickets.findIndex(x => x.code === t.code); i >= 0 ? S.tickets[i] = { ...t, ownerUser: t.ownerUser || S.tickets[i].ownerUser, viewerUser: t.viewerUser || S.tickets[i].viewerUser } : S.tickets.push(t); });
     on("groups", p => { if (p.eventType === "DELETE") { S.groups = S.groups.filter(g => g.code !== p.old.code); return; } const old = S.groups.find(x => x.code === p.new.code); const g = mapGroup(p.new, []); g.students = old ? old.students : []; old ? Object.assign(old, g) : S.groups.push(g); });
@@ -103,7 +116,7 @@ const Remote = (() => {
 
   return {
     init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, hasV5, DEVICE,
-    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get hasClient() { return !!sb; },
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, reloadCatalog, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();

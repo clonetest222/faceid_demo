@@ -6,8 +6,9 @@ const ROUTES = {
   ve: { roles: ["khach"], view: () => vVe() }, doan: { roles: ["khach"], view: () => vDoan() }, taikhoan: { roles: ["khach"], view: () => vTaiKhoan() },
   tongquan: { roles: ["quanly"], view: () => vTongQuan() }, suat: { roles: ["quanly"], view: () => vSuat() }, soat: { roles: ["nhanvien", "quanly"], view: () => vSoat() },
   quay: { roles: ["nhanvien", "quanly"], view: () => vQuay() }, kiemthu: { roles: ["quanly"], view: () => vKiemThu() }, quyen: { roles: ["quanly"], view: () => vQuyen() },
+  coso: { roles: ["quanly", "kythuat"], view: () => vCoSo() }, phim: { roles: ["quanly"], view: () => vPhim() }, baocao: { roles: ["quanly"], view: () => vBaoCao() },
 };
-const HOME = { khach: "lich", nhanvien: "soat", quanly: "tongquan" };
+const HOME = { khach: "lich", nhanvien: "soat", kythuat: "coso", quanly: "tongquan" };
 let CUR_ROUTE = "", PHONE_MODE = false;
 const routeName = () => (location.hash.match(/^#\/([a-z]+)/) || [])[1] || "";
 function go(r) { if (routeName() === r) { render(); window.scrollTo({ top: 0 }); } else location.hash = "#/" + r; }
@@ -458,6 +459,23 @@ const A = {
       d.until = until; d.seats.push(sid); (S.seats[d.showId] ||= {})[sid] = { st: "held", by: d.id, until };
     }
     d.assign = null; save(); render(); },
+  /* quản trị chuỗi: cơ sở, phòng, phim, suất */
+  "cinema-new"() { cinemaSheet(null); },
+  "cinema-edit"(el) { cinemaSheet(cinema(el.dataset.id)); },
+  "room-new"(el) { roomSheet(el.dataset.cinema, null); },
+  "room-edit"(el) { const r = room(el.dataset.id); roomSheet(r.cinemaId, r); },
+  "film-new"() { filmSheet(null); },
+  "film-edit"(el) { filmSheet(film(el.dataset.id)); },
+  async "film-dist"(el) {
+    const fid = el.dataset.film, cid = el.dataset.cinema, on = el.getAttribute("aria-pressed") !== "true";
+    el.disabled = true;
+    if (Remote.v8 && Auth.token) { try { await Remote.rpc("set_film_cinema_s", { p_token: Auth.token, p_film: fid, p_cinema: cid, p_active: on }); await Remote.reloadCatalog(); } catch (e) { el.disabled = false; return toast(Auth.message(e), "bad"); } }
+    else if (ON()) { el.disabled = false; return toast("Máy chủ chưa chạy migration 008", "bad"); }
+    else { on ? DIST.delete(cid + "|" + fid) : DIST.add(cid + "|" + fid); }
+    log("admin", `${on ? "Phân phối" : "Bỏ"} phim ${film(fid).title} ${on ? "cho" : "khỏi"} ${cinema(cid).name}`); save(); render(); toast(`${film(fid).title}: ${on ? "đang chiếu tại" : "không chiếu tại"} ${cinema(cid).name}`); },
+  "show-info"(el) { showSheet(show(el.dataset.show)); },
+  "bc-scope"(el) { S.view.bcScope = el.dataset.v; save(); render(); },
+  "bc-day"(el) { S.view.bcDay = el.dataset.v; save(); render(); },
   /* chuỗi rạp */
   "cinema-pick"() { const sheet = openSheet(cinemaSheetHtml(curCinema().city), { label: "Chọn rạp" }); CINEMA_SHEET = sheet;
     sheet.el.onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "cinema-city") sheet.set(cinemaSheetHtml(b.dataset.v)); else if (b.dataset.act === "cinema-set") A["cinema-set"](b); else if (e.target.closest('[data-m="close"]')) sheet.close(); }; },
@@ -650,7 +668,7 @@ const A = {
     let clash = S.shows.find(s => s.roomId === f.room && new Date(s.start) < e0 && endOf(s) > s0);
     if (!clash && ON()) { const cid = await call("add_show", { p_id: id, p_film: f.film, p_room: f.room, p_start: s0.toISOString(), p_end: e0.toISOString() }, null); if (cid === null && !show(id) && Remote.v4 === false) return; if (cid) clash = show(cid) || { start: s0, filmId: f.film, roomId: f.room }; }
     if (clash) { toast(`Trùng suất ${hhmm(clash.start)} (${film(clash.filmId).title})`, "bad"); return render(); }
-    if (!show(id)) S.shows.push({ id, filmId: f.film, roomId: f.room, cinemaId: room(f.room).cinemaId, format: formatOf({ roomId: f.room }), start: s0.toISOString(), end: e0.toISOString() }); S.seats[id] ||= {};
+    if (!show(id)) S.shows.push({ id, filmId: f.film, roomId: f.room, cinemaId: room(f.room).cinemaId, format: formatOf({ roomId: f.room }), start: s0.toISOString(), end: e0.toISOString(), status: "on" }); S.seats[id] ||= {};
     log("admin", `Thêm suất ${film(f.film).title} ${ddmm(s0)} ${hhmm(s0)}`); f.time = ""; delete f._s0; delete f._e0; save(); render(); toast("Đã thêm suất chiếu"); },
   /* tài khoản & quyền */
   async "create-user"() {
@@ -739,6 +757,120 @@ const A = {
 };
 /* ô chọn tuỳ biến đổi giá trị */
 let CINEMA_SHEET = null;
+/* ---------- hộp thoại quản trị: form cơ sở / phòng / phim / suất ---------- */
+const SELECT = "h-11 md:h-10 w-full rounded-xl border border-border-strong bg-surface px-3 text-base md:text-sm outline-hidden focus:border-focus focus:ring-2 focus:ring-focus";
+const sel = (id, opts, v) => `<select id="${id}" class="${SELECT}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${String(k) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+const chk = (id, label, on) => `<label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" id="${id}" ${on ? "checked" : ""} class="size-4 accent-[var(--primary)]">${label}</label>`;
+/** Mở hộp thoại có các nút data-act xử lý riêng (bộ xử lý chung bỏ qua phần tử trong #modal-root) */
+function adminSheet(html, handlers, opts = {}) {
+  const sh = openSheet(html, { label: opts.label || "Quản trị", wide: opts.wide });
+  sh.el.addEventListener("click", async e => { const b = e.target.closest("[data-act]"); if (b && handlers[b.dataset.act]) { e.preventDefault(); b.disabled = true; try { await handlers[b.dataset.act](b, sh); } finally { if (document.body.contains(b)) b.disabled = false; } } else if (e.target.closest('[data-m="close"]')) sh.close(); });
+  return sh;
+}
+const v = id => ($("#" + id)?.value ?? "").trim();
+/** Gọi hàm máy chủ 008 nếu có; không có máy chủ → chỉ sửa cục bộ (demo ngoại tuyến) */
+async function adminCall(name, args, local) {
+  if (Remote.v8 && Auth.token) { await Remote.rpc(name, { p_token: Auth.token, ...args }); await Remote.reloadCatalog(); }
+  else if (ON()) throw new Error("need_008");
+  else local();
+}
+function cinemaSheet(c) {
+  const isNew = !c; c = c || { id: "", name: "CineVin ", city: "", district: "", address: "", hotline: "1900 6017", tier: "B", active: true };
+  const html = `${sheetHead(isNew ? "Thêm cơ sở" : `Sửa cơ sở ${c.id}`, isNew ? "Mã 3 chữ số đi vào mã suất, mã phòng và QR vé – đặt một lần, không đổi." : esc(c.name))}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Mã cơ sở", input("cs-id", c.id, `placeholder="088" inputmode="numeric" maxlength="3" ${isNew ? "" : "disabled"}`))}${field("Tên", input("cs-name", c.name, 'placeholder="CineVin Huế"'))}${field("Tỉnh/Thành", input("cs-city", c.city, 'placeholder="Thừa Thiên Huế" list="cs-cities"'))}<datalist id="cs-cities">${cities().map(x => `<option value="${esc(x)}">`).join("")}</datalist>${field("Quận/Huyện", input("cs-district", c.district, 'placeholder="TP Huế"'))}${field("Địa chỉ", input("cs-address", c.address, 'placeholder="Tầng 4, Vincom Huế, 50A Hùng Vương"'))}${field("Hotline", input("cs-hotline", c.hotline, 'placeholder="1900 6017"'))}${field("Hạng giá", sel("cs-tier", [["A", "A – Hà Nội, TP.HCM (giá cao)"], ["B", "B – tỉnh"]], c.tier), "Bảng giá vé theo hạng; phụ thu VIP/3D/GOLD/IMAX đi kèm.")}<div class="flex items-end pb-2">${chk("cs-active", "Đang hoạt động (bỏ chọn = tạm ngưng, khách không thấy)", c.active !== false)}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button>${!isNew && isChainManager() ? `<button type="button" class="${B.ghost} ml-auto text-err" data-act="del">${ic("trash-2")}Xoá cơ sở</button>` : ""}</div>`;
+  adminSheet(html, {
+    async save(b, sh) {
+      const p = { id: isNew ? v("cs-id") : c.id, name: v("cs-name"), city: v("cs-city"), district: v("cs-district"), address: v("cs-address"), hotline: v("cs-hotline"), tier: v("cs-tier") || "B", active: $("#cs-active").checked };
+      if (!/^[0-9]{3}$/.test(p.id)) return toast(Auth.message({ message: "bad_cinema_id" }), "bad");
+      if (p.name.length < 3 || p.city.length < 2) return toast(Auth.message({ message: "bad_input" }), "bad");
+      if (isNew && CINEMAS.some(x => x.id === p.id)) return toast("Mã cơ sở đã tồn tại", "bad");
+      try { await adminCall("save_cinema_s", { p }, () => { const i = CINEMAS.findIndex(x => x.id === p.id); i >= 0 ? Object.assign(CINEMAS[i], p) : CINEMAS.push({ ...p }); }); }
+      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
+      log("admin", `${isNew ? "Thêm" : "Sửa"} cơ sở ${p.id} ${p.name}`); sh.close(); save(); render(); toast(`Đã lưu cơ sở ${p.id} · ${p.name}`); },
+    async del(b, sh) {
+      if (!confirm(`Xoá cơ sở ${c.id} ${c.name}? Chỉ xoá được khi chưa bán vé; nếu không hãy tạm ngưng.`)) return;
+      try { await adminCall("delete_cinema_s", { p_id: c.id }, () => { const i = CINEMAS.findIndex(x => x.id === c.id); if (i >= 0) CINEMAS.splice(i, 1); for (let k = ROOMS.length - 1; k >= 0; k--) if (ROOMS[k].cinemaId === c.id) ROOMS.splice(k, 1); S.shows = S.shows.filter(s => cinemaOf(s).id !== c.id); }); }
+      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
+      if (curCinema().id === c.id) setCurCinema(CINEMAS[0].id); if (workCinema().id === c.id) setWorkCinema(CINEMAS[0].id);
+      log("admin", `Xoá cơ sở ${c.id}`); sh.close(); save(); render(); toast("Đã xoá cơ sở " + c.id); },
+  }, { label: "Cơ sở", wide: true });
+}
+function roomSheet(cid, r) {
+  const isNew = !r, c = cinema(cid), n = roomsOf(cid).length;
+  r = r || { id: `${cid}-R${n + 1}`, name: `Phòng ${n + 1}`, kind: "2D", rows: 8, cols: 12, vip: [3, 4, 5], blocked: [], active: true, note: "" };
+  const letters = idx => idx.map(i => String.fromCharCode(65 + i)).join(",");
+  const html = `${sheetHead(isNew ? `Thêm phòng · ${esc(c.name)}` : `Sửa ${esc(r.name)} · ${esc(c.name)}`, "Ghế = hàng (A, B, C…) × số ghế. Ghế bảo trì không bán; phòng tạm ngưng không xếp suất.")}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Mã phòng", input("rm-id", r.id, `${isNew ? "" : "disabled"} placeholder="${cid}-R${n + 1}"`), isNew ? `Dạng ${cid}-R1` : "")}${field("Tên phòng", input("rm-name", r.name, 'placeholder="Phòng 3 · IMAX"'))}${field("Công nghệ / loại phòng", sel("rm-kind", ROOM_KINDS.map(k => [k, ROOM_KIND_TXT[k]]), r.kind), "Phụ thu theo loại: 3D, GOLD, IMAX.")}<div class="grid grid-cols-2 gap-3">${field("Số hàng", input("rm-rows", r.rows, 'type="number" min="1" max="26" inputmode="numeric"'))}${field("Ghế mỗi hàng", input("rm-cols", r.cols, 'type="number" min="1" max="30" inputmode="numeric"'))}</div>${field("Hàng VIP", input("rm-vip", letters(r.vip), 'placeholder="D,E,F"'), "Chữ cái hàng, cách nhau dấu phẩy (hàng couple/ghế đôi xếp vào VIP).")}${field("Ghế bảo trì / khoá", input("rm-blocked", (r.blocked || []).join(","), 'placeholder="A1,B2"'), "Mã ghế, cách nhau dấu phẩy. Để trống = không có.")}${field("Ghi chú", input("rm-note", r.note || "", 'placeholder="Đang thay máy chiếu – xong 20/10"'))}<div class="flex items-end pb-2">${chk("rm-active", "Phòng đang hoạt động (bỏ chọn = tạm ngưng)", r.active !== false)}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button>${!isNew && Auth.user.role === "quanly" ? `<button type="button" class="${B.ghost} ml-auto text-err" data-act="del">${ic("trash-2")}Xoá phòng</button>` : ""}</div>`;
+  adminSheet(html, {
+    async save(b, sh) {
+      const rows = +v("rm-rows"), cols = +v("rm-cols"), id = isNew ? v("rm-id").toUpperCase() : r.id;
+      const vip = v("rm-vip").toUpperCase().split(/[,\s]+/).filter(Boolean).map(x => x.charCodeAt(0) - 65).filter(i => i >= 0 && i < rows);
+      const blocked = v("rm-blocked").toUpperCase().split(/[,\s]+/).filter(x => /^[A-Z][0-9]{1,2}$/.test(x));
+      const p = { id, cinema_id: cid, name: v("rm-name") || id, kind: v("rm-kind") || "2D", rows, cols, vip, blocked, active: $("#rm-active").checked, note: v("rm-note") };
+      if (!new RegExp(`^${cid}-[A-Z0-9]{1,6}$`).test(id)) return toast(Auth.message({ message: "bad_room_id" }), "bad");
+      if (!(rows >= 1 && rows <= 26 && cols >= 1 && cols <= 30)) return toast(Auth.message({ message: "bad_size" }), "bad");
+      if (isNew && ROOMS.some(x => x.id === id)) return toast("Mã phòng đã tồn tại", "bad");
+      try { await adminCall("save_room_s", { p }, () => { const i = ROOMS.findIndex(x => x.id === id); const obj = { id, cinemaId: cid, name: p.name, kind: p.kind, rows, cols, vip, blocked, active: p.active, note: p.note }; i >= 0 ? Object.assign(ROOMS[i], obj) : ROOMS.push(obj); }); }
+      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
+      log("admin", `${isNew ? "Thêm" : "Sửa"} phòng ${id} (${p.kind}, ${rows}×${cols}${blocked.length ? ", khoá " + blocked.length + " ghế" : ""}${p.active ? "" : ", tạm ngưng"})`); sh.close(); save(); render(); toast(`Đã lưu ${p.name}`); },
+    async del(b, sh) {
+      if (!confirm(`Xoá ${r.name} (${r.id})? Chỉ xoá được khi không còn vé của suất sắp chiếu.`)) return;
+      try { await adminCall("delete_room_s", { p_id: r.id }, () => { const i = ROOMS.findIndex(x => x.id === r.id); if (i >= 0) ROOMS.splice(i, 1); S.shows = S.shows.filter(s => s.roomId !== r.id); }); }
+      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
+      log("admin", `Xoá phòng ${r.id}`); sh.close(); save(); render(); toast("Đã xoá phòng " + r.id); },
+  }, { label: "Phòng chiếu", wide: true });
+}
+function filmSheet(f) {
+  const isNew = !f; f = f || { id: "f" + Date.now().toString(36).slice(-5), title: "", rating: "P", dur: 100, genre: "", img: "", active: true };
+  const html = `${sheetHead(isNew ? "Thêm phim vào kho" : `Sửa phim · ${esc(f.title)}`, "Kho phim dùng chung toàn chuỗi; chọn rạp được chiếu ở dưới.")}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Tên phim", input("fm-title", f.title, 'placeholder="Tên phim"'))}${field("Nhãn tuổi", sel("fm-rating", [["P", "P – mọi lứa tuổi"], ["K", "K – dưới 13 có người lớn"], ["T13", "T13"], ["T16", "T16"], ["T18", "T18"]], f.rating))}${field("Thời lượng (phút)", input("fm-dur", f.dur, 'type="number" min="30" max="300" inputmode="numeric"'))}${field("Thể loại", input("fm-genre", f.genre, 'placeholder="Hành động"'))}<div class="sm:col-span-2">${field("Ảnh poster (URL)", input("fm-img", f.img || "", 'placeholder="https://…"'))}</div><div class="flex items-end pb-2">${chk("fm-active", "Đang chiếu (bỏ chọn = ngừng chiếu toàn chuỗi)", f.active !== false)}</div></div>
+    <div><p class="mb-2 text-sm font-medium">Phân phối cho cơ sở</p><div class="grid gap-1.5 sm:grid-cols-2">${CINEMAS.filter(c => c.active !== false).map(c => chk("fm-c-" + c.id, `<span class="font-mono text-xs text-muted">${c.id}</span> ${esc(c.name)}`, isNew ? true : filmAt(c.id, f.id))).join("")}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button></div>`;
+  adminSheet(html, {
+    async save(b, sh) {
+      const p = { id: f.id, title: v("fm-title"), rating: v("fm-rating") || "P", dur: +v("fm-dur") || 100, genre: v("fm-genre"), img: v("fm-img"), active: $("#fm-active").checked };
+      if (!p.title) return toast("Nhập tên phim", "bad");
+      const cs = CINEMAS.filter(c => c.active !== false && $("#fm-c-" + c.id)?.checked).map(c => c.id);
+      try { await adminCall("save_film_s", { p, p_cinemas: cs }, () => { const i = FILMS.findIndex(x => x.id === p.id); const obj = { ...p, img: p.img || null }; i >= 0 ? Object.assign(FILMS[i], obj) : FILMS.push(obj); S.films = FILMS; CINEMAS.forEach(c => cs.includes(c.id) ? DIST.delete(c.id + "|" + p.id) : DIST.add(c.id + "|" + p.id)); }); }
+      catch (e) { return toast(e.message === "need_008" ? "Máy chủ chưa chạy migration 008" : Auth.message(e), "bad"); }
+      log("admin", `${isNew ? "Thêm" : "Sửa"} phim ${p.title} (${p.rating}) · ${cs.length} rạp`); sh.close(); save(); render(); toast(`Đã lưu phim ${p.title}`); },
+  }, { label: "Phim", wide: true });
+}
+function showSheet(s) {
+  if (!s) return;
+  const f = film(s.filmId), r = room(s.roomId), c = cinemaOf(s), sold = soldCount(s), cap = capacity(s), tks = S.tickets.filter(t => t.showId === s.id && t.status !== "refunded"), off = s.status === "cancelled", past = endOf(s) < new Date();
+  const canEdit = Auth.user.role === "quanly" && !off && !past, roomsOn = roomsOf(c.id).filter(x => x.active !== false || x.id === s.roomId);
+  const d = new Date(s.start), ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const html = `${sheetHead(`${esc(f.title)} ${f.rating}`, `${dayLabel(s.start)} · ${hhmm(s.start)} – ${hhmm(endOf(s).getTime() - 15 * 60000)} · ${esc(placeOf(s))} · ${esc(formatOf(s))}`)}
+    ${off ? banner("bad", "Suất đã huỷ", esc(s.cancelReason || "Không ghi lý do") + ". Vé đã bán được hoàn vào thẻ quà tặng của từng khách.") : ""}
+    <div class="grid grid-cols-3 gap-3">${[["Ghế bán", `${sold}/${cap}`], ["Lấp đầy", `${cap ? Math.round(sold / cap * 100) : 0}%`], ["Vé qua hệ thống", `${tks.length} · ${vnd(tks.reduce((a, t) => a + t.price, 0))}`]].map(([l, x]) => `<div class="rounded-xl bg-background p-3"><p class="text-xs text-muted">${l}</p><p class="mt-0.5 text-base font-semibold tabular-nums">${x}</p></div>`).join("")}</div>
+    ${tks.length ? `<div class="max-h-40 overflow-auto rounded-xl border border-border text-sm">${tks.slice(0, 30).map(t => `<div class="flex items-center gap-2 border-b border-border px-3 py-1.5 last:border-0"><span class="w-10 font-mono font-medium">${t.seat}</span><span class="min-w-0 flex-1 truncate">${esc(t.viewerName || "")}${t.ownerUser ? ` <span class="font-mono text-xs text-muted">@${esc(t.ownerUser)}</span>` : ""}</span>${t.status === "used" ? tone("Đã vào", "neutral") : tone(t.channel || "Online", "ok")}</div>`).join("")}</div>` : ""}
+    ${canEdit ? `<div class="grid gap-3 border-t border-border pt-4"><p class="text-sm font-medium">Điều chỉnh suất</p><div class="grid gap-3 sm:grid-cols-3">${field("Ngày", input("sh-day", ymd, 'type="date"'))}${field("Giờ bắt đầu", input("sh-time", hhmm(s.start), 'placeholder="19:30" maxlength="5"'))}${field("Phòng", sel("sh-room", roomsOn.map(x => [x.id, `${x.name} · ${x.rows * x.cols} ghế`]), s.roomId), tks.length ? "Đã bán vé: chỉ đổi giờ." : "")}</div>
+      <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu thay đổi</button><span class="text-xs text-muted">Khách đã mua vé nhận thông báo đổi giờ (mô phỏng).</span></div>
+      <div class="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-border p-3"><div class="min-w-[200px] flex-1">${field("Lý do huỷ", input("sh-reason", "", 'placeholder="Hỏng máy chiếu / bảo trì phòng"'))}</div><button type="button" class="${B.outline} min-h-11 md:min-h-10 text-err" data-act="cancel">${ic("calendar-x")}Huỷ suất${tks.length ? ` · hoàn ${tks.length} vé` : ""}</button></div></div>` : ""}`;
+  adminSheet(html, {
+    async save(b, sh) {
+      const t = v("sh-time"); if (!/^\d{1,2}:\d{2}$/.test(t)) return toast("Giờ dạng HH:MM", "bad");
+      const [h, m] = t.split(":").map(Number), s0 = new Date(v("sh-day") + "T00:00:00"); s0.setHours(h, m, 0, 0); const e0 = new Date(s0.getTime() + (f.dur + 15) * 60000), rid_ = v("sh-room");
+      if (rid_ !== s.roomId && tks.length) return toast(Auth.message({ message: "has_tickets" }), "bad");
+      const clash = S.shows.find(x => x.id !== s.id && x.status !== "cancelled" && x.roomId === rid_ && new Date(x.start) < e0 && endOf(x) > s0);
+      if (clash) return toast(`Trùng suất ${hhmm(clash.start)} (${film(clash.filmId).title})`, "bad");
+      if (ON() && Remote.v8) { try { const cid = await Remote.rpc("update_show_s", { p_token: Auth.token, p_id: s.id, p_room: rid_, p_start: s0.toISOString(), p_end: e0.toISOString() }); if (cid) return toast(`Máy chủ báo trùng suất ${cid}`, "bad"); } catch (e) { return toast(Auth.message(e), "bad"); } }
+      else if (ON()) return toast("Máy chủ chưa chạy migration 008", "bad");
+      Object.assign(s, { roomId: rid_, start: s0.toISOString(), end: e0.toISOString(), format: formatOf({ roomId: rid_ }) });
+      log("admin", `Đổi suất ${s.id}: ${f.title} → ${room(rid_).name} ${ddmm(s0)} ${hhmm(s0)}`); sh.close(); save(); render(); toast("Đã cập nhật suất chiếu"); },
+    async cancel(b, sh) {
+      const reason = v("sh-reason") || "Không ghi lý do";
+      if (!confirm(`Huỷ suất ${f.title} ${hhmm(s.start)} ${ddmm(s.start)}?${tks.length ? ` ${tks.length} vé sẽ được hoàn vào thẻ quà tặng của khách.` : ""}`)) return;
+      let n = tks.length;
+      if (ON() && Remote.v8) { try { n = await Remote.rpc("cancel_show_s", { p_token: Auth.token, p_id: s.id, p_reason: reason }); } catch (e) { return toast(Auth.message(e), "bad"); } }
+      else if (ON()) return toast("Máy chủ chưa chạy migration 008", "bad");
+      s.status = "cancelled"; s.cancelReason = reason; S.seats[s.id] = {}; S.tickets.forEach(t => { if (t.showId === s.id && t.status === "valid") t.status = "refunded"; });
+      log("admin", `Huỷ suất ${s.id} (${reason}): hoàn ${n} vé`, false); sh.close(); save(); render(); toast(`Đã huỷ suất · hoàn ${n} vé vào thẻ quà tặng`); },
+  }, { label: "Suất chiếu", wide: true });
+}
 const SEL = {
   "work-cinema"(box, v) { if (!isChainManager()) return; setWorkCinema(v); S.view.ns = null; S.view.pos = { showId: null, seats: [], types: {}, docs: {} }; S.view.gate = {}; save(); render(); toast(`Đang thao tác tại ${cinema(v).name}`); },
   "nu-cinema"(box, v) { S.view.nu.cinema = v || null; },
@@ -758,6 +890,7 @@ document.addEventListener("click", e => {
 document.addEventListener("change", e => {
   const el = e.target;
   if (el.id === "g-commit") { S.view.gdraft.commit = el.checked; save(); render(); }
+  if (el.id === "log-type") { S.view.logType = el.value; save(); render(); }
   if (el.id === "gate-file" && el.files[0]) gateImage(el.files[0]);
   if (el.id === "haar-file" && el.files[0]) { const file = el.files[0]; LAB.haar.err = ""; LAB.haar.stats = { status: "Đang chạy Haar trên ảnh…" }; render(); FaceKit.preload();
     Haar.runImage(file, m => { const s = $("#haar-stats"); if (s) s.innerHTML = haarStats({ status: m }); }).then(r => { LAB.haar.img = r.dataUrl; LAB.haar.stats = { ms: r.ms, tinyMs: r.tinyMs, faces: r.faces, eyes: r.eyes, fps: null, blinks: null };

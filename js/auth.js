@@ -10,10 +10,11 @@ const Auth = (() => {
     { username: "khach", pass: "khach123", role: "khach", name: "Nguyễn Văn An", note: "Khách hàng" },
     { username: "giaovien", pass: "giaovien123", role: "khach", name: "Phạm Thu Hà", note: "Khách – giáo viên mua vé đoàn" },
     { username: "nhanvien", pass: "nhanvien123", role: "nhanvien", name: "Lê Minh Tuấn", note: "Nhân viên · CineVin Vinh Centre" },
+    { username: "kythuat", pass: "kythuat123", role: "kythuat", name: "Hoàng Văn Kỹ", note: "Kỹ thuật · phòng chiếu, ghế · CineVin Vinh Centre" },
     { username: "quanlyvinh", pass: "quanlyvinh123", role: "quanly", name: "Trần Quốc Bảo", note: "Quản lý rạp · CineVin Vinh Centre" },
     { username: "quanly", pass: "quanly123", role: "quanly", name: "Ngô Thị Lan", note: "Quản lý chuỗi · toàn bộ rạp" },
   ];
-  const ROLE_TXT = { khach: "Khách hàng", nhanvien: "Nhân viên", quanly: "Quản lý" };
+  const ROLE_TXT = { khach: "Khách hàng", nhanvien: "Nhân viên", kythuat: "Kỹ thuật", quanly: "Quản lý" };
   const ERR = {
     invalid_login: "Sai tài khoản hoặc mật khẩu.",
     username_taken: "Tên đăng nhập đã có người dùng.",
@@ -32,6 +33,19 @@ const Auth = (() => {
     voucher_unknown: "Không có mã này.", voucher_used: "Mã đã dùng rồi.", voucher_expired: "Mã đã hết hạn.", voucher_not_yours: "Thẻ quà tặng này của tài khoản khác.", voucher_invalid: "Mã giảm giá không còn hợp lệ.",
     companion_unknown: "Không tìm thấy tài khoản khách hàng này.", companion_self: "Đó là tài khoản của bạn – chọn “Tôi”.", companion_underage: "Bạn đi cùng chưa đủ tuổi xem phim này (theo hồ sơ VNeID của họ).",
     wrong_cinema: "Vé/suất này thuộc rạp khác – tài khoản của bạn chỉ thao tác ở rạp mình.",
+    has_tickets: "Suất đã bán vé: chỉ đổi giờ được, không đổi phòng (ghế gắn với phòng). Muốn đổi phòng hãy huỷ suất.",
+    show_cancelled: "Suất này đã huỷ.",
+    room_inactive: "Phòng đang tạm ngưng hoạt động.",
+    film_not_at_cinema: "Phim chưa được phân phối cho rạp này (Kho phim → phân phối).",
+    film_inactive: "Phim đã ngừng chiếu trong kho phim.",
+    room_in_use: "Phòng còn vé của suất sắp chiếu – huỷ các suất trước khi xoá phòng.",
+    cinema_in_use: "Cơ sở đã có vé bán – chỉ nên tạm ngưng, không xoá.",
+    seats_sold: "Không thu nhỏ phòng được: có ghế đã bán nằm ngoài kích thước mới.",
+    bad_room_id: "Mã phòng dạng <mã rạp>-R1 (chữ/số, tối đa 6 ký tự).",
+    bad_cinema_id: "Mã cơ sở là 3 chữ số.",
+    bad_size: "Kích thước phòng: 1–26 hàng, 1–30 ghế mỗi hàng.",
+    bad_input: "Thiếu tên hoặc tỉnh/thành.",
+    unknown_show: "Không tìm thấy suất chiếu.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
   };
