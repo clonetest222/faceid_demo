@@ -67,7 +67,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     } else { await T.ev(`$c('[data-m="later"]')`); }
     // 3. đăng nhập bằng email / SĐT / FaceID / VNeID
     await logout(T); await toLogin(T);
-    check("Màn đăng nhập có 3 cách: Mật khẩu · FaceID · VNeID", (await T.ev(`document.querySelectorAll('[data-act="login-mode"]').length`)) === 3);
+    check("Màn đăng nhập: một form mật khẩu, biểu tượng FaceID cạnh nút Đăng nhập, nút VNeID riêng", await T.ev(`!!document.querySelector('#li-user') && !!document.querySelector('#li-pass') && !!document.querySelector('[data-act="login-face-btn"]') && !!document.querySelector('[data-act="login-vneid"]') && !document.querySelector('[data-act="login-mode"]')`));
     await T.shot("cust_04_dangnhap");
     await T.ev(`$v('li-user','${email.toUpperCase()}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(600); await T.ev(H);
     check("Đăng nhập bằng email (không phân biệt hoa thường)", (await T.ev(`Auth.user.username`)) === user);
@@ -76,8 +76,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     check("Đăng nhập bằng SĐT (có khoảng trắng)", (await T.ev(`Auth.user.username`)) === user);
     await logout(T); await toLogin(T);
     if (FACES) {
-      await T.ev(`$c('[data-act="login-mode"][data-v="face"]')`); await sleep(400); await T.ev(H);
-      await T.ev(`$v('li-user','${user}');document.querySelector('[data-form="login-face"]').requestSubmit()`); await sleep(1500);
+      await T.ev(`$v('li-user','${user}');$c('[data-act="login-face-btn"]')`); await sleep(1500);
       await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
       await T.setFile("#lf-file", join(FACES, "raj1.png")); await sheetDone(T);
       check("Đăng nhập FaceID bằng mặt người khác → từ chối, không có phiên", (await T.ev(`$t('[data-sheet]')`)).includes("không khớp") && !(await T.ev(`!!Auth.user`)));
@@ -89,17 +88,14 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
       const nLogin = await T.ev(`(S.verifs||[]).filter(v=>v.kind==='login'&&v.detail&&v.detail.user==='${user}').length`);
       check("Mỗi lần đăng nhập FaceID (kể cả thất bại) có bản ghi", nLogin >= 2, nLogin + " bản ghi");
       await logout(T); await toLogin(T);
-      await T.ev(`$c('[data-act="login-mode"][data-v="vneid"]')`); await sleep(400); await T.ev(H);
-      await T.ev(`$v('li-vneid-id','${idno}');$c('[data-act="login-vneid"]')`); await sleep(1500); await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
+      await T.ev(`$c('[data-act="login-vneid"]')`); await sleep(400); await T.ev(`$v('li-vneid-id','${idno}');$c('[data-sheet] [data-m="go"]')`); await sleep(1500); await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
       await T.setFile("#lf-file", join(FACES, "sheldon2.png")); await T.waitFor(`!!Auth.user`, 60000); await sleep(600); await T.ev(H);
       check("Đăng nhập VNeID = số căn cước + khuôn mặt chính chủ → đúng tài khoản", (await T.ev(`Auth.user && Auth.user.username`)) === user);
       await logout(T); await toLogin(T);
-      await T.ev(`$c('[data-act="login-mode"][data-v="vneid"]')`); await sleep(400); await T.ev(H);
-      await T.ev(`$v('li-vneid-id','000000000000');$c('[data-act="login-vneid"]')`); await sleep(1500); await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
+      await T.ev(`$c('[data-act="login-vneid"]')`); await sleep(400); await T.ev(`$v('li-vneid-id','000000000000');$c('[data-sheet] [data-m="go"]')`); await sleep(1500); await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
       await T.setFile("#lf-file", join(FACES, "sheldon2.png")); await T.waitFor(`/chưa gắn với tài khoản nào/.test($t('[data-sheet]'))`, 60000);
       check("Số căn cước chưa gắn tài khoản → báo rõ, không có phiên", (await T.ev(`$t('[data-sheet]')`)).includes("chưa gắn với tài khoản nào") && !(await T.ev(`!!Auth.user`)));
       await T.ev(`document.querySelector('[data-sheet] [data-m="close"]')?.click()`); await sleep(300);
-      await T.ev(`$c('[data-act="login-mode"][data-v="pass"]')`); await sleep(300); await T.ev(H);
     }
     await T.ev(`$v('li-user','${user}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
     // 4. thanh toán với mã khuyến mãi + điểm

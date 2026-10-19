@@ -67,15 +67,13 @@ function vLogin(reg) {
       <p class="text-pretty text-center text-xs text-muted">Sau khi tạo, bạn được mời xác thực VNeID + FaceID để mua vé theo độ tuổi và vào thẳng phim T13–T18. Có thể làm sau.</p></form>
       <p class="text-center text-sm text-muted">Đã có tài khoản? <a href="#/dangnhap" class="font-medium text-foreground underline underline-offset-2">Đăng nhập</a></p>`;
   else {
-    const m = LOGIN.mode || "pass";
-    const tabs = seg([["pass", "Mật khẩu", "key-round"], ["face", "FaceID", "scan-face"], ["vneid", "VNeID", "badge-check"]], m, "login-mode");
-    const inner = m === "pass" ? `<form class="grid gap-4" data-form="login" novalidate>${idField}${field("Mật khẩu", pass)}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang đăng nhập…" : "Đăng nhập"}</button></form>`
-      : m === "face" ? `<form class="grid gap-4" data-form="login-face" novalidate>${idField}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${ic("scan-face")}Quét khuôn mặt để đăng nhập</button>
-          <p class="text-pretty text-xs text-muted">Dùng được sau khi tài khoản đã liên kết VNeID. Camera xử lý trên thiết bị, máy chủ chỉ nhận vector 128 số để đối chiếu với ảnh gốc – không nhận ảnh.</p></form>`
-      : `<div class="grid gap-4">${banner("info", "Mô phỏng ứng dụng VNeID", "Thực tế: web chuyển sang app VNeID, bạn quét Face ID trong app và đồng ý chia sẻ. Ở bản demo: nhập số căn cước đã khai khi liên kết, rồi quét khuôn mặt của chính bạn.")}
-          ${field("Số căn cước", input("li-vneid-id", LOGIN.vneid && /^\d{12}$/.test(LOGIN.vneid) ? LOGIN.vneid : "", 'inputmode="numeric" maxlength="12" placeholder="12 chữ số (hoặc tên đăng nhập / email / SĐT)" autocomplete="off"'))}${err}
-          <button type="button" class="${B.primary} min-h-12" data-act="login-vneid" ${LOGIN.busy ? "disabled" : ""}>${ic("badge-check")}Mở VNeID – quét khuôn mặt</button></div>`;
-    form = `<div class="flex justify-center">${tabs}</div>${inner}<p class="text-center text-sm text-muted">Chưa có tài khoản? <a href="#/dangky" class="font-medium text-foreground underline underline-offset-2">Tạo tài khoản</a></p>`;
+    // một form: tài khoản + mật khẩu; nút FaceID (biểu tượng) cạnh nút Đăng nhập; VNeID là nút riêng phía dưới
+    const inner = `<form class="grid gap-4" data-form="login" novalidate>${idField}${field("Mật khẩu", pass)}${err}
+        <div class="flex gap-2"><button type="submit" class="${B.primary} min-h-12 flex-1" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang đăng nhập…" : "Đăng nhập"}</button>
+          <button type="button" data-act="login-face-btn" class="grid size-12 shrink-0 cursor-pointer place-items-center rounded-xl border border-border-strong bg-surface text-foreground hover:bg-button-hover" aria-label="Đăng nhập bằng khuôn mặt (FaceID)" title="FaceID – quét khuôn mặt, không cần mật khẩu (tài khoản đã liên kết VNeID)">${ic("scan-face", "size-5")}</button></div></form>
+      <div class="flex items-center gap-3 text-xs text-muted"><span class="h-px flex-1 bg-border"></span>hoặc<span class="h-px flex-1 bg-border"></span></div>
+      <button type="button" class="${B.outline} min-h-12 w-full" data-act="login-vneid">${ic("badge-check", "size-5")}Đăng nhập bằng VNeID</button>`;
+    form = `${inner}<p class="text-center text-sm text-muted">Chưa có tài khoản? <a href="#/dangky" class="font-medium text-foreground underline underline-offset-2">Tạo tài khoản</a></p>`;
   }
   return `<main class="grid min-h-screen place-items-center p-4">
     <div class="grid w-full max-w-[440px] gap-6">
@@ -433,7 +431,15 @@ const A = {
     if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("unlink_vneid", { p_token: Auth.token })); } catch (e) { return toast(Auth.message(e), "bad"); } }
     Object.assign(S.user, { linked: false, dob: null, key: null, name: Auth.user.name, passkey: null }); S.dependents.length = 0; bindProfile(); save(); render(); },
   "login-mode"(el) { LOGIN.mode = el.dataset.v; LOGIN.err = ""; render(); },
-  "login-vneid"() { const id = ($("#li-vneid-id")?.value || "").trim(); LOGIN.vneid = id; if (!id) { LOGIN.err = "Nhập số căn cước (hoặc tên đăng nhập / email / SĐT)."; return render(); } doLoginFace(id, "vneid"); },
+  "login-face-btn"() { const id = ($("#li-user")?.value || "").trim(); if (!id) { LOGIN.err = "Nhập tên đăng nhập, email hoặc số điện thoại rồi bấm biểu tượng khuôn mặt."; LOGIN.field = "user"; return render(); } LOGIN.err = ""; doLoginFace(id, "face"); },
+  "login-vneid"() {
+    // mô phỏng chuyển sang app VNeID: hỏi số căn cước (điền sẵn nếu ô tài khoản là 12 số) rồi quét khuôn mặt
+    const pre = ($("#li-user")?.value || "").trim();
+    const sh = openSheet(`${sheetHead("Đăng nhập bằng VNeID", "Mô phỏng ứng dụng VNeID: thực tế bạn quét Face ID trong app và đồng ý chia sẻ.")}
+      ${field("Số căn cước", input("li-vneid-id", /^\d{12}$/.test(pre) ? pre : (LOGIN.vneid || ""), 'inputmode="numeric" maxlength="12" placeholder="12 chữ số (hoặc tên đăng nhập / email / SĐT)" autocomplete="off"'), "Số đã khai khi liên kết VNeID ở Tài khoản.")}
+      <button type="button" class="${B.primary} min-h-12" data-m="go">${ic("badge-check")}Mở VNeID – quét khuôn mặt</button>`, { label: "Đăng nhập VNeID" });
+    sh.el.onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m === "close") sh.close(); if (m === "go") { const id = ($("#li-vneid-id")?.value || "").trim(); if (!id) return toast("Nhập số căn cước (hoặc tên đăng nhập / email / SĐT)", "bad"); LOGIN.vneid = id; sh.close(); doLoginFace(id, "vneid"); } };
+    sh.el.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); sh.el.querySelector('[data-m="go"]').click(); } }; },
   async "pref-confirm"(el) { const on = el.getAttribute("aria-checked") !== "true"; S.user.confirmEvery = on;
     if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("set_pref", { p_token: Auth.token, p_confirm_every: on })); } catch (e) { toast(Auth.message(e), "bad"); } }
     save(); render(); },
