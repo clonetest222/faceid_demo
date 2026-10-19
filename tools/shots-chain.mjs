@@ -67,7 +67,7 @@ try {
   check("Thẻ Loại ghế: 4 loại mặc định, nút Thêm loại ghế (quản lý chuỗi)", await ev("document.querySelectorAll('[data-act=\"seattype-edit\"]').length") === 4 && await ev("!!document.querySelector('[data-act=\"seattype-new\"]')"));
   await shot("chain_09_coso");
   await ev("document.querySelector('[data-act=\"seattype-new\"]').click()"); await sleep(500);
-  check("Loại ghế mới: mã, tên, số người, phụ thu A/B, 7 màu, biểu tượng, có bán", await ev("!!document.querySelector('#st-id') && !!document.querySelector('#st-persons') && !!document.querySelector('#st-mode') && !!document.querySelector('#st-fa') && document.querySelectorAll('[data-sheet] [data-act=\"color\"]').length===7 && document.querySelectorAll('[data-sheet] [data-act=\"icon\"]').length>=10 && !!document.querySelector('#st-sell')"));
+  check("Loại ghế mới: mã, tên, số người, phụ thu A/B, 7 màu, biểu tượng, có bán", await ev("!!document.querySelector('#st-id') && !!document.querySelector('#st-persons') && !!document.querySelector('#st-price') && !document.querySelector('#st-mode') && document.querySelectorAll('[data-sheet] [data-act=\"color\"]').length===7 && document.querySelectorAll('[data-sheet] [data-act=\"icon\"]').length>=10 && !!document.querySelector('#st-sell')"));
   await shot("chain_17_loai_ghe"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
   await ev("document.querySelector('[data-act=\"cinema-prices\"]').click()"); await sleep(500);
   check("Bảng giá rạp: 3 loại ngày × 4 đối tượng + phụ thu 3D/GOLD/IMAX/lễ, nút Lưu", await ev("document.querySelectorAll('[data-sheet] input[id^=pr-]').length") === 17 && await ev("!!document.querySelector('[data-sheet] [data-act=\"save\"]')"));
