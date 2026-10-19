@@ -128,11 +128,12 @@ const cities = () => [...new Set(CINEMAS.filter(c => c.active !== false).map(c =
 const DIST = new Set();   // cặp "rạp|phim" đã bị bỏ phân phối
 const SEED_ORDER = CINEMAS.map(c => c.id);   // giữ thứ tự hiển thị như dữ liệu mẫu (rạp nhà trước), rạp mới thêm xếp sau theo mã
 const seedRank = id => { const i = SEED_ORDER.indexOf(id); return i < 0 ? 1000 + Number(id) : i; };
-function applyCatalog({ cinemas, rooms, films, cinemaFilms, seatTypes } = {}) {
+function applyCatalog({ cinemas, rooms, films, cinemaFilms, seatTypes, priceTiers } = {}) {
   if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", prices: c.prices && c.prices.weekday ? c.prices : null, active: c.active !== false })); }
   if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], seatMap: r.seat_map || {}, active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
   if (films && films.length) { FILMS.length = 0; films.forEach(f => FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false })); S.films = FILMS; }
   if (seatTypes && seatTypes.length) setSeatTypes(seatTypes.map(t => ({ id: t.id, name: t.name, persons: t.persons || 1, surchargeA: Number(t.surcharge_a) || 0, surchargeB: Number(t.surcharge_b) || 0, fixedA: t.fixed_a == null ? null : Number(t.fixed_a), fixedB: t.fixed_b == null ? null : Number(t.fixed_b), color: t.color || "gray", icon: t.icon || null, sellable: t.sellable !== false, sort: t.sort ?? 100, builtin: !!t.builtin, active: t.active !== false })));
+  if (priceTiers && priceTiers.length) priceTiers.forEach(t => { if (t.prices && t.prices.weekday) PRICE_TIERS[t.id] = { ...PRICE_TIERS[t.id], ...t.prices }; });
   if (cinemaFilms) { DIST.clear(); cinemaFilms.forEach(x => { if (!x.active) DIST.add(x.cinema_id + "|" + x.film_id); }); }
 }
 const filmAt = (cid, fid) => !DIST.has(cid + "|" + fid);

@@ -493,6 +493,7 @@ const A = {
   "room-edit"(el) { const r = room(el.dataset.id); roomSheet(r.cinemaId, r); },
   "seattype-new"() { seatTypeSheet(null); },
   "cinema-prices"(el) { pricesSheet(cinema(el.dataset.id)); },
+  "tier-prices"(el) { tierSheet(el.dataset.v); },
   "seattype-edit"(el) { seatTypeSheet(SEAT_TYPES[el.dataset.id]); },
   "film-new"() { filmSheet(null); },
   "film-edit"(el) { filmSheet(film(el.dataset.id)); },
@@ -825,7 +826,7 @@ function roomSheet(cid, r) {
   const count = () => { const o = {}; tools().forEach(t => o[t.id] = 0); for (let i = 0; i < ed.rows; i++) for (let j = 0; j < ed.cols; j++) { const k = ed.types[seatId(i, j)] || "std"; o[k] = (o[k] || 0) + 1; } return o; };
   const tierSur = t => Number(c.tier === "A" ? t.surchargeA : t.surchargeB) || 0;
   const grid = () => { const half = Math.ceil(ed.cols / 2), cnt = count(), T = tools(); let h = `<div class="mb-2 flex flex-wrap items-center justify-between gap-2"><span class="text-sm font-medium">Loại ghế – chọn công cụ rồi bấm ghế, hoặc bấm chữ hàng để áp cả hàng</span>${isChainManager() ? `<button type="button" class="${B.ghost} min-h-8 px-2 text-xs" data-act="newtype">${ic("plus", "size-3.5")}Loại ghế mới</button>` : ""}</div>
-      <div class="mb-3 flex flex-wrap gap-2">${T.map(t => `<button type="button" data-act="tool" data-v="${t.id}" aria-pressed="${ed.tool === t.id}" title="${esc(t.name)}${t.sellable ? ` · ${t.persons} người · ${t.id === "std" ? "giá cơ bản" : "+" + vnd(tierSur(t)) + " trên giá thường"}` : " · không bán"}" class="flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-sm ${toolCls(t)} ${ed.tool === t.id ? "ring-2 ring-focus" : ""}">${ic(t.icon || "square", "size-4")}${esc(t.name)}<span class="tabular-nums opacity-70">${cnt[t.id] || 0}</span></button>`).join("")}</div>
+      <div class="mb-3 flex flex-wrap gap-2">${T.map(t => `<button type="button" data-act="tool" data-v="${t.id}" aria-pressed="${ed.tool === t.id}" title="${esc(t.name)}${t.sellable ? ` · ${t.persons} người · ${(c.tier === "A" ? t.fixedA : t.fixedB) != null ? "giá cứng " + vnd(c.tier === "A" ? t.fixedA : t.fixedB) : "phụ thu " + vnd(tierSur(t))}` : " · không bán"}" class="flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-sm ${toolCls(t)} ${ed.tool === t.id ? "ring-2 ring-focus" : ""}">${ic(t.icon || "square", "size-4")}${esc(t.name)}<span class="tabular-nums opacity-70">${cnt[t.id] || 0}</span></button>`).join("")}</div>
       <div class="mx-auto mb-3 max-w-[420px]"><div class="h-1 rounded-full bg-foreground/20"></div><p class="mt-1 text-center text-xs text-muted">Màn hình</p></div><div class="overflow-x-auto pb-1"><div class="mx-auto grid w-max gap-1">`;
     for (let i = 0; i < ed.rows; i++) { const L = String.fromCharCode(65 + i); h += `<div class="flex items-center gap-1"><button type="button" data-act="row" data-v="${i}" title="Áp ${esc(seatType(ed.tool).name)} cho cả hàng ${L}" class="grid size-7 cursor-pointer place-items-center rounded-md text-xs font-medium text-muted hover:bg-item-hover">${L}</button>`;
       for (let j = 0; j < ed.cols; j++) { const sid = seatId(i, j), g = ed.groups[sid]; if (g && g[0] !== sid) continue; const n = g ? g.length : 1, k = ed.types[sid] || "std", t = seatType(k), label = n > 1 ? `${g[0]}–${g[n - 1]}` : sid;
@@ -868,30 +869,50 @@ function roomSheet(cid, r) {
 }
 /** Thêm / sửa loại ghế tự định nghĩa (quản lý chuỗi): tên, số người, phụ thu A/B, màu, biểu tượng, có bán */
 /** Bảng giá riêng của một rạp: giá cơ bản theo loại ngày × đối tượng, phụ thu phòng. Trống = dùng bảng theo hạng A/B. */
+/** Bảng giá hạng A / hạng B (toàn chuỗi): giá cơ bản của ghế thường ở mọi cơ sở thuộc hạng đó, trừ cơ sở có bảng riêng */
+function tierSheet(tier) {
+  const cur = PRICE_TIERS[tier] || PRICE_TIERS.B, n = CINEMAS.filter(c => c.tier === tier && !(c.prices && c.prices.weekday)).length;
+  priceSheet({
+    title: `Bảng giá hạng ${tier}`, sub: `${tier === "A" ? "Thành phố lớn (Hà Nội, TP.HCM)" : "Tỉnh"} · đang áp cho ${n} cơ sở. Đây là giá ghế thường; loại ghế khác cộng phụ thu hoặc dùng giá cứng.`, cur, saveLabel: `Lưu bảng giá hạng ${tier}`,
+    async save(p) {
+      if (ON() && Auth.token) { try { await Remote.rpc("save_price_tier_s", { p_token: Auth.token, p_tier: tier, p }); await Remote.reloadCatalog(); } catch (e) { if (/PGRST202|not find|does not exist/i.test(e.message || "")) throw new Error("need_015"); throw e; } }
+      PRICE_TIERS[tier] = p;
+      log("admin", `Bảng giá hạng ${tier}: người lớn ${vnd(p.weekday.adult)} / ${vnd(p.wed.adult)} / ${vnd(p.weekend.adult)}`); toast(`Đã lưu bảng giá hạng ${tier}`); },
+  });
+}
 function pricesSheet(c) {
   const base = PRICE_TIERS[c.tier] || PRICE_TIERS.B, cur = c.prices && c.prices.weekday ? c.prices : base, own = !!(c.prices && c.prices.weekday);
+  priceSheet({
+    title: `Bảng giá · ${esc(c.name)}`, sub: `${own ? "Đang dùng bảng giá riêng." : `Đang dùng bảng giá hạng ${c.tier}.`} Giá cơ bản theo loại ngày × đối tượng; đối tượng lấy từ tuổi đã xác thực VNeID. Phụ thu ghế VIP / đôi… đặt ở Loại ghế.`, cur, saveLabel: "Lưu bảng giá riêng",
+    resetLabel: own ? `Dùng lại bảng hạng ${c.tier}` : "",
+    async save(p) { await pushCinemaPrices(c, p); log("admin", `Bảng giá riêng ${c.name}: người lớn ${vnd(p.weekday.adult)} / ${vnd(p.wed.adult)} / ${vnd(p.weekend.adult)}`); toast("Đã lưu bảng giá " + c.name); },
+    async reset() { await pushCinemaPrices(c, null); log("admin", `${c.name}: dùng lại bảng giá hạng ${c.tier}`); toast("Đã bỏ bảng giá riêng"); },
+  });
+}
+async function pushCinemaPrices(c, p) {
+  if (Remote.v11 && Auth.token) { await Remote.rpc("save_cinema_prices_s", { p_token: Auth.token, p_cinema: c.id, p }); await Remote.reloadCatalog(); }
+  else if (ON()) throw new Error("need_011");
+  else c.prices = p;
+}
+/** Form bảng giá dùng chung: 3 loại ngày × 4 đối tượng + phụ thu phòng */
+function priceSheet({ title, sub, cur, saveLabel, resetLabel = "", save: onSave, reset: onReset }) {
+  const base = cur;
   const DAYS = [["weekday", "Ngày thường (T2–T5)"], ["wed", "Thứ Tư vui vẻ"], ["weekend", "Cuối tuần (T6–CN)"]], AUD = [["adult", "Người lớn"], ["u22", "U22"], ["child", "Trẻ em"], ["senior", "Người cao tuổi"]];
   const num = (id, val) => `<input id="${id}" value="${val}" type="number" min="0" step="1000" inputmode="numeric" class="${INPUT} !h-9 text-right tabular-nums">`;
-  const html = `${sheetHead(`Bảng giá · ${esc(c.name)}`, `${own ? "Đang dùng bảng giá riêng." : `Đang dùng bảng giá hạng ${c.tier}.`} Giá cơ bản theo loại ngày × đối tượng; đối tượng lấy từ tuổi đã xác thực VNeID. Phụ thu ghế VIP / đôi… đặt ở Loại ghế.`)}
+  const html = `${sheetHead(title, sub)}
     <div class="-mx-2 overflow-x-auto"><table class="w-full min-w-[520px] text-sm"><thead><tr class="text-left text-xs text-muted"><th class="px-2 py-1.5 font-medium">Đối tượng</th>${DAYS.map(([k, l]) => `<th class="px-2 py-1.5 font-medium">${l}</th>`).join("")}</tr></thead>
       <tbody>${AUD.map(([a, al]) => `<tr><td class="px-2 py-1.5">${al}</td>${DAYS.map(([d]) => `<td class="px-2 py-1.5">${num(`pr-${d}-${a}`, cur[d][a])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
     <div class="grid gap-3 sm:grid-cols-2">${field("Phụ thu 3D ngày thường", num("pr-s3d-weekday", cur.s3d.weekday))}${field("Phụ thu 3D cuối tuần", num("pr-s3d-weekend", cur.s3d.weekend))}${field("Phụ thu phòng GOLD", num("pr-gold", cur.gold))}${field("Phụ thu phòng IMAX", num("pr-imax", cur.imax ?? cur.gold))}${field("Phụ thu ngày lễ", num("pr-holiday", cur.holiday))}</div>
-    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu bảng giá riêng</button>${own ? `<button type="button" class="${B.outline}" data-act="reset">${ic("rotate-ccw")}Dùng lại bảng hạng ${c.tier}</button>` : ""}</div>`;
-  const push = async p => {
-    if (Remote.v11 && Auth.token) { await Remote.rpc("save_cinema_prices_s", { p_token: Auth.token, p_cinema: c.id, p }); await Remote.reloadCatalog(); }
-    else if (ON()) throw new Error("need_011");
-    else c.prices = p;
-  };
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}${saveLabel}</button>${resetLabel ? `<button type="button" class="${B.outline}" data-act="reset">${ic("rotate-ccw")}${resetLabel}</button>` : ""}</div>`;
+  const fail = e => toast(e.message === "need_011" ? "Máy chủ chưa chạy migration 011" : e.message === "need_015" ? "Máy chủ chưa chạy migration 015 (bảng giá hạng)" : Auth.message(e), "bad");
   adminSheet(html, {
     async save(b, sh) {
-      const g = id => Math.max(0, Math.round(+v(id) || 0)); const p = { s3d: { weekday: g("pr-s3d-weekday"), weekend: g("pr-s3d-weekend") }, gold: g("pr-gold"), imax: g("pr-imax"), holiday: g("pr-holiday"), vip: base.vip, couple: base.couple };
+      const g = id => Math.max(0, Math.round(+v(id) || 0)); const p = { s3d: { weekday: g("pr-s3d-weekday"), weekend: g("pr-s3d-weekend") }, gold: g("pr-gold"), imax: g("pr-imax"), holiday: g("pr-holiday"), vip: base.vip ?? 5500, couple: base.couple ?? 16000 };
       DAYS.forEach(([d]) => { p[d] = {}; AUD.forEach(([a]) => p[d][a] = g(`pr-${d}-${a}`)); });
       if (DAYS.some(([d]) => p[d].adult <= 0)) return toast("Giá người lớn phải lớn hơn 0", "bad");
-      try { await push(p); } catch (e) { return toast(e.message === "need_011" ? "Máy chủ chưa chạy migration 011" : Auth.message(e), "bad"); }
-      log("admin", `Bảng giá riêng ${c.name}: người lớn ${vnd(p.weekday.adult)} / ${vnd(p.wed.adult)} / ${vnd(p.weekend.adult)}`); sh.close(); save(); render(); toast("Đã lưu bảng giá " + c.name); },
-    async reset(b, sh) {
-      try { await push(null); } catch (e) { return toast(e.message === "need_011" ? "Máy chủ chưa chạy migration 011" : Auth.message(e), "bad"); }
-      log("admin", `${c.name}: dùng lại bảng giá hạng ${c.tier}`); sh.close(); save(); render(); toast("Đã bỏ bảng giá riêng"); },
+      try { await onSave(p); } catch (e) { return fail(e); }
+      sh.close(); save(); render(); },
+    async reset(b, sh) { try { await onReset(); } catch (e) { return fail(e); } sh.close(); save(); render(); },
   }, { label: "Bảng giá", wide: true });
 }
 function seatTypeSheet(t, after) {
@@ -901,7 +922,9 @@ function seatTypeSheet(t, after) {
   const iconBtn = (k, on) => `<button type="button" data-act="icon" data-v="${k}" aria-pressed="${on}" class="grid size-9 cursor-pointer place-items-center rounded-lg border ${on ? "border-foreground bg-foreground text-surface" : "border-border bg-surface hover:bg-button-hover"}" title="${k || "không biểu tượng"}">${k ? ic(k, "size-4") : `<span class="text-xs">–</span>`}</button>`;
   const st = { color: t.color, icon: t.icon || "" };
   const html = `${sheetHead(isNew ? "Loại ghế mới" : `Sửa loại ghế · ${esc(t.name)}`, "Dùng chung toàn chuỗi. Ví dụ: Ghế 3 người, Sofa 4, Ghế trẻ em, Lối đi (không bán).")}
-    <div class="grid gap-3 sm:grid-cols-2">${field("Mã", input("st-id", t.id, `placeholder="sofa4" autocapitalize="none" ${isNew ? "" : "disabled"}`), isNew ? "chữ thường, số, gạch dưới" : "")}${field("Tên hiển thị", input("st-name", t.name, 'placeholder="Sofa 4 người"'))}${field("Số người ngồi", input("st-persons", t.persons, 'type="number" min="1" max="8" inputmode="numeric"'), "Ghế nhiều người chiếm n ghế liền trên sơ đồ")}${t.id === "std" ? field("Giá", input("st-price-std", "Giá cơ bản – theo Bảng giá của rạp", "disabled"), "Ghế thường là giá cơ bản (ngày thường / thứ Tư / cuối tuần × đối tượng); sửa ở nút Bảng giá của từng cơ sở.") : field("Giá", input("st-price", t.surchargeA, 'type="number" min="0" step="1000" inputmode="numeric" placeholder="5000"'), "Cộng thêm trên giá ghế thường. Ghế nhiều người: giá thường × số người + giá này.")}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Mã", input("st-id", t.id, `placeholder="sofa4" autocapitalize="none" ${isNew ? "" : "disabled"}`), isNew ? "chữ thường, số, gạch dưới" : "")}${field("Tên hiển thị", input("st-name", t.name, 'placeholder="Sofa 4 người"'))}${field("Số người ngồi", input("st-persons", t.persons, 'type="number" min="1" max="8" inputmode="numeric"'), "Ghế nhiều người chiếm n ghế liền trên sơ đồ")}${field("Cách tính giá", sel("st-mode", [["formula", "Giá cơ bản × số người + phụ thu"], ["fixed", "Giá cứng – một giá cố định"]], fixedMode ? "fixed" : "formula"), "Giá cơ bản = giá ghế thường theo hạng rạp (sửa ở nút Hạng A / Hạng B). Giá cứng: không theo ngày, đối tượng hay loại phòng; ghế đôi = giá cả cặp")}
+      <div id="st-formula" class="grid grid-cols-2 gap-3 ${fixedMode ? "hidden" : ""}">${field("Phụ thu hạng A", input("st-sa", t.surchargeA, 'type="number" min="0" step="1000" inputmode="numeric"'))}${field("Phụ thu hạng B", input("st-sb", t.surchargeB, 'type="number" min="0" step="1000" inputmode="numeric"'))}</div>
+      <div id="st-fixed" class="grid grid-cols-2 gap-3 ${fixedMode ? "" : "hidden"}">${field("Giá cứng hạng A", input("st-fa", t.fixedA ?? "", 'type="number" min="0" step="1000" inputmode="numeric" placeholder="150000"'))}${field("Giá cứng hạng B", input("st-fb", t.fixedB ?? "", 'type="number" min="0" step="1000" inputmode="numeric" placeholder="120000"'))}</div>
       <div><p class="mb-1.5 text-sm font-medium">Màu trên sơ đồ</p><div id="st-colors" class="flex flex-wrap gap-2">${Object.keys(SEAT_COLORS).map(k => swatch(k, k === st.color)).join("")}</div></div>
       <div><p class="mb-1.5 text-sm font-medium">Biểu tượng</p><div id="st-icons" class="flex flex-wrap gap-2">${iconBtn("", !st.icon)}${SEAT_ICONS.map(k => iconBtn(k, k === st.icon)).join("")}</div></div>
       <div class="flex items-end pb-2 sm:col-span-2">${chk("st-sell", "Bán được (bỏ chọn = loại không bán: bảo trì, lối đi, ghế hỏng…)", t.sellable !== false)}</div></div>
@@ -911,17 +934,18 @@ function seatTypeSheet(t, after) {
     color(b) { st.color = b.dataset.v; $("#st-colors").innerHTML = Object.keys(SEAT_COLORS).map(k => swatch(k, k === st.color)).join(""); },
     icon(b) { st.icon = b.dataset.v; $("#st-icons").innerHTML = iconBtn("", !st.icon) + SEAT_ICONS.map(k => iconBtn(k, k === st.icon)).join(""); },
     async save(b, sh) {
-      const fixed = false, id = isNew ? v("st-id").toLowerCase() : t.id, price = t.id === "std" ? 0 : Math.max(0, Math.round(+v("st-price") || 0));
-      const p = { id, name: v("st-name"), persons: Math.min(8, Math.max(1, +v("st-persons") || 1)), surcharge_a: price, surcharge_b: price, fixed_a: null, fixed_b: null, color: st.color, icon: st.icon || null, sellable: $("#st-sell").checked, sort: t.sort ?? 10, active: true };
+      const fixed = v("st-mode") === "fixed", id = isNew ? v("st-id").toLowerCase() : t.id;
+      const p = { id, name: v("st-name"), persons: Math.min(8, Math.max(1, +v("st-persons") || 1)), surcharge_a: +v("st-sa") || 0, surcharge_b: +v("st-sb") || 0, fixed_a: fixed ? Math.round(+v("st-fa")) || null : null, fixed_b: fixed ? Math.round(+v("st-fb")) || null : null, color: st.color, icon: st.icon || null, sellable: $("#st-sell").checked, sort: t.sort ?? 10, active: true };
       if (!/^[a-z0-9_]{1,16}$/.test(id)) return toast("Mã: 1–16 ký tự chữ thường, số, gạch dưới", "bad");
       if (!p.name) return toast("Nhập tên loại ghế", "bad");
+      if (fixed && (!p.fixed_a || !p.fixed_b)) return toast("Nhập giá cứng cho cả hạng A và hạng B (lớn hơn 0)", "bad");
       if (isNew && SEAT_TYPES[id]) return toast("Mã loại ghế đã có", "bad");
       const local = () => { SEAT_TYPES[id] = { id, name: p.name, persons: p.persons, surchargeA: p.surcharge_a, surchargeB: p.surcharge_b, fixedA: p.fixed_a, fixedB: p.fixed_b, color: p.color, icon: p.icon, sellable: p.sellable, sort: p.sort, builtin: !!t.builtin, active: true }; };
       if (Remote.v11 && Auth.token) { try { await Remote.rpc("save_seat_type_s", { p_token: Auth.token, p }); await Remote.reloadCatalog(); } catch (e) { return toast(Auth.message(e), "bad"); } }
       else if (ON() && Remote.v8) return toast("Máy chủ chưa chạy migration 011 (loại ghế)", "bad");
       else if (ON()) return toast("Máy chủ chưa chạy migration 008", "bad");
       else local();
-      log("admin", `${isNew ? "Thêm" : "Sửa"} loại ghế ${p.name} (${p.persons} người, +${vnd(price)} trên giá thường${p.sellable ? "" : ", không bán"})`); sh.close(); done(); toast(`Đã lưu loại ghế ${p.name}`); },
+      log("admin", `${isNew ? "Thêm" : "Sửa"} loại ghế ${p.name} (${p.persons} người, ${fixed ? `giá cứng A ${vnd(p.fixed_a)} / B ${vnd(p.fixed_b)}` : `phụ thu A ${vnd(p.surcharge_a)} / B ${vnd(p.surcharge_b)}`}${p.sellable ? "" : ", không bán"})`); sh.close(); done(); toast(`Đã lưu loại ghế ${p.name}`); },
     async del(b, sh) {
       if (!confirm(`Xoá loại ghế ${t.name}? Ghế đang mang loại này sẽ thành ghế thường.`)) return;
       if (Remote.v11 && Auth.token) { try { await Remote.rpc("delete_seat_type_s", { p_token: Auth.token, p_id: t.id }); await Remote.reloadCatalog(); } catch (e) { return toast(Auth.message(e), "bad"); } }
@@ -929,6 +953,7 @@ function seatTypeSheet(t, after) {
       else { delete SEAT_TYPES[t.id]; ROOMS.forEach(r => { if (r.seatMap) for (const k in r.seatMap) if (r.seatMap[k] === t.id) delete r.seatMap[k]; }); }
       log("admin", `Xoá loại ghế ${t.name}`); sh.close(); done(); toast("Đã xoá loại ghế"); },
   }, { label: "Loại ghế", wide: true });
+  sheetT.el.addEventListener("change", e => { if (e.target.id === "st-mode") { const fx = e.target.value === "fixed"; $("#st-formula").classList.toggle("hidden", fx); $("#st-fixed").classList.toggle("hidden", !fx); } });
 }
 function filmSheet(f) {
   const isNew = !f; f = f || { id: "f" + Date.now().toString(36).slice(-5), title: "", rating: "P", dur: 100, genre: "", img: "", active: true };
