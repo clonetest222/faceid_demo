@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -174,6 +174,8 @@ await q(`select save_seat_type_s($1,'{"id":"sofa4","name":"Sofa 4 người","per
 ok("quản lý chuỗi tạo loại ghế Sofa 4 người; quản lý rạp không tạo", (await q(`select persons, surcharge_b from seat_types where id='sofa4'`))[0].persons === 4 && /forbidden/.test(await err(`select save_seat_type_s($1,'{"id":"x","name":"X"}'::jsonb)`, [qlv.token])));
 await q(`select save_room_s($1,'{"id":"086-R2","cinema_id":"086","name":"Phòng 2","kind":"IMAX","rows":10,"cols":14,"seat_map":{"j13":"sofa4","J14":"sofa4","A1":"vip","B2":"khongco","A5":"blocked","Z9":"vip"},"active":true}'::jsonb)`, [kt.token]);
 ok("sơ đồ phòng theo loại: giữ loại tồn tại, bỏ loại lạ, ghế ngoài kích thước; cột 009 suy ra tương thích", JSON.stringify((await q(`select seat_map, vip_seats, couple, blocked from rooms where id='086-R2'`))[0]) === '{"seat_map":{"A1":"vip","A5":"blocked","J13":"sofa4","J14":"sofa4"},"vip_seats":["A1"],"couple":[],"blocked":["A5"]}');
+await q(`select save_seat_type_s($1,'{"id":"sofa4","name":"Sofa 4 người","persons":4,"fixed_a":500000,"fixed_b":400000,"color":"violet","icon":"sofa"}'::jsonb)`, [ql.token]);
+ok("013 loại ghế giá cứng A 500k / B 400k lưu được; giá cứng 0 bị chặn", (await q(`select fixed_a, fixed_b from seat_types where id='sofa4'`))[0].fixed_b == 400000 && /bad_input/.test(await err(`select save_seat_type_s($1,'{"id":"sofa4","name":"X","fixed_a":0}'::jsonb)`, [ql.token])));
 ok("không xoá loại ghế mặc định", /builtin_type/.test(await err(`select delete_seat_type_s($1,'vip')`, [ql.token])));
 await q(`select delete_seat_type_s($1,'sofa4')`, [ql.token]);
 ok("xoá loại tự tạo → ghế mang loại đó về thường, loại biến mất", JSON.stringify((await q(`select seat_map from rooms where id='086-R2'`))[0].seat_map) === '{"A1":"vip","A5":"blocked"}' && (await q(`select count(*)::int n from seat_types where id='sofa4'`))[0].n === 0);

@@ -132,7 +132,7 @@ function applyCatalog({ cinemas, rooms, films, cinemaFilms, seatTypes } = {}) {
   if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", prices: c.prices && c.prices.weekday ? c.prices : null, active: c.active !== false })); }
   if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], seatMap: r.seat_map || {}, active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
   if (films && films.length) { FILMS.length = 0; films.forEach(f => FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false })); S.films = FILMS; }
-  if (seatTypes && seatTypes.length) setSeatTypes(seatTypes.map(t => ({ id: t.id, name: t.name, persons: t.persons || 1, surchargeA: Number(t.surcharge_a) || 0, surchargeB: Number(t.surcharge_b) || 0, color: t.color || "gray", icon: t.icon || null, sellable: t.sellable !== false, sort: t.sort ?? 100, builtin: !!t.builtin, active: t.active !== false })));
+  if (seatTypes && seatTypes.length) setSeatTypes(seatTypes.map(t => ({ id: t.id, name: t.name, persons: t.persons || 1, surchargeA: Number(t.surcharge_a) || 0, surchargeB: Number(t.surcharge_b) || 0, fixedA: t.fixed_a == null ? null : Number(t.fixed_a), fixedB: t.fixed_b == null ? null : Number(t.fixed_b), color: t.color || "gray", icon: t.icon || null, sellable: t.sellable !== false, sort: t.sort ?? 100, builtin: !!t.builtin, active: t.active !== false })));
   if (cinemaFilms) { DIST.clear(); cinemaFilms.forEach(x => { if (!x.active) DIST.add(x.cinema_id + "|" + x.film_id); }); }
 }
 const filmAt = (cid, fid) => !DIST.has(cid + "|" + fid);
@@ -203,10 +203,10 @@ function tier() { if (S.user.linked && ageAt(S.user.dob, new Date()) <= 22) retu
 /* ---------- loại ghế: danh mục tự định nghĩa (011), mặc định 4 loại; mỗi loại: số người ngồi, phụ thu theo hạng rạp, màu, biểu tượng, có bán hay không ---------- */
 const SEAT_TYPES = {};
 const SEAT_TYPE_DEFAULTS = [
-  { id: "std", name: "Thường", persons: 1, surchargeA: 0, surchargeB: 0, color: "gray", icon: null, sellable: true, sort: 1, builtin: true },
-  { id: "vip", name: "VIP", persons: 1, surchargeA: 5500, surchargeB: 5500, color: "amber", icon: "crown", sellable: true, sort: 2, builtin: true },
-  { id: "couple", name: "Ghế đôi", persons: 2, surchargeA: 26000, surchargeB: 16000, color: "rose", icon: "heart", sellable: true, sort: 3, builtin: true },
-  { id: "blocked", name: "Bảo trì", persons: 1, surchargeA: 0, surchargeB: 0, color: "gray", icon: "wrench", sellable: false, sort: 99, builtin: true },
+  { id: "std", name: "Thường", persons: 1, surchargeA: 0, surchargeB: 0, fixedA: null, fixedB: null, color: "gray", icon: null, sellable: true, sort: 1, builtin: true },
+  { id: "vip", name: "VIP", persons: 1, surchargeA: 5500, surchargeB: 5500, fixedA: null, fixedB: null, color: "amber", icon: "crown", sellable: true, sort: 2, builtin: true },
+  { id: "couple", name: "Ghế đôi", persons: 2, surchargeA: 26000, surchargeB: 16000, fixedA: null, fixedB: null, color: "rose", icon: "heart", sellable: true, sort: 3, builtin: true },
+  { id: "blocked", name: "Bảo trì", persons: 1, surchargeA: 0, surchargeB: 0, fixedA: null, fixedB: null, color: "gray", icon: "wrench", sellable: false, sort: 99, builtin: true },
 ];
 function setSeatTypes(list) { for (const k in SEAT_TYPES) delete SEAT_TYPES[k]; list.forEach(t => SEAT_TYPES[t.id] = { ...t }); }
 setSeatTypes(SEAT_TYPE_DEFAULTS);
@@ -257,7 +257,9 @@ function seatPrice(sh, sid, aud = "adult") {
   const r = room(sh.roomId), c = cinemaOf(sh), t = tierOf(c), dt = dayType(sh);
   let p = t[dt][aud] ?? t[dt].adult;
   // loại ghế: ghế nhiều chỗ (đôi, ghế 3, sofa…) chiếm n ghế liền – mỗi ghế thành viên = giá cơ bản + phụ thu chia đều; cả nhóm = giá cơ bản × n + phụ thu
-  const ty = seatType(seatKind(r, sid)), sur = Number(c.tier === "A" ? ty.surchargeA : ty.surchargeB) || 0;
+  const ty = seatType(seatKind(r, sid)), sur = Number(c.tier === "A" ? ty.surchargeA : ty.surchargeB) || 0, fixed = c.tier === "A" ? ty.fixedA : ty.fixedB;
+  // giá cứng: giá cuối cùng của cả ghế/nhóm, không theo ngày, đối tượng hay loại phòng
+  if (fixed != null) return ty.persons > 1 ? Math.round(fixed / seatUnit(r, sid).length) : fixed;
   p += ty.persons > 1 ? Math.round(sur / seatUnit(r, sid).length) : sur;
   if (r.kind === "3D") p += t.s3d[dt === "weekend" ? "weekend" : "weekday"];
   if (r.kind === "GOLD") p += t.gold;
