@@ -11,8 +11,8 @@ alter table public.price_tiers enable row level security;
 drop policy if exists "read_all" on public.price_tiers; create policy "read_all" on public.price_tiers for select to anon, authenticated using (true);
 do $$ begin alter publication supabase_realtime add table public.price_tiers; exception when duplicate_object then null; end $$;
 insert into public.price_tiers (id, name, prices) values
-  ('A', 'Hạng A – Hà Nội, TP.HCM', '{"weekday":{"adult":115000,"child":68000,"senior":83000,"u22":70000},"wed":{"adult":79000,"child":68000,"senior":79000,"u22":70000},"weekend":{"adult":135000,"child":68000,"senior":93000,"u22":70000},"vip":5500,"couple":26000,"gold":60000,"imax":80000,"s3d":{"weekday":32000,"weekend":53000},"holiday":11000}'::jsonb),
-  ('B', 'Hạng B – tỉnh', '{"weekday":{"adult":70000,"child":50000,"senior":50000,"u22":60000},"wed":{"adult":60000,"child":50000,"senior":60000,"u22":60000},"weekend":{"adult":85000,"child":58000,"senior":58000,"u22":60000},"vip":5500,"couple":16000,"gold":40000,"imax":60000,"s3d":{"weekday":32000,"weekend":32000},"holiday":11000}'::jsonb)
+  ('A', 'Hạng A (Thành phố)', '{"weekday":{"adult":115000,"child":68000,"senior":83000,"u22":70000},"wed":{"adult":79000,"child":68000,"senior":79000,"u22":70000},"weekend":{"adult":135000,"child":68000,"senior":93000,"u22":70000},"vip":5500,"couple":26000,"gold":60000,"imax":80000,"s3d":{"weekday":32000,"weekend":53000},"holiday":11000}'::jsonb),
+  ('B', 'Hạng B (Cơ bản)', '{"weekday":{"adult":70000,"child":50000,"senior":50000,"u22":60000},"wed":{"adult":60000,"child":50000,"senior":60000,"u22":60000},"weekend":{"adult":85000,"child":58000,"senior":58000,"u22":60000},"vip":5500,"couple":16000,"gold":40000,"imax":60000,"s3d":{"weekday":32000,"weekend":32000},"holiday":11000}'::jsonb)
 on conflict (id) do nothing;
 
 create or replace function public.save_price_tier_s(p_token uuid, p_tier text, p jsonb)

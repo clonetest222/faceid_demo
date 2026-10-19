@@ -259,8 +259,8 @@ function seatPrice(sh, sid, aud = "adult") {
   let p = t[dt][aud] ?? t[dt].adult;
   // loại ghế: ghế nhiều chỗ (đôi, ghế 3, sofa…) chiếm n ghế liền – mỗi ghế thành viên = giá cơ bản + phụ thu chia đều; cả nhóm = giá cơ bản × n + phụ thu
   const ty = seatType(seatKind(r, sid)), sur = Number(c.tier === "A" ? ty.surchargeA : ty.surchargeB) || 0, fixed = c.tier === "A" ? ty.fixedA : ty.fixedB;
-  // giá cứng: giá cuối cùng của cả ghế/nhóm, không theo ngày, đối tượng hay loại phòng
-  if (fixed != null) return ty.persons > 1 ? Math.round(fixed / seatUnit(r, sid).length) : fixed;
+  // giá cứng: giá cố định cho MỖI ghế, không theo ngày, đối tượng hay loại phòng (ghế đôi = giá cứng × 2)
+  if (fixed != null) return fixed;
   p += ty.persons > 1 ? Math.round(sur / seatUnit(r, sid).length) : sur;
   if (r.kind === "3D") p += t.s3d[dt === "weekend" ? "weekend" : "weekday"];
   if (r.kind === "GOLD") p += t.gold;
