@@ -103,7 +103,13 @@ try {
   check("Tìm kiếm cơ sở: gõ 'Đà Nẵng' → còn 1 cơ sở", await ev("document.querySelectorAll('[data-act=\"cinema-edit\"]').length") === 1);
   await ev("(()=>{const i=document.querySelector('#coso-q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true}));return 1})()"); await sleep(300);
   await ev("location.hash='#/quyen'"); await sleep(1500);
-  check("Tài khoản & quyền: ô tìm kiếm, nút khoá / đặt lại mật khẩu từng tài khoản", await ev("!!document.querySelector('#user-q') && document.querySelectorAll('[data-act=\"acc-active\"]').length > 0 && document.querySelectorAll('[data-act=\"acc-pass\"]').length > 0"));
+  check("Tài khoản & quyền: ô tìm kiếm, nút sửa / khoá / đặt lại mật khẩu từng tài khoản, bảng quyền 5 vai trò", await ev("!!document.querySelector('#user-q') && document.querySelectorAll('[data-act=\"acc-active\"]').length > 0 && document.querySelectorAll('[data-act=\"acc-pass\"]').length > 0 && document.querySelectorAll('[data-act=\"acc-edit\"]').length > 0 && /Phục vụ/.test(document.querySelector('main').innerText)"));
+  await ev("document.querySelector('[data-act=\"acc-edit\"]').click()"); await sleep(500);
+  check("Sửa tài khoản: tên, vai trò, cơ sở, mật khẩu, trạng thái", await ev("['ac-name','ac-role','ac-pass','ac-active'].every(id=>!!document.getElementById(id))"));
+  await shot("chain_25_sua_tai_khoan"); await ev("document.querySelector('[data-sheet] [data-m=\"close\"]').click()"); await sleep(300);
+  await ev("(()=>{const i=document.querySelector('#user-q'); i.value='kythuat'; i.dispatchEvent(new Event('input',{bubbles:true}));return 1})()"); await sleep(400);
+  check("Tìm tài khoản 'kythuat' → còn đúng 1 dòng", await ev("document.querySelectorAll('[data-act=\"acc-edit\"]').length") === 1);
+  await ev("(()=>{const i=document.querySelector('#user-q'); i.value=''; i.dispatchEvent(new Event('input',{bubbles:true}));return 1})()"); await sleep(300);
   await ev("location.hash='#/baocao'"); await sleep(1200);
   check("Báo cáo: theo phim, giờ cao điểm, VIP, theo cơ sở, nhật ký có bộ lọc", /Doanh thu theo phim/.test(await txt()) && /Giờ cao điểm/.test(await txt()) && /Theo cơ sở/.test(await txt()) && await ev("!!document.querySelector('#log-type')") && await ev("document.querySelectorAll('[data-act=\"bc-day\"]').length") === 3);
   await shot("chain_13_bao_cao");

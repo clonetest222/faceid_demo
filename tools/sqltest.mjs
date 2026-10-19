@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql", "015_price_tiers.sql", "015_price_tiers.sql", "016_hr.sql", "016_hr.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql", "015_price_tiers.sql", "015_price_tiers.sql", "016_hr.sql", "016_hr.sql", "017_account.sql", "017_account.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -244,6 +244,11 @@ await q(`select hold_seat('X7','C1','HPOS',now()+interval '5 min')`);
 await q(`select sell_order_u($1,'X7','HPOS','[{"code":"VPOS1","seat":"C1","price":70000,"channel":"Quầy"}]'::jsonb)`, [nvm.token]);
 const stt = (await q(`select * from staff_stats_s($1,'2026-10-01','2026-12-31')`, [qlv.token])).find(x => x.username === "nv.moi");
 ok("016 hiệu suất: vé quầy ghi người bán, thưởng/phạt, nghỉ phép đã duyệt, ca xác nhận", stt && stt.tickets === 1 && Number(stt.revenue) === 70000 && Number(stt.rewards) === 200000 && Number(stt.violations) === 50000 && stt.leaves_approved === 1 && stt.confirmed === 1, JSON.stringify(stt && { t: stt.tickets, r: stt.revenue, rw: stt.rewards, v: stt.violations, c: stt.confirmed }));
+await q(`select account_update_s($1,'{"username":"abc.def","name":"Nguyễn Lên Chức","role":"nhanvien","cinema_id":"035","active":true}'::jsonb)`, [ql.token]);
+ok("017 quản lý chuỗi nâng khách lên nhân viên rạp 035, đổi tên", (await q(`select role, cinema_id, display_name from app_users where username='abc.def'`))[0].role === "nhanvien" && (await q(`select cinema_id from app_users where username='abc.def'`))[0].cinema_id === "035");
+ok("017 quản lý rạp 086 không sửa nhân viên rạp 035, không sửa khách; không tự hạ quyền", /wrong_cinema/.test(await err(`select account_update_s($1,'{"username":"abc.def","role":"khach"}'::jsonb)`, [qlv.token])) && /wrong_cinema/.test(await err(`select account_update_s($1,'{"username":"minh.anh","role":"khach"}'::jsonb)`, [qlv.token])) && /bad_input/.test(await err(`select account_update_s($1,'{"username":"quanly","role":"nhanvien","cinema_id":"086"}'::jsonb)`, [ql.token])));
+await q(`select account_update_s($1,'{"username":"abc.def","role":"khach","pass":"matkhau9"}'::jsonb)`, [ql.token]);
+ok("017 hạ về khách (bỏ rạp) + đặt lại mật khẩu → đăng nhập bằng mật khẩu mới", (await q(`select role, cinema_id from app_users where username='abc.def'`))[0].cinema_id === null && (await j(`select login('abc.def','matkhau9') j`)).role === "khach");
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);

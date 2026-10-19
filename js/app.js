@@ -501,6 +501,7 @@ const A = {
   async "acc-pass"(el) { const p = prompt(`Mật khẩu mới cho @${el.dataset.u} (ít nhất 6 ký tự):`); if (p == null) return; if (p.length < 6) return toast("Mật khẩu cần ít nhất 6 ký tự", "bad");
     try { await Remote.rpc("account_set_s", { p_token: Auth.token, p_user: el.dataset.u, p_active: null, p_pass: p }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); }
     log("admin", `Đặt lại mật khẩu @${el.dataset.u}`); toast("Đã đặt lại mật khẩu @" + el.dataset.u); },
+  "acc-edit"(el) { const u = (S.view.users || []).find(x => x.username === el.dataset.u); if (u) accountSheet(u); },
   "shift-new"(el) { shiftSheet({ username: el.dataset.u || "", day: el.dataset.day || hrDay() }); },
   "shift-edit"(el) { const s = Object.values(HR.cache).flat().find(x => x && x.id == el.dataset.id && x.start_at); if (s) shiftSheet(s); },
   async "shift-confirm"(el) { try { await Remote.rpc("shift_confirm_s", { p_token: Auth.token, p_id: +el.dataset.id, p_ok: el.dataset.v === "1" }); } catch (e) { return toast(Auth.message(e), "bad"); } hrInvalidate(); render(); toast(el.dataset.v === "1" ? "Đã nhận ca" : "Đã từ chối ca"); },
@@ -948,6 +949,21 @@ function priceSheet({ title, sub, cur, saveLabel, resetLabel = "", save: onSave,
 }
 /* ---------- hộp thoại nhân sự: nhân viên, ca, nghỉ phép, thưởng/phạt ---------- */
 const HR_ROLES = [["nhanvien", "Nhân viên bán vé / soát vé"], ["kythuat", "Nhân viên kỹ thuật"], ["phucvu", "Nhân viên phục vụ"], ["quanly", "Quản lý cơ sở / hệ thống"]];
+/** Sửa một tài khoản ở Tài khoản & quyền: tên, vai trò (phân quyền), cơ sở, khoá, mật khẩu */
+function accountSheet(u) {
+  const fixed = staffCinemaId(), roles = [["khach", "Khách hàng"], ...HR_ROLES];
+  const html = `${sheetHead(`Tài khoản @${esc(u.username)}`, `${esc(u.display_name)} · ${Auth.ROLE_TXT[u.role] || u.role}${u.cinema_id ? " · " + esc(cinema(u.cinema_id).name) : ""}`)}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Họ và tên", input("ac-name", u.display_name || "", 'autocomplete="off"'))}${field("Vai trò (phân quyền)", sel("ac-role", roles, u.role))}
+      ${field("Cơ sở làm việc", fixed ? input("ac-cinema-fixed", cinema(fixed).name, "disabled") : sel("ac-cinema", [["", "Toàn chuỗi / không gắn rạp"], ...CINEMAS.map(c => [c.id, `${c.id} · ${c.name}`])], u.cinema_id || ""), "Khách hàng không gắn rạp; quản lý không gắn rạp = quản lý chuỗi")}${field("Mật khẩu mới (để trống = giữ nguyên)", input("ac-pass", "", 'type="password" autocomplete="new-password" placeholder="Ít nhất 6 ký tự"'))}
+      <div class="flex items-end pb-2 sm:col-span-2">${chk("ac-active", "Đang hoạt động (bỏ chọn = khoá, đăng xuất ngay)", u.active !== false)}</div></div>
+    <p class="text-pretty text-xs text-muted">Hồ sơ nhân viên đầy đủ (SĐT, hợp đồng, lương…) sửa ở trang Nhân sự. Nhật ký quản trị ghi lại mọi thay đổi.</p>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button></div>`;
+  adminSheet(html, { async save(b, sh) {
+    const role = v("ac-role"), p = { username: u.username, name: v("ac-name"), role, cinema_id: role === "khach" ? null : (fixed || v("ac-cinema") || null), active: $("#ac-active").checked, pass: v("ac-pass") };
+    if (p.pass && p.pass.length < 6) return toast("Mật khẩu ít nhất 6 ký tự", "bad");
+    try { await Remote.rpc("account_update_s", { p_token: Auth.token, p }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 017" : Auth.message(e), "bad"); }
+    S.view.users = null; hrInvalidate(); log("admin", `Tài khoản @${u.username}: ${role}${p.cinema_id ? ", rạp " + p.cinema_id : ""}${p.active ? "" : ", khoá"}`); sh.close(); render(); toast(`Đã lưu @${u.username}`); } }, { label: "Tài khoản", wide: true });
+}
 function staffSheet(s) {
   const isNew = !s, fixed = staffCinemaId(); s = s || { username: "", display_name: "", role: "nhanvien", cinema_id: fixed || workCinema().id, phone: "", email: "", dob: null, position: "", department: "", active: true, hired_at: ymd(new Date()), contract_type: "thử việc", contract_until: null, hourly_rate: 30000, salary_base: 0, bonus_pct: 0, insurance: false, notes: "" };
   const html = `${sheetHead(isNew ? "Thêm nhân viên" : `Hồ sơ · ${esc(s.display_name)}`, isNew ? "Tạo hồ sơ và tài khoản đăng nhập; nhân viên liên kết khuôn mặt ở Tài khoản để đăng nhập FaceID / chấm công." : `@${esc(s.username)} · ${s.vneid ? "đã liên kết FaceID/VNeID" : "chưa liên kết FaceID"}`)}
