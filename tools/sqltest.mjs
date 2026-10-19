@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -194,6 +194,20 @@ await q(`select create_user($1,'kt035','abc12345','Kỹ thuật 035','kythuat','
 ok("tạo tài khoản kỹ thuật gắn rạp; nhật ký quản trị ghi lại", (await q(`select role, cinema_id from app_users where username='kt035'`))[0].role === "kythuat" && (await q(`select count(*)::int n from audit_logs where type='admin'`))[0].n >= 8);
 await q(`select reset_demo_s($1)`, [ql.token]);
 ok("012 reset_demo: suất/vé/khoá/thẻ quà tặng/lượt mã về 0, điểm khách về 120, tài khoản kiểm thử bị xoá", (await q(`select (select count(*) from shows) + (select count(*) from tickets) + (select count(*) from seat_locks) + (select count(*) from vouchers where kind='gift') + (select count(*) from voucher_uses) as n`))[0].n == 0 && (await q(`select points from app_users where username='khach'`))[0].points === 120 && (await q(`select count(*)::int n from app_users where display_name='Khách Kiểm Thử'`))[0].n === 0);
+// ---- 014: hồ sơ chính chủ
+const own1 = await j(`select register('tu.khai','matkhau1','Nguyễn Tự Khai','tukhai@example.com','0988000111') j`);
+ok("014 khai hồ sơ: ngày sinh / căn cước sai bị chặn", /bad_dob/.test(await err(`select register_citizen_s($1,'Nguyễn Tự Khai','2025-01-01','040099000111')`, [own1.token])) && /bad_id_number/.test(await err(`select register_citizen_s($1,'Nguyễn Tự Khai','1999-05-05','12345')`, [own1.token])));
+const rc = await j(`select register_citizen_s($1,'Nguyễn Tự Khai','1999-05-05','040099000111') j`, [own1.token]);
+ok("014 khai hồ sơ chính chủ → key u_<user>, chưa có ảnh gốc", rc.key === "u_tu.khai" && rc.has_template === false);
+ok("014 căn cước trùng với người khác → id_taken", /id_taken/.test(await err(`select register_citizen_s($1,'X Y','1999-05-05','040099000111')`, [reg.token])));
+const fc = await j(`select face_check('u_tu.khai', $1, 'dev1', 'tu.khai', 'ảnh', true) j`, [Array.from({ length: 128 }, (_, i) => Math.sin(i) / 7)]);
+await q(`select link_vneid($1,'u_tu.khai','ảnh',$2)`, [own1.token, fc.id]);
+ok("014 ghi ảnh gốc + liên kết → tài khoản có citizen_key u_tu.khai, ngày sinh theo khai báo", (await j(`select session_info($1) j`, [own1.token])).citizen_key === "u_tu.khai" && (await j(`select session_info($1) j`, [own1.token])).dob === "1999-05-05");
+const lv = await j(`select login_vneid2('040099000111', $1, 'dev2') j`, [Array.from({ length: 128 }, (_, i) => Math.sin(i) / 7)]);
+ok("014 đăng nhập VNeID bằng số căn cước + đúng khuôn mặt → phiên của tu.khai", lv.ok === true && lv.username === "tu.khai");
+ok("014 đăng nhập VNeID với khuôn mặt khác → từ chối; căn cước lạ → vneid_not_linked", (await j(`select login_vneid2('040099000111', $1, 'dev2') j`, [Array.from({ length: 128 }, (_, i) => Math.cos(i * 3) / 2)])).ok === false && /vneid_not_linked/.test(await err(`select login_vneid2('000000000000', $1, 'dev2')`, [Array.from({ length: 128 }, () => 0.1)])));
+ok("014 nhân viên tra hồ sơ khách theo căn cước / SĐT", (await j(`select citizen_lookup_s($1,'040099000111') j`, [nvv.token])).username === "tu.khai" && (await j(`select citizen_lookup_s($1,'0988000111') j`, [nvv.token])).key === "u_tu.khai");
+ok("014 đổi ngày sinh → ảnh gốc bị xoá (phải chụp lại)", (await j(`select register_citizen_s($1,'Nguyễn Tự Khai','1998-05-05','040099000111') j`, [own1.token])).has_template === false);
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);

@@ -36,7 +36,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
   const t0 = await (await fetch(`http://localhost:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
   const T = new Tab(t0.webSocketDebuggerUrl); await T.open();
   await T.send("Page.navigate", { url: BASE }); await sleep(2500); await T.ev("localStorage.clear(); location.hash=''; location.reload()"); await sleep(3500); await T.ev(H);
-  const uid = Date.now().toString(36).slice(-5), user = "kt" + uid, email = `kt${uid}@example.com`, phone = "09" + String(Date.now()).slice(-8);
+  const uid = Date.now().toString(36).slice(-5), user = "kt" + uid, email = `kt${uid}@example.com`, phone = "09" + String(Date.now()).slice(-8), idno = "04" + String(Date.now()).slice(-10);
   try {
     await T.waitFor(`Remote.v4`, 15000);
     const v5 = await T.ev(`Remote.hasV5()`);
@@ -56,10 +56,11 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     // 2. liên kết VNeID bằng ảnh → lưu máy chủ
     if (FACES) {
       await T.ev(`$c('[data-m="now"]')`); await sleep(600);
-      await T.ev(`$sel('vn-id','cuc')`); await T.ev(`$c('[data-m="methods"]')`); await T.waitFor(`!!document.querySelector('#fk-file')`, 10000);
+      // 014: khai hồ sơ của chính mình (tên, ngày sinh, căn cước) thay vì chọn hồ sơ mẫu
+      await T.ev(`$v('vn-name','Lê Thị Cúc');$v('vn-dob','1958-01-05');$v('vn-idno','${idno}')`); await T.ev(`$c('[data-m="methods"]')`); await T.waitFor(`!!document.querySelector('#fk-file')`, 10000);
       await T.setFile("#fk-file", join(FACES, "sheldon1.png")); await sheetDone(T);
       await T.ev(`document.querySelector('[data-scrim]')?.click()`); await sleep(1200); await T.ev(H);
-      check("Liên kết VNeID → phiên máy chủ có citizen_key, tên theo hồ sơ", (await T.ev(`Auth.user.citizenKey`)) === "cuc" && (await T.ev(`Auth.user.name`)) === "Lê Thị Cúc" && (await T.ev(`S.user.linked`)));
+      check("Liên kết VNeID theo chính chủ → phiên máy chủ có citizen_key u_<user>, tên/ngày sinh như đã khai", (await T.ev(`Auth.user.citizenKey`)) === "u_" + user && (await T.ev(`Auth.user.name`)) === "Lê Thị Cúc" && (await T.ev(`Auth.user.dob`)) === "1958-01-05" && (await T.ev(`S.user.linked`)), await T.ev(`Auth.user.citizenKey`));
       await T.ev(`location.hash='#/taikhoan'`); await sleep(800);
       check("Tài khoản: Đã xác thực VNeID · email · SĐT · lịch sử · voucher", await T.ev(`/Đã xác thực VNeID/.test($t('main')) && /${email}/.test($t('main')) && /Lịch sử đặt vé/.test($t('main')) && /Voucher/.test($t('main'))`));
       await T.shot("cust_03_taikhoan");
@@ -89,12 +90,15 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
       check("Mỗi lần đăng nhập FaceID (kể cả thất bại) có bản ghi", nLogin >= 2, nLogin + " bản ghi");
       await logout(T); await toLogin(T);
       await T.ev(`$c('[data-act="login-mode"][data-v="vneid"]')`); await sleep(400); await T.ev(H);
-      await T.ev(`$sel('li-vneid','cuc')`); await T.ev(`$c('[data-act="login-vneid"]')`); await T.waitFor(`!!Auth.user`, 15000); await sleep(600); await T.ev(H);
-      check("Đăng nhập qua VNeID → đúng tài khoản đã liên kết hồ sơ", (await T.ev(`Auth.user.username`)) === user);
+      await T.ev(`$v('li-vneid-id','${idno}');$c('[data-act="login-vneid"]')`); await sleep(1500); await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
+      await T.setFile("#lf-file", join(FACES, "sheldon2.png")); await T.waitFor(`!!Auth.user`, 60000); await sleep(600); await T.ev(H);
+      check("Đăng nhập VNeID = số căn cước + khuôn mặt chính chủ → đúng tài khoản", (await T.ev(`Auth.user && Auth.user.username`)) === user);
       await logout(T); await toLogin(T);
       await T.ev(`$c('[data-act="login-mode"][data-v="vneid"]')`); await sleep(400); await T.ev(H);
-      await T.ev(`$sel('li-vneid','binh')`); await T.ev(`$c('[data-act="login-vneid"]')`); await sleep(1500);
-      check("VNeID của hồ sơ chưa gắn tài khoản → báo rõ", (await T.ev(`$t('main')`)).includes("chưa gắn với tài khoản nào"));
+      await T.ev(`$v('li-vneid-id','000000000000');$c('[data-act="login-vneid"]')`); await sleep(1500); await T.waitFor(`!!document.querySelector('#lf-file')`, 10000);
+      await T.setFile("#lf-file", join(FACES, "sheldon2.png")); await T.waitFor(`/chưa gắn với tài khoản nào/.test($t('[data-sheet]'))`, 60000);
+      check("Số căn cước chưa gắn tài khoản → báo rõ, không có phiên", (await T.ev(`$t('[data-sheet]')`)).includes("chưa gắn với tài khoản nào") && !(await T.ev(`!!Auth.user`)));
+      await T.ev(`document.querySelector('[data-sheet] [data-m="close"]')?.click()`); await sleep(300);
       await T.ev(`$c('[data-act="login-mode"][data-v="pass"]')`); await sleep(300); await T.ev(H);
     }
     await T.ev(`$v('li-user','${user}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
@@ -186,7 +190,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
       await T.ev(`$v('li-user','nhanvien');$v('li-pass','nhanvien123');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`location.hash==='#/soat'`, 15000); await sleep(800); await T.ev(H);
       check("Soát vé có nút 'Khách quên vé'", await T.ev(`!!document.querySelector('[data-act="gate-noticket"]')`));
       await T.ev(`$c('[data-act="gate-noticket"]')`); await sleep(500);
-      await T.ev(`$sel('vn-id','cuc')`); await T.ev(`$c('[data-m="methods"]')`); await T.waitFor(`!!document.querySelector('#fk-file')`, 10000);
+      await T.ev(`$v('vn-lookup','${idno}')`); await T.ev(`$c('[data-m="methods"]')`); await T.waitFor(`!!document.querySelector('#fk-file')`, 10000);
       await T.setFile("#fk-file", join(FACES, "sheldon2.png")); await sheetDone(T);
       await T.ev(`document.querySelector('[data-m="close"]')?.click()`);
       const found = await T.waitFor(`/Vé của Lê Thị Cúc/.test($t('[data-sheet]'))`, 15000);

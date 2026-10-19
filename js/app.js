@@ -72,9 +72,9 @@ function vLogin(reg) {
     const inner = m === "pass" ? `<form class="grid gap-4" data-form="login" novalidate>${idField}${field("Mật khẩu", pass)}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${LOGIN.busy ? "Đang đăng nhập…" : "Đăng nhập"}</button></form>`
       : m === "face" ? `<form class="grid gap-4" data-form="login-face" novalidate>${idField}${err}<button type="submit" class="${B.primary} min-h-12" ${LOGIN.busy ? "disabled" : ""}>${ic("scan-face")}Quét khuôn mặt để đăng nhập</button>
           <p class="text-pretty text-xs text-muted">Dùng được sau khi tài khoản đã liên kết VNeID. Camera xử lý trên thiết bị, máy chủ chỉ nhận vector 128 số để đối chiếu với ảnh gốc – không nhận ảnh.</p></form>`
-      : `<div class="grid gap-4">${banner("info", "Mô phỏng ứng dụng VNeID", "Thực tế: web chuyển sang app VNeID, bạn quét Face ID trong app và đồng ý chia sẻ; VNeID gửi hồ sơ về rạp. Ở bản demo, chọn hồ sơ bên dưới.")}
-          ${field("Hồ sơ dân cư", selectBox("li-vneid", IDENTITIES.map(i => [i.key, `${i.name} – ${i.note}`]), LOGIN.vneid || "an"))}${err}
-          <button type="button" class="${B.primary} min-h-12" data-act="login-vneid" ${LOGIN.busy ? "disabled" : ""}>${ic("badge-check")}Đồng ý chia sẻ và đăng nhập</button></div>`;
+      : `<div class="grid gap-4">${banner("info", "Mô phỏng ứng dụng VNeID", "Thực tế: web chuyển sang app VNeID, bạn quét Face ID trong app và đồng ý chia sẻ. Ở bản demo: nhập số căn cước đã khai khi liên kết, rồi quét khuôn mặt của chính bạn.")}
+          ${field("Số căn cước", input("li-vneid-id", LOGIN.vneid && /^\d{12}$/.test(LOGIN.vneid) ? LOGIN.vneid : "", 'inputmode="numeric" maxlength="12" placeholder="12 chữ số (hoặc tên đăng nhập / email / SĐT)" autocomplete="off"'))}${err}
+          <button type="button" class="${B.primary} min-h-12" data-act="login-vneid" ${LOGIN.busy ? "disabled" : ""}>${ic("badge-check")}Mở VNeID – quét khuôn mặt</button></div>`;
     form = `<div class="flex justify-center">${tabs}</div>${inner}<p class="text-center text-sm text-muted">Chưa có tài khoản? <a href="#/dangky" class="font-medium text-foreground underline underline-offset-2">Tạo tài khoản</a></p>`;
   }
   return `<main class="grid min-h-screen place-items-center p-4">
@@ -97,22 +97,23 @@ async function doLogin(u, p) {
   afterLogin();
 }
 /** Đăng nhập bằng khuôn mặt: camera (hoặc ảnh khi không có camera) → máy chủ so với ảnh gốc của hồ sơ VNeID đã liên kết */
-function doLoginFace(id) {
+function doLoginFace(id, mode = "face") {
   if (!id) { LOGIN.err = "Nhập tên đăng nhập, email hoặc số điện thoại trước."; LOGIN.field = "user"; return render(); }
   FaceKit.preload();
   let stop = null;
-  const sh = openSheet("", { label: "Đăng nhập FaceID", onClose: () => { stop && stop(); } });
-  const serverMatch = async desc => { const r = await Auth.loginFace(id, desc); return { ok: r.ok, score: r.score, dist: r.dist, message: r.message, session: r.ok }; };
+  const vn = mode === "vneid", ttl = vn ? "VNeID – quét khuôn mặt" : "Đăng nhập FaceID";
+  const sh = openSheet("", { label: ttl, onClose: () => { stop && stop(); } });
+  const serverMatch = async desc => { const r = vn ? await Auth.loginVneid2(id, desc) : await Auth.loginFace(id, desc); return { ok: r.ok, score: r.score, dist: r.dist, message: r.message, session: r.ok }; };
   const done = r => { stop = null;
-    if (r.ok && r.session) { sh.close(); return afterLogin(`Đăng nhập bằng khuôn mặt · tương đồng ${r.score}%`); }
+    if (r.ok && r.session) { sh.close(); return afterLogin(vn ? `Đăng nhập qua VNeID · khuôn mặt khớp ${r.score}%` : `Đăng nhập bằng khuôn mặt · tương đồng ${r.score}%`); }
     sh.set(`${sheetHead("Không đăng nhập được")}${banner("bad", "", esc(r.message || "Khuôn mặt không khớp."))}${r.dist ? `<p class="text-sm text-muted">Khoảng cách đặc trưng ${String(r.dist).replace(".", ",")} > ngưỡng 0,5.</p>` : ""}<div class="grid gap-2"><button type="button" class="${B.primary}" data-m="cam">Thử lại</button><label class="${B.outline}">Dùng ảnh<input type="file" accept="image/*" capture="user" id="lf-file" class="sr-only"></label><button type="button" class="${B.ghost}" data-m="close">Đăng nhập bằng mật khẩu</button></div>`); };
   const cam = async () => {
-    if (!(await FaceKit.hasCamera())) return sh.set(`${sheetHead("Đăng nhập FaceID", "Máy này không có camera")}<p class="text-sm text-muted">Chọn ảnh khuôn mặt để đối chiếu (không kiểm tra được người thật).</p><label class="${B.primary}">Chọn ảnh<input type="file" accept="image/*" capture="user" id="lf-file" class="sr-only"></label><button type="button" class="${B.ghost}" data-m="close">Huỷ</button>`);
-    sh.set(`${sheetHead("Đăng nhập FaceID", esc(id))}<div id="fk-host" class="grid gap-4"></div><button type="button" class="${B.ghost}" data-m="close">Huỷ</button>`);
+    if (!(await FaceKit.hasCamera())) return sh.set(`${sheetHead(ttl, "Máy này không có camera")}<p class="text-sm text-muted">Chọn ảnh khuôn mặt để đối chiếu (không kiểm tra được người thật).</p><label class="${B.primary}">Chọn ảnh<input type="file" accept="image/*" capture="user" id="lf-file" class="sr-only"></label><button type="button" class="${B.ghost}" data-m="close">Huỷ</button>`);
+    sh.set(`${sheetHead(ttl, esc(id))}<div id="fk-host" class="grid gap-4"></div><button type="button" class="${B.ghost}" data-m="close">Huỷ</button>`);
     stop = FaceKit.runCamera($("#fk-host", sh.el), { refKey: null, ref: null, serverMatch, onResult: done });
   };
   sh.el.onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m === "close") { stop && stop(); sh.close(); } if (m === "cam") { stop && stop(); cam(); } };
-  sh.el.onchange = e => { if (e.target.id === "lf-file" && e.target.files[0]) { stop && stop(); stop = null; sh.set(`${sheetHead("Đăng nhập FaceID")}<div id="fk-host" class="grid gap-4"></div>`); FaceKit.runImage($("#fk-host", sh.el), e.target.files[0], { refKey: null, ref: null, serverMatch, onResult: done }); } };
+  sh.el.onchange = e => { if (e.target.id === "lf-file" && e.target.files[0]) { stop && stop(); stop = null; sh.set(`${sheetHead(ttl)}<div id="fk-host" class="grid gap-4"></div>`); FaceKit.runImage($("#fk-host", sh.el), e.target.files[0], { refKey: null, ref: null, serverMatch, onResult: done }); } };
   cam();
 }
 /** Sau khi đăng ký: mời xác thực VNeID ngay (có thể làm sau) */
@@ -169,16 +170,33 @@ function verifyFace({ who, title, fixedKey, onDone = () => {}, onResult = () => 
   FaceKit.preload();
   const ids = fixedKey ? IDENTITIES.filter(i => i.key === fixedKey) : who === "lab" || who === "gate-viewer" ? IDENTITIES : who === "teacher" ? IDENTITIES.filter(i => i.key === "gv") : IDENTITIES.filter(i => i.key !== "gv");
   let chosen = ids[0], stopCam = null, pairH = null;
+  const own = who === "self" || who === "teacher", lookup = who === "gate-viewer";   // chính chủ khai hồ sơ · nhân viên tra khách
+  const me = Auth.user || {};
   const account = who === "gate-teacher" || who === "gate-viewer" ? "Soát vé · " + Auth.user.name : who === "lab" ? "Kiểm thử · " + Auth.user.name : S.user.name;
   const sh = openSheet("", { label: title, onClose: () => { stopCam && stopCam(); pairH && pairH.close(); render(); } });
   const consent = () => sh.set(`${sheetHead(title)}
     ${who === "gate-teacher" ? `<p class="text-sm">Đối chiếu khuôn mặt 1:1 người phụ trách đoàn với ảnh gốc trong CSDL dân cư.</p>` : `
     <div class="rounded-xl border border-border p-4"><p class="text-sm font-medium">CINEVIN yêu cầu chia sẻ từ VNeID</p>
       <ul class="mt-2 grid gap-1.5 text-sm"><li class="flex items-center gap-2 text-success">${ic("check")}<span class="text-foreground">Họ và tên</span></li><li class="flex items-center gap-2 text-success">${ic("check")}<span class="text-foreground">Ngày sinh</span></li><li class="flex items-center gap-2 text-muted">${ic("x")}Ảnh khuôn mặt, số căn cước, địa chỉ</li></ul></div>`}
-    ${field(`Hồ sơ dân cư mẫu ${badge("Mô phỏng VNeID", TONE.neutral)}`, selectBox("vn-id", ids.map(i => [i.key, `${i.name} – ${i.note}`]), chosen.key))}
-    <button type="button" class="${B.primary}" data-m="methods">${who === "gate-teacher" ? "Tiếp tục" : "Mở VNeID để xác thực"}</button>`);
+    ${own ? `<div class="grid gap-3 sm:grid-cols-2"><div class="sm:col-span-2">${field("Họ và tên (theo căn cước)", input("vn-name", S.user.name || me.name || "", 'autocomplete="name"'))}</div>${field("Ngày sinh", input("vn-dob", S.user.dob || "", 'type="date"'))}${field("Số căn cước", input("vn-idno", S.user.idNumber || "", 'inputmode="numeric" maxlength="12" placeholder="12 chữ số" autocomplete="off"'), "Mô phỏng: thực tế VNeID gửi về, không phải tự khai")}</div>
+       <p class="text-pretty text-xs text-muted">Khuôn mặt của <b>bạn</b> được ghi làm ảnh gốc cho hồ sơ này; FaceID / VNeID sau này so với nó. Không dùng hồ sơ mẫu.</p>`
+     : lookup ? field("Khách là ai?", input("vn-lookup", "", 'placeholder="Số căn cước, SĐT, email hoặc tên đăng nhập" autocomplete="off"'), "Tra hồ sơ VNeID đã liên kết của khách rồi đối chiếu khuôn mặt.")
+     : field(`Hồ sơ dân cư mẫu ${badge("Mô phỏng VNeID", TONE.neutral)}`, selectBox("vn-id", ids.map(i => [i.key, `${i.name} – ${i.note}`]), chosen.key))}
+    <button type="button" class="${B.primary}" data-m="methods">${who === "gate-teacher" ? "Tiếp tục" : lookup ? "Tra hồ sơ và quét khuôn mặt" : "Mở VNeID để xác thực"}</button>`);
   const methods = async () => {
-    chosen = IDENTITIES.find(i => i.key === (selVal("vn-id") || chosen.key)) || chosen;
+    if (own && $("#vn-name", sh.el)) {
+      const name = $("#vn-name").value.trim(), dob = $("#vn-dob").value, idno = $("#vn-idno").value.replace(/\D/g, "");
+      if (name.length < 2) return toast("Nhập họ và tên", "bad"); if (!dob) return toast("Chọn ngày sinh", "bad"); if (!/^\d{12}$/.test(idno)) return toast("Số căn cước gồm 12 chữ số", "bad");
+      const age = ageAt(dob, new Date()); if (age < 5 || age > 110) return toast("Ngày sinh không hợp lệ", "bad");
+      if (ON() && Auth.token) { try { const r = await Remote.rpc("register_citizen_s", { p_token: Auth.token, p_name: name, p_dob: dob, p_id_number: idno }); chosen = { key: r.key, name: r.name, dob: r.dob, idNumber: idno, note: "" }; }
+        catch (e) { if (/PGRST202|not find|does not exist/i.test(e.message || "")) chosen = { key: "u_" + (me.username || "local"), name, dob, idNumber: idno, note: "" }; else return toast(Auth.message(e), "bad"); } }
+      else chosen = { key: "u_" + (me.username || "local"), name, dob, idNumber: idno, note: "" };
+    } else if (lookup && $("#vn-lookup", sh.el)) {
+      const idv = $("#vn-lookup").value.trim(); if (!idv) return toast("Nhập số căn cước, SĐT, email hoặc tên đăng nhập của khách", "bad");
+      if (!(ON() && Auth.token)) return toast("Cần kết nối máy chủ để tra hồ sơ khách", "bad");
+      try { const r = await Remote.rpc("citizen_lookup_s", { p_token: Auth.token, p_id: idv }); chosen = { key: r.key, name: r.name, dob: r.dob, note: "@" + r.username }; if (!r.has_template) toast("Khách chưa ghi ảnh gốc – không đối chiếu được", "bad"); }
+      catch (e) { return toast(Auth.message(e), "bad"); }
+    } else chosen = IDENTITIES.find(i => i.key === (selVal("vn-id") || chosen.key)) || chosen;
     const cam = await FaceKit.hasCamera();
     let refNote = FaceKit.getRef(chosen.key) ? "" : banner("warn", "", "Hồ sơ này chưa có ảnh gốc trên thiết bị. Lần quét này sẽ được lưu làm ảnh gốc; các lần sau so khớp với nó.");
     if (Remote.v2) { try { const st = (await Remote.rpc("citizen_status", {})).find(x => x.key === chosen.key);
@@ -407,7 +425,7 @@ const A = {
   },
   "reset-local"() { S = Store.reset(); bindProfile(); render(); },
   "vneid-self"() { verifyFace({ who: "self", title: "Liên kết VNeID", async onDone(id, r) {
-      Object.assign(S.user, { linked: true, key: id.key, name: id.name, dob: id.dob, verifiedAt: new Date().toISOString(), faceScore: r.score, method: r.method });
+      Object.assign(S.user, { linked: true, key: id.key, name: id.name, dob: id.dob, idNumber: id.idNumber || S.user.idNumber || null, verifiedAt: new Date().toISOString(), faceScore: r.score, method: r.method });
       if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("link_vneid", { p_token: Auth.token, p_key: id.key, p_method: r.method, p_face_record: r.recordId || null })); bindProfile(); }
         catch (e) { Object.assign(S.user, { linked: false, key: null, dob: null, verifiedAt: null, name: Auth.user.name }); toast(Auth.message(e), "bad"); } }
       log("vneid", `Liên kết VNeID: ${id.name}, ${ageAt(id.dob, new Date())} tuổi, qua ${r.method}`); save(); } }); },
@@ -415,7 +433,7 @@ const A = {
     if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("unlink_vneid", { p_token: Auth.token })); } catch (e) { return toast(Auth.message(e), "bad"); } }
     Object.assign(S.user, { linked: false, dob: null, key: null, name: Auth.user.name, passkey: null }); S.dependents.length = 0; bindProfile(); save(); render(); },
   "login-mode"(el) { LOGIN.mode = el.dataset.v; LOGIN.err = ""; render(); },
-  async "login-vneid"() { LOGIN.busy = true; LOGIN.err = ""; LOGIN.vneid = selVal("li-vneid") || "an"; render(); const r = await Auth.loginVneid(LOGIN.vneid); LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; return render(); } afterLogin("Đăng nhập qua VNeID"); },
+  "login-vneid"() { const id = ($("#li-vneid-id")?.value || "").trim(); LOGIN.vneid = id; if (!id) { LOGIN.err = "Nhập số căn cước (hoặc tên đăng nhập / email / SĐT)."; return render(); } doLoginFace(id, "vneid"); },
   async "pref-confirm"(el) { const on = el.getAttribute("aria-checked") !== "true"; S.user.confirmEvery = on;
     if (Remote.v5 && Auth.token) { try { Auth.refresh(await Remote.rpc("set_pref", { p_token: Auth.token, p_confirm_every: on })); } catch (e) { toast(Auth.message(e), "bad"); } }
     save(); render(); },

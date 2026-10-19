@@ -29,7 +29,7 @@ const Auth = (() => {
     face_not_linked: "Tài khoản chưa liên kết VNeID nên chưa có khuôn mặt để đối chiếu – đăng nhập bằng mật khẩu rồi liên kết ở Tài khoản.",
     face_not_enrolled: "Hồ sơ chưa có ảnh gốc trên máy chủ – xác thực lại VNeID bằng mật khẩu trước.",
     face_mismatch: "Khuôn mặt không khớp với chủ tài khoản.",
-    vneid_not_linked: "Hồ sơ VNeID này chưa gắn với tài khoản nào – đăng ký rồi liên kết VNeID ở Tài khoản.",
+    vneid_not_linked: "Số căn cước / tài khoản này chưa gắn với tài khoản nào đã xác thực VNeID.",
     voucher_unknown: "Không có mã này.", voucher_used: "Mã đã dùng rồi.", voucher_expired: "Mã đã hết hạn.", voucher_not_yours: "Thẻ quà tặng này của tài khoản khác.", voucher_invalid: "Mã giảm giá không còn hợp lệ.",
     companion_unknown: "Không tìm thấy tài khoản khách hàng này.", companion_self: "Đó là tài khoản của bạn – chọn “Tôi”.", companion_underage: "Bạn đi cùng chưa đủ tuổi xem phim này (theo hồ sơ VNeID của họ).",
     wrong_cinema: "Vé/suất này thuộc rạp khác – tài khoản của bạn chỉ thao tác ở rạp mình.",
@@ -47,6 +47,10 @@ const Auth = (() => {
     bad_input: "Thiếu tên hoặc tỉnh/thành.",
     unknown_show: "Không tìm thấy suất chiếu.",
     builtin_type: "Loại ghế mặc định không xoá được (có thể đổi tên, phụ thu).",
+    bad_dob: "Ngày sinh không hợp lệ (5–110 tuổi).",
+    bad_id_number: "Số căn cước gồm 12 chữ số.",
+    id_taken: "Số căn cước này đã gắn với tài khoản khác.",
+    already_linked: "Tài khoản đang liên kết hồ sơ khác – huỷ liên kết trước.",
     seat_sold_blocked: "Ghế đã bán / đang giữ cho suất sắp chiếu – không đánh dấu bảo trì được. Hoàn hoặc đổi vé trước.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
@@ -85,6 +89,13 @@ const Auth = (() => {
     } catch (e) { return { ok: false, message: message(e) }; }
   }
   /** Đăng nhập VNeID (mô phỏng cổng VNeID trả về hồ sơ người dùng đã đồng ý chia sẻ) */
+  /** Đăng nhập VNeID (mô phỏng): số căn cước hoặc tài khoản + khuôn mặt của chính chủ (014) */
+  async function loginVneid2(id, descriptor) {
+    try { const r = await Remote.rpc("login_vneid2", { p_id: norm(id), p_descriptor: descriptor, p_device: Remote.DEVICE });
+      if (!r.ok) return { ok: false, message: "Khuôn mặt không khớp với ảnh gốc đã đăng ký.", score: r.score, dist: Number(r.distance) };
+      store(fromServer(r)); return { ok: true, score: r.score }; }
+    catch (e) { return { ok: false, message: message(e) }; }
+  }
   async function loginVneid(key) {
     if (!(await Remote.hasV5())) return { ok: false, message: "Máy chủ chưa bật đăng nhập VNeID (migration 005)." };
     try { store(fromServer(await Remote.rpc("login_vneid", { p_key: key, p_device: Remote.DEVICE }))); return { ok: true }; }
@@ -122,5 +133,5 @@ const Auth = (() => {
     try { const r = await Remote.rpc("session_info", { p_token: user.token }); if (!r) { store(null); return false; } store(fromServer(r)); } catch (e) {}
     return true;
   }
-  return { get user() { return user; }, get token() { return user && user.token; }, login, loginFace, loginVneid, register, logout, refresh, setPoints, check, message, DEMO, ROLE_TXT };
+  return { get user() { return user; }, get token() { return user && user.token; }, login, loginFace, loginVneid, loginVneid2, register, logout, refresh, setPoints, check, message, DEMO, ROLE_TXT };
 })();

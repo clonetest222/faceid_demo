@@ -57,8 +57,8 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 | Bước | Cách làm |
 |---|---|
 | Đăng ký | Họ tên, email, SĐT, tên đăng nhập, mật khẩu (kiểm định dạng và trùng ở máy chủ). Tạo xong được mời **xác thực VNeID + FaceID** ngay, có thể để sau |
-| Đăng nhập | **Mật khẩu** (tên đăng nhập / email / SĐT) · **FaceID** (camera hoặc ảnh → máy chủ so vector với ảnh gốc của hồ sơ VNeID đã liên kết; thất bại cũng ghi bản ghi) · **VNeID** (mô phỏng app VNeID trả hồ sơ đã đồng ý chia sẻ) |
-| Hồ sơ | Liên kết VNeID **lưu trên máy chủ** (đổi thiết bị vẫn còn; một hồ sơ chỉ gắn một tài khoản); điểm thưởng; lịch sử đặt vé; voucher; tuỳ chọn "xác nhận mỗi lần đặt vé bằng passkey" |
+| Đăng nhập | **Mật khẩu** (tên đăng nhập / email / SĐT) · **FaceID** (camera hoặc ảnh → máy chủ so vector với ảnh gốc của chính chủ; thất bại cũng ghi bản ghi) · **VNeID** (014: nhập **số căn cước** đã khai khi liên kết + quét khuôn mặt của chính mình – mô phỏng app VNeID) |
+| Hồ sơ | Liên kết VNeID theo **chính chủ tài khoản** (014): khai họ tên, ngày sinh, số căn cước của mình (mô phỏng VNeID trả hồ sơ thật), khuôn mặt của mình được ghi làm ảnh gốc – không chọn hồ sơ mẫu nữa; số căn cước là duy nhất, đổi ngày sinh phải chụp lại. Liên kết **lưu trên máy chủ** (đổi thiết bị vẫn còn; một hồ sơ chỉ gắn một tài khoản); điểm thưởng; lịch sử đặt vé; voucher; tuỳ chọn "xác nhận mỗi lần đặt vé bằng passkey" |
 | Người đi cùng | Ở bước thanh toán chọn "Bạn đi cùng có tài khoản" → nhập email/SĐT/tên đăng nhập → máy chủ trả tên, đã xác thực VNeID chưa, tuổi tại ngày chiếu (không lộ ngày sinh). Bạn đã xác thực → vé `verified`, **ở cửa không cần giấy tờ**, chưa đủ tuổi thì chặn ngay; vé hiện trong "Vé của tôi" của bạn đó kèm QR riêng |
 | Đặt vé | Mã khuyến mãi (`CHAONHOM05` −10%) / thẻ quà tặng + điểm thưởng (1 điểm = 1.000 đ) tính ở máy chủ; cộng 5% điểm; phim T13+ dùng tuổi đã xác thực thì quét passkey |
 | Hoàn vé | Tiền vào **thẻ quà tặng** của chính chủ (180 ngày) |
@@ -83,13 +83,13 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 
 ## Chạy
 - Online: https://clonetest222.github.io/faceid_demo/
-- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì), `010_seat_info.sql` (tra cứu ghế: vé, người mua, đơn), `011_seat_types.sql` (loại ghế tự định nghĩa, bảng giá riêng từng rạp), `012_zero.sql` (ghế bảo trì không bán được ở máy chủ; `reset_demo` xoá thêm thẻ quà tặng, lượt mã, tài khoản kiểm thử), `013_fixed_price.sql` (giá cứng cho loại ghế). Muốn về 0: Tổng quan → **Đặt lại dữ liệu demo** (hoặc `select reset_demo();`). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
+- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì), `010_seat_info.sql` (tra cứu ghế: vé, người mua, đơn), `011_seat_types.sql` (loại ghế tự định nghĩa, bảng giá riêng từng rạp), `012_zero.sql` (ghế bảo trì không bán được ở máy chủ; `reset_demo` xoá thêm thẻ quà tặng, lượt mã, tài khoản kiểm thử), `013_fixed_price.sql` (giá cứng cho loại ghế), `014_own_identity.sql` (VNeID/FaceID theo chính chủ: khai hồ sơ, đăng nhập bằng căn cước + mặt, nhân viên tra khách theo căn cước/SĐT). Muốn về 0: Tổng quan → **Đặt lại dữ liệu demo** (hoặc `select reset_demo();`). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Ghép nối điện thoại: `?pair=MÃ`.
 
 ## Kiểm thử
 - **Trang Kiểm thử** (tài khoản quản lý): 27 ca cho FaceID, Haar, QR, kiểm tuổi tại cửa, NFC, VNeID + passkey, tự đánh dấu Đạt/Không đạt.
-- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 121 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
+- SQL (PGlite): `node tools/sqltest.mjs` (cần `npm i --prefix tools/.pg @electric-sql/pglite`) – 131 ca: đăng ký/đăng nhập email·SĐT·FaceID·VNeID, liên kết VNeID, voucher, điểm, hoàn vé, vé theo hồ sơ, một QR cho cả đơn, chuỗi rạp (nhân viên sai rạp, quản lý rạp/chuỗi, doanh thu theo rạp), quản trị (kỹ thuật khoá ghế, phân phối phim, đổi/huỷ suất hoàn tiền, xoá phòng/cơ sở).
 - Đầu-cuối (Edge headless): đăng nhập 3 vai, chặn quyền, mua vé, QR động, soát vé bằng ảnh/mã, FaceID qua ảnh, Haar.
 - `node tools/e2e-customer.mjs [URL] [ảnh] [thư mục ảnh mặt]`: 36 bước nghiệp vụ khách hàng, gồm bạn đi cùng có tài khoản và cửa soát đơn nhiều vé (cần 005).
 - `node tools/e2e-more.mjs [URL]`: mua thêm vé cùng suất, một QR cho cả đơn / tách từng vé (10 bước).
