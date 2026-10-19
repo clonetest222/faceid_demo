@@ -121,7 +121,6 @@ function seatMap(sh, selected, act, opts = {}) {
   return h + `</div></div><div class="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted sm:flex sm:flex-wrap sm:justify-center sm:gap-x-5">
     ${priceLegend(sh).types.filter(t => t.sellable).map(t => `<span class="flex items-center gap-1.5"><i class="grid size-4 place-items-center rounded border ${seatColor(t, "dot")}">${t.icon ? ic(t.icon, "size-2.5") : ""}</i>${esc(t.name)}${t.unitSize > 1 ? ` (${t.unitSize} ghế)` : t.persons > 1 ? ` (${t.persons} người)` : ""} ${vnd(t.price)}</span>`).join("")}
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-primary"></i>Bạn chọn</span>
-    <span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-muted/50 bg-background"></i>Người khác đang giữ</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span>
     ${priceLegend(sh).types.filter(t => !t.sellable).map(t => `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-border bg-background"></i>${esc(t.name)} (${t.n})</span>`).join("")}
     ${mine.size ? `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-success/50 bg-success-bg"></i>Ghế của bạn</span>` : ""}</div>
