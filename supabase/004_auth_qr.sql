@@ -106,6 +106,7 @@ returns void language sql security definer set search_path = public as $$
 $$;
 
 -- quản lý xem / tạo tài khoản nhân viên
+drop function if exists public.list_users(uuid);   -- 006 đổi kiểu trả về; chạy lại file gộp không lỗi
 create or replace function public.list_users(p_token uuid)
 returns table (username text, role text, display_name text, created_at timestamptz)
 language plpgsql stable security definer set search_path = public as $$
@@ -139,6 +140,7 @@ begin
   return true;
 end $$;
 
+drop function if exists public.refund_ticket_u(uuid, text);   -- 005 đổi kiểu trả về
 create or replace function public.refund_ticket_u(p_token uuid, p_code text)
 returns boolean language plpgsql security definer set search_path = public as $$
 declare u app_users;

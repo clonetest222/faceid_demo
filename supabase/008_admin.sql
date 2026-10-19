@@ -6,7 +6,7 @@
 
 -- ---------- vai trò kỹ thuật ----------
 alter table public.app_users drop constraint if exists app_users_role_check;
-alter table public.app_users add constraint app_users_role_check check (role in ('khach', 'nhanvien', 'kythuat', 'quanly'));
+alter table public.app_users add constraint app_users_role_check check (role in ('khach', 'nhanvien', 'kythuat', 'phucvu', 'quanly'));   -- 'phucvu' thêm ở 016, ghi sẵn để chạy lại không lỗi
 insert into public.app_users (username, pass_hash, role, display_name, cinema_id)
 values ('kythuat', extensions.crypt('kythuat123', extensions.gen_salt('bf', 8)), 'kythuat', 'Hoàng Văn Kỹ', '086')
 on conflict (username) do nothing;
