@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -130,8 +130,8 @@ ok("chain_stats: doanh thu/ghế theo rạp", cs.length === 2 && cs.find(x => x.
 // ---- quản trị chuỗi (008)
 const kt = await j(`select login('kythuat','kythuat123') j`);
 ok("kỹ thuật đăng nhập: vai trò kythuat gắn rạp 086; nhật ký có bản ghi đăng nhập", kt.role === "kythuat" && kt.cinema_id === "086" && (await q(`select count(*)::int n from audit_logs where type='login' and msg like '@kythuat%'`))[0].n === 1);
-await q(`select save_room_s($1,'{"id":"086-R1","cinema_id":"086","name":"Phòng 1","kind":"2D","rows":8,"cols":12,"vip":[3,4,5],"blocked":["a1","B2"],"active":true}'::jsonb)`, [kt.token]);
-ok("kỹ thuật khoá ghế A1, B2 phòng 086-R1", JSON.stringify((await q(`select blocked from rooms where id='086-R1'`))[0].blocked) === '["A1","B2"]', JSON.stringify((await q(`select blocked, seat_map from rooms where id='086-R1'`))[0]));
+await q(`select save_room_s($1,'{"id":"086-R1","cinema_id":"086","name":"Phòng 1","kind":"2D","rows":8,"cols":12,"vip":[3,4,5],"blocked":["h11","H12"],"active":true}'::jsonb)`, [kt.token]);
+ok("kỹ thuật khoá ghế H11, H12 phòng 086-R1", JSON.stringify((await q(`select blocked from rooms where id='086-R1'`))[0].blocked) === '["H11","H12"]', JSON.stringify((await q(`select blocked, seat_map from rooms where id='086-R1'`))[0]));
 ok("nhân viên không sửa phòng", /forbidden/.test(await err(`select save_room_s($1,'{"id":"086-R1","cinema_id":"086","rows":8,"cols":12}'::jsonb)`, [nvv.token])));
 ok("kỹ thuật rạp 086 không sửa phòng rạp 035", /wrong_cinema/.test(await err(`select save_room_s($1,'{"id":"035-R1","cinema_id":"035","rows":8,"cols":12}'::jsonb)`, [kt.token])));
 await q(`select save_room_s($1,'{"id":"086-R2","cinema_id":"086","name":"Phòng 2","kind":"IMAX","rows":10,"cols":14,"vip":[4,5],"active":true}'::jsonb)`, [qlv.token]);
@@ -181,11 +181,17 @@ await q(`select save_cinema_prices_s($1,'086','{"weekday":{"adult":75000,"u22":6
 ok("quản lý rạp đặt bảng giá riêng cho rạp mình; không đặt cho rạp khác; giá người lớn 0 bị chặn", ((await q(`select prices from cinemas where id='086'`))[0].prices.weekday.adult === 75000) && /wrong_cinema/.test(await err(`select save_cinema_prices_s($1,'035','{}'::jsonb)`, [qlv.token])) && /bad_input/.test(await err(`select save_cinema_prices_s($1,'086','{"weekday":{"adult":0,"u22":1,"child":1,"senior":1},"wed":{"adult":1,"u22":1,"child":1,"senior":1},"weekend":{"adult":1,"u22":1,"child":1,"senior":1}}'::jsonb)`, [qlv.token])));
 await q(`select save_cinema_prices_s($1,'086',null)`, [qlv.token]);
 ok("bỏ bảng giá riêng → prices null", (await q(`select prices from cinemas where id='086'`))[0].prices === null);
+// ---- 012: ghế bảo trì không bán được; không đánh dấu bảo trì ghế đã bán
+await q(`select add_show_s($1,'X5','f1','086-R2',now()+interval '12h',now()+interval '14h')`, [qlv.token]);
+ok("012 hold_seat ghế bảo trì (086-R2/A5) → false ở máy chủ; ghế thường bên cạnh → true", (await q(`select hold_seat('X5','A5','H12',now()+interval '5 min') r`))[0].r === false && (await q(`select hold_seat('X5','A6','H12',now()+interval '5 min') r`))[0].r === true);
+ok("012 đánh dấu bảo trì ghế đã bán sắp chiếu (X3/A1) → seat_sold_blocked A1", /seat_sold_blocked A1/.test(await err(`select save_room_s($1,'{"id":"086-R1","cinema_id":"086","rows":8,"cols":12,"seat_map":{"A1":"blocked"}}'::jsonb)`, [kt.token])));
 ok("xoá phòng còn vé sắp chiếu → room_in_use; quản lý rạp không xoá cơ sở", /room_in_use/.test(await err(`select delete_room_s($1,'086-R1')`, [qlv.token])) && /forbidden/.test(await err(`select delete_cinema_s($1,'099')`, [qlv.token])));
 await q(`select delete_cinema_s($1,'099')`, [ql.token]);
 ok("quản lý chuỗi xoá cơ sở chưa có vé", (await q(`select count(*)::int n from cinemas where id='099'`))[0].n === 0);
 await q(`select create_user($1,'kt035','abc12345','Kỹ thuật 035','kythuat','035')`, [ql.token]);
 ok("tạo tài khoản kỹ thuật gắn rạp; nhật ký quản trị ghi lại", (await q(`select role, cinema_id from app_users where username='kt035'`))[0].role === "kythuat" && (await q(`select count(*)::int n from audit_logs where type='admin'`))[0].n >= 8);
+await q(`select reset_demo_s($1)`, [ql.token]);
+ok("012 reset_demo: suất/vé/khoá/thẻ quà tặng/lượt mã về 0, điểm khách về 120, tài khoản kiểm thử bị xoá", (await q(`select (select count(*) from shows) + (select count(*) from tickets) + (select count(*) from seat_locks) + (select count(*) from vouchers where kind='gift') + (select count(*) from voucher_uses) as n`))[0].n == 0 && (await q(`select points from app_users where username='khach'`))[0].points === 120 && (await q(`select count(*)::int n from app_users where display_name='Khách Kiểm Thử'`))[0].n === 0);
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);

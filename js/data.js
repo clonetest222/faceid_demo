@@ -68,7 +68,8 @@ function buildSchedule() {
         rows.push({ id, film_id: fid, room_id: r.id, cinema_id: c.id, format: ROOM_KIND_TXT[r.kind], start_at: st.toISOString(), end_at: en.toISOString() });
         let seed = [...id].reduce((a, c2) => (a * 31 + c2.charCodeAt(0)) >>> 0, 7);
         const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-        const seen = new Set(), fill = 0.08 + ((ci * 7 + i) % 5) * 0.06;
+        // không gieo ghế "đã bán" mẫu nữa: mọi suất bắt đầu từ 0, số liệu chỉ đến từ giao dịch thật
+        const seen = new Set(), fill = 0;
         for (let k = 0; k < r.rows * r.cols * fill; k++) { const sid = seatId(rnd() * r.rows | 0, rnd() * r.cols | 0); if (!seen.has(sid)) { seen.add(sid); sold.push({ show_id: id, seat: sid }); } }
       });
     });

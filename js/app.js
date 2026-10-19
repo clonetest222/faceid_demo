@@ -457,6 +457,7 @@ const A = {
       el.disabled = true; const got = [];
       for (const sid of list) { const ok = await call("hold_seat", { p_show: d.showId, p_seat: sid, p_hold: d.id, p_until: until });
         if (!ok) { got.forEach(g => call("release_seat", { p_show: d.showId, p_seat: g, p_hold: d.id })); if (ok === false) toast(list.length > 1 ? "Ghế trong nhóm vừa có người khác giữ" : "Ghế vừa có người khác giữ"); return render(); } got.push(sid); }
+      if (S.draft !== d) { got.forEach(g => call("release_seat", { p_show: d.showId, p_seat: g, p_hold: d.id })); return render(); }   // đơn đã bị huỷ/hết hạn trong lúc chờ máy chủ
       d.until = until; list.forEach(sid => { d.seats.push(sid); (S.seats[d.showId] ||= {})[sid] = { st: "held", by: d.id, until }; });
       if (list.length > 1) toast(`${seatType(seatKind(room(show(d.showId).roomId), list[0])).name}: đã lấy ${list.length} ghế ${list.join(", ")}`);
     }

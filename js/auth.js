@@ -47,10 +47,13 @@ const Auth = (() => {
     bad_input: "Thiếu tên hoặc tỉnh/thành.",
     unknown_show: "Không tìm thấy suất chiếu.",
     builtin_type: "Loại ghế mặc định không xoá được (có thể đổi tên, phụ thu).",
+    seat_sold_blocked: "Ghế đã bán / đang giữ cho suất sắp chiếu – không đánh dấu bảo trì được. Hoàn hoặc đổi vé trước.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
   };
-  const message = e => { const m = String((e && (e.message || e)) || ""); for (const k in ERR) if (m.includes(k)) return ERR[k]; return "Không kết nối được máy chủ – thử lại."; };
+  const message = e => { const m = String((e && (e.message || e)) || "");
+    const sb = /seat_sold_blocked ([A-Z0-9, ]+)/.exec(m); if (sb) return `Ghế ${sb[1]} đã bán / đang giữ cho suất sắp chiếu – không đánh dấu bảo trì được. Hoàn hoặc đổi vé trước.`;
+    for (const k in ERR) if (m.includes(k)) return ERR[k]; return "Không kết nối được máy chủ – thử lại."; };
   let user = null;
   try { user = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
   const store = u => { user = u; try { u ? localStorage.setItem(KEY, JSON.stringify(u)) : localStorage.removeItem(KEY); } catch (e) {} };
