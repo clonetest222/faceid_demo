@@ -46,8 +46,9 @@ function vLich() {
   const now = new Date(), mode = S.view.lichMode === "phim" ? "phim" : "rap", c = curCinema();
   const tabs = `<div class="inline-flex rounded-xl border border-border bg-surface p-1" role="tablist">${[["rap", "Theo rạp"], ["phim", "Theo phim"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${mode === k}" data-act="lich-mode" data-v="${k}" class="h-9 cursor-pointer rounded-lg px-3 text-sm ${mode === k ? "bg-foreground text-surface" : "text-foreground/70 hover:bg-item-hover"}">${l}</button>`).join("")}</div>`;
   const head = pageHead("Lịch chiếu", `${WEEKDAY[now.getDay()]}, ${dmy(now)} · bây giờ ${hhmm(now)}`, tabs);
-  const loading = !S.shows.length && Remote.status === "connecting";
-  const pickDay = `<div class="mb-5">${dateStrip(days, cur, "lich-day")}</div>`;
+  const loading = !S.shows.length && Remote.status === "connecting", lq = (S.view.lichQ || "").trim().toLowerCase();
+  const matchFilm = f => !lq || [f.title, f.genre, f.rating].some(x => (x || "").toLowerCase().includes(lq));
+  const pickDay = `<div class="mb-5 flex flex-wrap items-center gap-3">${dateStrip(days, cur, "lich-day")}${searchBox("lich-q", "Tìm phim theo tên, thể loại, nhãn tuổi…", S.view.lichQ, "min-w-[220px] flex-1")}</div>`;
   const chipRow = ss => byFormat(ss).map(([k, list]) => `<div class="flex flex-wrap items-center gap-2">${fmtTag(k)}${list.map(timeChip).join("")}</div>`).join("");
   let body;
   if (mode === "rap") {
@@ -56,8 +57,8 @@ function vLich() {
     let list;
     if (loading) list = `<div class="grid gap-3 lg:grid-cols-2">${skelRows(4, "h-40")}</div>`;
     else {
-      const films = S.films.map(f => [f, showsOf(c.id).filter(s => s.filmId === f.id && dayKey(s.start) === cur).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(x => x[1].length);
-      list = !films.length ? card(emptyState("calendar-x", "Chưa có suất chiếu ngày này", `${esc(c.name)} chưa lên lịch cho ngày đã chọn. Xem ngày khác, hoặc đổi sang rạp khác.`, `<button class="${B.outline}" data-act="cinema-pick">Đổi rạp</button>`))
+      const films = S.films.filter(matchFilm).map(f => [f, showsOf(c.id).filter(s => s.filmId === f.id && dayKey(s.start) === cur).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(x => x[1].length);
+      list = !films.length ? card(lq ? emptyState("search-x", "Không có phim khớp", "Thử từ khoá khác hoặc xoá tìm kiếm.") : emptyState("calendar-x", "Chưa có suất chiếu ngày này", `${esc(c.name)} chưa lên lịch cho ngày đã chọn. Xem ngày khác, hoặc đổi sang rạp khác.`, `<button class="${B.outline}" data-act="cinema-pick">Đổi rạp</button>`))
         : `<div class="grid gap-3 lg:grid-cols-2">${films.map(([f, ss]) => `<article class="flex gap-4 rounded-xl border border-border bg-surface p-4">
           ${poster(f, "h-[132px] w-[88px] shrink-0")}
           <div class="min-w-0 flex-1">
@@ -69,8 +70,8 @@ function vLich() {
     body = head + sub + pickDay + list;
   } else {
     // Theo phim: chọn phim → ngày → tỉnh/thành → từng rạp (kể cả nhiều cơ sở cùng thành phố) → suất
-    const fid = S.films.some(f => f.id === S.view.lichFilm) ? S.view.lichFilm : S.films[0].id, f = film(fid);
-    const filmRow = `<div class="-mx-4 mb-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2">${S.films.map(x => `<button type="button" data-act="lich-film" data-v="${x.id}" aria-pressed="${x.id === fid}" class="flex h-[72px] w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-xl border p-2 text-left ${x.id === fid ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${poster(x, "h-14 w-10 shrink-0")}<span class="min-w-0"><span class="line-clamp-2 text-sm font-medium leading-tight">${esc(x.title)}</span><span class="block text-xs ${x.id === fid ? "text-surface/70" : "text-muted"}">${x.rating} · ${x.dur} phút</span></span></button>`).join("")}</div></div>`;
+    const filmsQ = S.films.filter(matchFilm), fid = filmsQ.some(f => f.id === S.view.lichFilm) ? S.view.lichFilm : (filmsQ[0] || S.films[0]).id, f = film(fid);
+    const filmRow = `<div class="-mx-4 mb-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2">${filmsQ.map(x => `<button type="button" data-act="lich-film" data-v="${x.id}" aria-pressed="${x.id === fid}" class="flex h-[72px] w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-xl border p-2 text-left ${x.id === fid ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${poster(x, "h-14 w-10 shrink-0")}<span class="min-w-0"><span class="line-clamp-2 text-sm font-medium leading-tight">${esc(x.title)}</span><span class="block text-xs ${x.id === fid ? "text-surface/70" : "text-muted"}">${x.rating} · ${x.dur} phút</span></span></button>`).join("")}</div></div>`;
     const ss = S.shows.filter(s => s.status !== "cancelled" && s.filmId === fid && dayKey(s.start) === cur);
     const cityList = cities().filter(ct => ss.some(s => cinemaOf(s).city === ct));
     const city = cityList.includes(S.view.lichCity) ? S.view.lichCity : (cityList.includes(c.city) ? c.city : cityList[0]);
@@ -269,11 +270,12 @@ function vVe() {
     : `<div class="mb-4 flex items-center justify-between gap-2"><span class="text-sm font-medium">Vé đang xem</span>${ticketStatus(t)}</div>${seatTabs}${info}`;
   // "Vé khác": gom theo suất, mỗi suất một dòng với danh sách ghế
   const groups = []; ts.filter(x => !sameShow.includes(x)).forEach(x => { const k = x.showId + "|" + x.status; let g = groups.find(y => y.k === k); if (!g) groups.push(g = { k, showId: x.showId, items: [] }); g.items.push(x); });
-  const others = groups;
+  const vq = (S.view.veQ || "").trim().toLowerCase();
+  const others = groups.filter(g => !vq || g.items.some(x => { const s2 = show(x.showId); return [film(s2.filmId).title, x.code, x.seat, cinemaOf(s2).name, ddmm(s2.start), x.status === "used" ? "đã xem" : x.status === "refunded" ? "đã hoàn" : "sắp chiếu"].join(" ").toLowerCase().includes(vq); }));
   const body = head + `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
     <section class="rounded-xl border border-border bg-surface p-4 sm:p-5">${top}</section>
-    <section>${h2("Vé khác")}${others.length ? `<div class="overflow-hidden rounded-xl border border-border bg-surface">${others.map(g => { const x = g.items[0], s2 = show(g.showId), f2 = film(s2.filmId), seats = g.items.map(y => y.seat);
-      return `<button type="button" data-act="ticket-pick" data-code="${x.code}" class="flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-surface-hover">${poster(f2, "h-14 w-10 shrink-0")}<span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(f2.title)}${g.items.length > 1 ? ` <span class="text-sm font-normal text-muted">· ${g.items.length} vé</span>` : ""}</span><span class="block truncate text-xs text-muted">${dayLabel(s2.start)} · ${hhmm(s2.start)} · ${placeOf(s2)} · ghế ${esc(seats.slice(0, 6).join(", "))}${seats.length > 6 ? ` +${seats.length - 6}` : ""}</span></span>${ticketStatus(x)}</button>`; }).join("")}</div>` : `<p class="text-sm text-muted">Chưa có vé khác. Mua thêm vé cho bạn bè bằng nút “Mua thêm vé cùng suất”, hoặc <a href="#/lich" class="font-medium text-foreground underline underline-offset-2">xem lịch chiếu</a>.</p>`}
+    <section>${h2("Vé khác", searchBox("ve-q", "Tìm vé theo phim, mã, ghế, rạp, ngày…", S.view.veQ, "w-full max-w-[320px]"))}${others.length ? `<div class="overflow-hidden rounded-xl border border-border bg-surface">${others.map(g => { const x = g.items[0], s2 = show(g.showId), f2 = film(s2.filmId), seats = g.items.map(y => y.seat);
+      return `<button type="button" data-act="ticket-pick" data-code="${x.code}" class="flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-surface-hover">${poster(f2, "h-14 w-10 shrink-0")}<span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(f2.title)}${g.items.length > 1 ? ` <span class="text-sm font-normal text-muted">· ${g.items.length} vé</span>` : ""}</span><span class="block truncate text-xs text-muted">${dayLabel(s2.start)} · ${hhmm(s2.start)} · ${placeOf(s2)} · ghế ${esc(seats.slice(0, 6).join(", "))}${seats.length > 6 ? ` +${seats.length - 6}` : ""}</span></span>${ticketStatus(x)}</button>`; }).join("")}</div>` : `<p class="text-sm text-muted">${vq ? "Không có vé khớp từ khoá." : "Chưa có vé khác. Mua thêm vé cho bạn bè bằng nút “Mua thêm vé cùng suất”, hoặc <a href=\"#/lich\" class=\"font-medium text-foreground underline underline-offset-2\">xem lịch chiếu</a>."}</p>`}
     ${S.gifts.length ? `<div class="mt-4">${h2("Thẻ quà tặng")}<div class="flex flex-wrap gap-2">${S.gifts.map(g => tone(`${g.code} · ${vnd(g.amount)}`, "neutral")).join("")}</div></div>` : ""}</section></div>`;
   return customerShell("ve", body);
 }

@@ -475,6 +475,7 @@ const A = {
   "pick-show"(el) { releaseDraft(); S.draft = { id: rid("D"), showId: el.dataset.show, seats: [], until: null }; save(); go("ghe"); },
   // ghế nhóm (đôi, ghế 3, sofa…): một nút = cả nhóm ghế → giữ / nhả tất cả thành viên, đơn có đủ n ghế
   async "toggle-seat"(el) { const d = S.draft, list = el.dataset.group ? el.dataset.group.split(",") : [el.dataset.seat];
+    if (!d || !show(d.showId)) return go("lich");   // đơn đã bị nhả (hết hạn / huỷ ở tab khác) trong lúc sơ đồ còn hiển thị
     if (list.some(sid => d.seats.includes(sid))) { list.forEach(sid => { const i = d.seats.indexOf(sid); if (i >= 0) d.seats.splice(i, 1); delete S.seats[d.showId][sid]; call("release_seat", { p_show: d.showId, p_seat: sid, p_hold: d.id }); }); }
     else {
       if (d.seats.length + list.length > S.params.maxTickets) return toast(`Tối đa ${S.params.maxTickets} vé mỗi đơn`); if (list.some(sid => seatState(d.showId, sid))) return toast("Ghế vừa có người giữ");
@@ -488,6 +489,9 @@ const A = {
     }
     d.assign = null; save(); render(); },
   /* nhân sự */
+  "search-clear"(el) { SEARCH_BOXES[el.dataset.id](""); render(); const n = $("#" + el.dataset.id); n && n.focus(); },
+  "shift-request"() { shiftRequestSheet(); },
+  async "shift-approve"(el) { try { await Remote.rpc("shift_approve_s", { p_token: Auth.token, p_id: +el.dataset.id, p_ok: el.dataset.v === "1" }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 018" : Auth.message(e), "bad"); } hrInvalidate(); render(); toast(el.dataset.v === "1" ? "Đã duyệt ca" : "Đã từ chối ca"); },
   "hr-tab"(el) { HR.tab = el.dataset.v; HR.q = ""; render(); },
   "hr-view"(el) { HR.view = el.dataset.v; render(); },
   "hr-nav"(el) { const n = +el.dataset.v, d = new Date(hrDay() + "T00:00:00"); if (!n) HR.day = ymd(new Date()); else if (HR.tab === "ca" && HR.view === "week" || CUR_ROUTE === "calam") HR.day = ymd(addDays(d, 7 * n)); else if (HR.tab === "ca" && HR.view === "month") HR.day = ymd(new Date(d.getFullYear(), d.getMonth() + n, 1)); else HR.day = ymd(addDays(d, n)); render(); },
@@ -1009,6 +1013,23 @@ function shiftSheet(s) {
     async del(b, sh) { if (!confirm("Xoá ca này?")) return; try { await Remote.rpc("shift_delete_s", { p_token: Auth.token, p_id: s.id }); } catch (e) { return toast(Auth.message(e), "bad"); } hrInvalidate(); sh.close(); render(); toast("Đã xoá ca"); },
   }, { label: "Ca làm việc", wide: true });
 }
+/** Nhân viên tự chọn ca: ngày + ca mẫu (sáng / chiều / tối) hoặc giờ tuỳ chỉnh + vị trí → chờ quản lý duyệt */
+function shiftRequestSheet() {
+  const PRESET = [["sang", "Sáng · 08:00 – 13:00"], ["chieu", "Chiều · 13:00 – 18:00"], ["toi", "Tối · 18:00 – 23:00"], ["khac", "Tuỳ chỉnh giờ"]], TIMES = { sang: ["08:00", "13:00"], chieu: ["13:00", "18:00"], toi: ["18:00", "23:00"] };
+  const myDuty = Auth.user.role === "kythuat" ? "kythuat" : Auth.user.role === "phucvu" ? "phucvu" : "quay";
+  const html = `${sheetHead("Đăng ký ca làm việc", `${esc(workCinema().name)} · quản lý duyệt xong ca mới có hiệu lực`)}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Ngày", input("rq-day", ymd(addDays(new Date(), 1)), 'type="date"'))}${field("Ca", sel("rq-kind", PRESET, "sang"))}${field("Bắt đầu", input("rq-start", "08:00", 'type="time"'))}${field("Kết thúc", input("rq-end", "13:00", 'type="time"'))}${field("Vị trí", sel("rq-duty", DUTIES.map(x => [x[0], x[1]]), myDuty))}${field("Ghi chú", input("rq-note", "", 'placeholder="Có thể đổi ca với …"'))}
+      <div class="flex items-end pb-2 sm:col-span-2">${chk("rq-repeat", "Đăng ký cùng ca cho 7 ngày liên tiếp", false)}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("send")}Gửi đăng ký</button></div>`;
+  const sh = adminSheet(html, { async save(b, sh2) {
+    const day = v("rq-day"), t1 = v("rq-start"), t2 = v("rq-end"); if (!day || !t1 || !t2) return toast("Chọn ngày và giờ", "bad");
+    const reps = $("#rq-repeat").checked ? 7 : 1; let n = 0, err = "";
+    for (let k = 0; k < reps; k++) { const d2 = ymd(addDays(new Date(day + "T00:00:00"), k)); let a = new Date(d2 + "T" + t1 + ":00"), z = new Date(d2 + "T" + t2 + ":00"); if (z <= a) z = addDays(z, 1);
+      const p = { cinema_id: workCinema().id, start_at: a.toISOString(), end_at: z.toISOString(), kind: kindOf(a.getHours()), duty: v("rq-duty"), note: v("rq-note") };
+      try { await Remote.rpc("shift_request_s", { p_token: Auth.token, p }); n++; } catch (e) { err = hrNeed(e) ? "Máy chủ chưa chạy migration 018" : Auth.message(e); if (reps === 1) return toast(err, "bad"); } }
+    hrInvalidate(); sh2.close(); render(); toast(`Đã gửi ${n} ca, chờ quản lý duyệt${err ? " · bỏ qua: " + err : ""}`, err ? "bad" : ""); } }, { label: "Đăng ký ca", wide: true });
+  sh.el.addEventListener("change", e => { if (e.target.id === "rq-kind" && TIMES[e.target.value]) { $("#rq-start").value = TIMES[e.target.value][0]; $("#rq-end").value = TIMES[e.target.value][1]; } });
+}
 function leaveSheet() {
   const html = `${sheetHead("Xin nghỉ phép / tăng ca", "Gửi quản lý cơ sở duyệt.")}
     <div class="grid gap-3 sm:grid-cols-2">${field("Loại", sel("lv-kind", [["nghi", "Nghỉ phép"], ["tangca", "Đăng ký tăng ca"]], "nghi"))}${field("Số giờ (tăng ca)", input("lv-hours", "", 'type="number" min="1" max="12" step="0.5" inputmode="decimal" placeholder="2"'))}${field("Từ ngày", input("lv-from", ymd(addDays(new Date(), 1)), 'type="date"'))}${field("Đến ngày", input("lv-to", ymd(addDays(new Date(), 1)), 'type="date"'))}<div class="sm:col-span-2">${field("Lý do", input("lv-reason", "", 'placeholder="Việc gia đình, khám bệnh…"'))}</div></div>
@@ -1221,7 +1242,8 @@ document.addEventListener("submit", e => {
   Auth.register(vals).then(r => { LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; LOGIN.field = r.field || ""; render(); refill(); const x = $("#li-" + ({ user: "user", pass: "pass", name: "name", email: "email", phone: "phone" }[r.field] || "user")); x && x.focus(); return; }
     LOGIN = { err: "", field: "", busy: false, show: false }; bindProfile(); save(); location.hash = "#/lich"; render(); offerVneid(); });
 });
-const SEARCH_BOXES = { "hr-q": v => HR.q = v, "coso-q": v => S.view.cosoQ = v, "phim-q": v => S.view.phimQ = v, "user-q": v => S.view.userQ = v };
+const SEARCH_BOXES = { "hr-q": v => HR.q = v, "coso-q": v => S.view.cosoQ = v, "phim-q": v => S.view.phimQ = v, "user-q": v => S.view.userQ = v,
+  "lich-q": v => S.view.lichQ = v, "ve-q": v => S.view.veQ = v, "doan-q": v => S.view.doanQ = v, "suat-q": v => S.view.suatQ = v, "quay-q": v => S.view.quayQ = v, "soat-q": v => S.view.soatQ = v, "tq-q": v => S.view.tqQ = v, "log-q": v => S.view.logQ = v };
 document.addEventListener("input", e => {
   if (SEARCH_BOXES[e.target.id]) { const id = e.target.id, pos = e.target.selectionStart; SEARCH_BOXES[id](e.target.value); render(); const n = $("#" + id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) {} } return; }
   if (e.target.id === "ns-time") { let v = e.target.value.replace(/[^\d:]/g, ""); if (/^\d{3,4}$/.test(v)) v = v.slice(0, v.length - 2) + ":" + v.slice(-2); S.view.ns.time = v;
