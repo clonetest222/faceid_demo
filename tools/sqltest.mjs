@@ -12,7 +12,7 @@ const err = async (sql, params) => { try { await db.query(sql, params); return n
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
 await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql", "015_price_tiers.sql", "015_price_tiers.sql"]) {
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql", "015_price_tiers.sql", "015_price_tiers.sql", "016_hr.sql", "016_hr.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -210,6 +210,40 @@ ok("014 đăng nhập VNeID bằng số căn cước + đúng khuôn mặt → p
 ok("014 đăng nhập VNeID với khuôn mặt khác → từ chối; căn cước lạ → vneid_not_linked", (await j(`select login_vneid2('040099000111', $1, 'dev2') j`, [Array.from({ length: 128 }, (_, i) => Math.cos(i * 3) / 2)])).ok === false && /vneid_not_linked/.test(await err(`select login_vneid2('000000000000', $1, 'dev2')`, [Array.from({ length: 128 }, () => 0.1)])));
 ok("014 nhân viên tra hồ sơ khách theo căn cước / SĐT", (await j(`select citizen_lookup_s($1,'040099000111') j`, [nvv.token])).username === "tu.khai" && (await j(`select citizen_lookup_s($1,'0988000111') j`, [nvv.token])).key === "u_tu.khai");
 ok("014 đổi ngày sinh → ảnh gốc bị xoá (phải chụp lại)", (await j(`select register_citizen_s($1,'Nguyễn Tự Khai','1998-05-05','040099000111') j`, [own1.token])).has_template === false);
+// ---- 016: nhân sự, tài khoản, ca làm việc, chấm công, nghỉ phép, thưởng/phạt, hiệu suất
+const pv = await j(`select login('phucvu','phucvu123') j`);
+ok("016 vai trò phục vụ đăng nhập, gắn rạp 086", pv.role === "phucvu" && pv.cinema_id === "086");
+await q(`select staff_save_s($1,'{"username":"nv.moi","pass":"abc12345","name":"Nguyễn Văn Mới","role":"nhanvien","cinema_id":"086","phone":"0911 222 333","email":"moi@example.com","dob":"2000-02-02","position":"Bán vé","hourly_rate":35000,"bonus_pct":1,"contract_type":"thử việc"}'::jsonb)`, [qlv.token]);
+const sl = await q(`select * from staff_list_s($1,'moi')`, [qlv.token]);
+ok("016 quản lý rạp thêm nhân viên có hồ sơ; tìm theo tên", sl.length === 1 && sl[0].username === "nv.moi" && sl[0].phone === "0911222333" && sl[0].position === "Bán vé" && Number(sl[0].hourly_rate) === 35000);
+ok("016 quản lý rạp không thêm nhân viên rạp khác; sai SĐT bị chặn", /wrong_cinema/.test(await err(`select staff_save_s($1,'{"username":"nv.035","pass":"abc12345","name":"X Y","role":"nhanvien","cinema_id":"035"}'::jsonb)`, [qlv.token])) && /bad_phone/.test(await err(`select staff_save_s($1,'{"username":"nv.sdt","pass":"abc12345","name":"X Y","role":"nhanvien","cinema_id":"086","phone":"123"}'::jsonb)`, [qlv.token])));
+await q(`select staff_save_s($1,'{"username":"nv.moi","name":"Nguyễn Văn Mới","role":"nhanvien","cinema_id":"086","active":false}'::jsonb)`, [qlv.token]);
+ok("016 khoá tài khoản → không đăng nhập được, phiên cũ mất", /account_disabled/.test(await err(`select login('nv.moi','abc12345')`)));
+await q(`select account_set_s($1,'nv.moi',true,'matkhaumoi')`, [ql.token]);
+const nvm = await j(`select login('nv.moi','matkhaumoi') j`);
+ok("016 mở khoá + đặt lại mật khẩu từ Quản lý tài khoản", nvm.username === "nv.moi");
+ok("016 account_list_s tìm khách theo email; quản lý rạp không khoá khách", (await q(`select * from account_list_s($1,'minh.anh',null)`, [ql.token])).some(x => x.username === "minh.anh") && /wrong_cinema/.test(await err(`select account_set_s($1,'minh.anh',false)`, [qlv.token])));
+const d0 = "2026-10-20";
+const sh1 = (await q(`select shift_save_s($1, $2::jsonb) id`, [qlv.token, JSON.stringify({ cinema_id: "086", username: "nv.moi", start_at: d0 + "T01:00:00Z", end_at: d0 + "T06:00:00Z", kind: "sang", duty: "quay" })]))[0].id;
+ok("016 phân ca sáng 08:00–13:00 (giờ VN) cho nhân viên rạp mình", sh1 > 0 && (await q(`select day, duty from shifts where id=$1`, [sh1]))[0].duty === "quay");
+ok("016 ca trùng giờ → shift_overlap; nhân viên rạp khác → wrong_cinema", /shift_overlap/.test(await err(`select shift_save_s($1, $2::jsonb)`, [qlv.token, JSON.stringify({ cinema_id: "086", username: "nv.moi", start_at: d0 + "T05:00:00Z", end_at: d0 + "T09:00:00Z" })])) && /wrong_cinema/.test(await err(`select shift_save_s($1, $2::jsonb)`, [qlv.token, JSON.stringify({ cinema_id: "035", username: "nv.moi", start_at: d0 + "T10:00:00Z", end_at: d0 + "T12:00:00Z" })])));
+await q(`select shift_confirm_s($1,$2,true)`, [nvm.token, sh1]);
+ok("016 nhân viên xác nhận ca của mình; không xác nhận hộ người khác", (await q(`select status from shifts where id=$1`, [sh1]))[0].status === "confirmed" && /forbidden/.test(await err(`select shift_confirm_s($1,$2,true)`, [pv.token, sh1])));
+const shNow = (await q(`select shift_save_s($1, $2::jsonb) id`, [qlv.token, JSON.stringify({ cinema_id: "086", username: "phucvu", start_at: new Date(Date.now() - 20 * 60000).toISOString(), end_at: new Date(Date.now() + 4 * 3600000).toISOString(), kind: "chieu", duty: "phucvu" })]))[0].id;
+const att = await j(`select attend_s($1,$2,'in','face',null) j`, [pv.token, shNow]);
+ok("016 chấm công vào ca đang diễn ra: ghi giờ vào, tính trễ ≈ 20 phút", att.check_in && att.late_min >= 19 && att.late_min <= 21, JSON.stringify(att));
+ok("016 ra ca khi chưa vào → not_checked_in; vào ca của người khác → forbidden", /not_checked_in/.test(await err(`select attend_s($1,$2,'out')`, [nvm.token, sh1])) && /forbidden/.test(await err(`select attend_s($1,$2,'in')`, [nvm.token, shNow])));
+ok("016 lịch ca: quản lý thấy cả rạp kèm chấm công; nhân viên chỉ thấy ca mình", (await q(`select * from shifts_list_s($1,'2026-10-01','2026-12-31',null)`, [qlv.token])).length >= 2 && (await q(`select * from shifts_list_s($1,'2026-10-01','2026-12-31',null)`, [nvm.token])).every(x => x.username === "nv.moi"));
+const lvq = (await q(`select leave_request_s($1,'{"kind":"nghi","day_from":"2026-10-25","day_to":"2026-10-26","reason":"Việc gia đình"}'::jsonb) id`, [nvm.token]))[0].id;
+await q(`select leave_decide_s($1,$2,'approved')`, [qlv.token, lvq]);
+ok("016 nghỉ phép: nhân viên gửi, quản lý duyệt", (await q(`select status, decided_by from leaves where id=$1`, [lvq]))[0].status === "approved");
+await q(`select staff_note_s($1,'{"username":"nv.moi","kind":"reward","amount":200000,"note":"Bán vé tốt"}'::jsonb)`, [qlv.token]);
+await q(`select staff_note_s($1,'{"username":"nv.moi","kind":"violation","amount":50000,"note":"Đi trễ"}'::jsonb)`, [qlv.token]);
+await q(`select add_show_s($1,'X7','f1','086-R1',now()+interval '20h',now()+interval '22h')`, [qlv.token]);
+await q(`select hold_seat('X7','C1','HPOS',now()+interval '5 min')`);
+await q(`select sell_order_u($1,'X7','HPOS','[{"code":"VPOS1","seat":"C1","price":70000,"channel":"Quầy"}]'::jsonb)`, [nvm.token]);
+const stt = (await q(`select * from staff_stats_s($1,'2026-10-01','2026-12-31')`, [qlv.token])).find(x => x.username === "nv.moi");
+ok("016 hiệu suất: vé quầy ghi người bán, thưởng/phạt, nghỉ phép đã duyệt, ca xác nhận", stt && stt.tickets === 1 && Number(stt.revenue) === 70000 && Number(stt.rewards) === 200000 && Number(stt.violations) === 50000 && stt.leaves_approved === 1 && stt.confirmed === 1, JSON.stringify(stt && { t: stt.tickets, r: stt.revenue, rw: stt.rewards, v: stt.violations, c: stt.confirmed }));
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);

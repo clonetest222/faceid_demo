@@ -11,10 +11,11 @@ const Auth = (() => {
     { username: "giaovien", pass: "giaovien123", role: "khach", name: "Phạm Thu Hà", note: "Khách – giáo viên mua vé đoàn" },
     { username: "nhanvien", pass: "nhanvien123", role: "nhanvien", name: "Lê Minh Tuấn", note: "Nhân viên · CineVin Vinh Centre" },
     { username: "kythuat", pass: "kythuat123", role: "kythuat", name: "Hoàng Văn Kỹ", note: "Kỹ thuật · phòng chiếu, ghế · CineVin Vinh Centre" },
+    { username: "phucvu", pass: "phucvu123", role: "phucvu", name: "Đỗ Thị Hạnh", note: "Phục vụ sảnh · nhận ca, chấm công · CineVin Vinh Centre" },
     { username: "quanlyvinh", pass: "quanlyvinh123", role: "quanly", name: "Trần Quốc Bảo", note: "Quản lý rạp · CineVin Vinh Centre" },
     { username: "quanly", pass: "quanly123", role: "quanly", name: "Ngô Thị Lan", note: "Quản lý chuỗi · toàn bộ rạp" },
   ];
-  const ROLE_TXT = { khach: "Khách hàng", nhanvien: "Nhân viên", kythuat: "Kỹ thuật", quanly: "Quản lý" };
+  const ROLE_TXT = { khach: "Khách hàng", nhanvien: "Nhân viên", kythuat: "Kỹ thuật", phucvu: "Phục vụ", quanly: "Quản lý" };
   const ERR = {
     invalid_login: "Sai tài khoản hoặc mật khẩu.",
     username_taken: "Tên đăng nhập đã có người dùng.",
@@ -51,6 +52,12 @@ const Auth = (() => {
     bad_id_number: "Số căn cước gồm 12 chữ số.",
     id_taken: "Số căn cước này đã gắn với tài khoản khác.",
     already_linked: "Tài khoản đang liên kết hồ sơ khác – huỷ liên kết trước.",
+    account_disabled: "Tài khoản đã bị khoá – liên hệ quản lý.",
+    shift_overlap: "Nhân viên đã có ca trùng giờ.",
+    unknown_shift: "Không tìm thấy ca.",
+    too_early: "Chưa tới giờ vào ca (được chấm trước 2 giờ).",
+    not_checked_in: "Chưa chấm vào ca nên không chấm ra được.",
+    unknown_user: "Không tìm thấy tài khoản.",
     seat_sold_blocked: "Ghế đã bán / đang giữ cho suất sắp chiếu – không đánh dấu bảo trì được. Hoàn hoặc đổi vé trước.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",

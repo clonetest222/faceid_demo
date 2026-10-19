@@ -22,6 +22,7 @@ Bản HTML để sửa: `docs/nghiep-vu.html` → xuất lại ảnh bằng `nod
 | `giaovien` | `giaovien123` | Khách hàng | như trên (dùng để thử vé đoàn) |
 | `nhanvien` | `nhanvien123` | Nhân viên · rạp 086 Vinh Centre | Soát vé, bán tại quầy (chỉ suất của rạp mình) |
 | `kythuat` | `kythuat123` | Kỹ thuật · 086 Vinh Centre | Phòng chiếu: kích thước, loại phòng, ghế bảo trì, tạm ngưng phòng (chỉ rạp mình) |
+| `phucvu` | `phucvu123` | Phục vụ · 086 Vinh Centre | Ca của tôi: nhận ca, chấm công, xin nghỉ |
 | `quanlyvinh` | `quanlyvinh123` | Quản lý rạp · 086 Vinh Centre | Tổng quan, suất chiếu, quầy, soát vé, tạo nhân viên **cho rạp mình** |
 | `quanly` | `quanly123` | Quản lý chuỗi | Mọi rạp: bảng toàn chuỗi theo tỉnh → rạp, đổi rạp đang thao tác, tạo tài khoản cho rạp bất kỳ |
 
@@ -54,6 +55,16 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 | Báo cáo | **Báo cáo & phân tích**: doanh thu/ghế bán/lấp đầy theo phim, giờ cao điểm, ghế VIP so ghế thường, suất đông nhất, theo kênh, theo cơ sở; lọc toàn chuỗi / rạp, hôm nay / ngày mai |
 | Nhật ký | `audit_logs` ghi **đăng nhập** và **thao tác quản trị** (cơ sở, phòng, phim, suất, tài khoản) ở máy chủ; xem và lọc trong Báo cáo |
 
+## Nhân sự (migration 016)
+| Việc | Cách làm |
+|---|---|
+| Nhân viên | Trang **Nhân sự → Nhân viên**: hồ sơ (họ tên, ngày sinh, SĐT, email), chức vụ, phòng ban, cơ sở, vai trò (bán vé / kỹ thuật / **phục vụ** / quản lý), hợp đồng (loại, ngày vào, hạn), lương cứng, lương giờ, % thưởng doanh thu quầy, bảo hiểm; tạo tài khoản kèm mật khẩu, đặt lại mật khẩu, khoá (tài khoản bị khoá bị đăng xuất và mọi hàm máy chủ từ chối). Ô tìm kiếm theo tên / tài khoản / SĐT / email / chức vụ. Quản lý cơ sở chỉ thấy rạp mình |
+| Bảng ca | **Bảng ca** theo **Ngày** (dòng nhân viên × trục giờ, như board trực ca), **Tuần**, **Tháng**; bấm chỗ trống để thêm ca, bấm ca để sửa / xoá; vị trí Quầy / Soát vé / Kỹ thuật / Phục vụ / Quản lý ca; lặp cả tuần; máy chủ chặn ca trùng giờ. Nét đứt = chờ nhân viên xác nhận |
+| Ca của tôi | Nhân viên (mọi vai trò) vào **Ca của tôi**: nhận / từ chối ca, **vào ca bằng FaceID** (đối chiếu khuôn mặt đã liên kết, có bản ghi) hoặc thủ công, ra ca; xin nghỉ phép / đăng ký tăng ca |
+| Chấm công | Tab **Chấm công & nghỉ phép**: vào / ra, đi trễ (phút), vắng; quản lý chấm hộ; duyệt / từ chối nghỉ phép, tăng ca; mọi lần chấm ghi `audit_logs` |
+| Hiệu suất & lương | Theo tháng: ca xác nhận, giờ chấm công, trễ, vắng, **vé bán tại quầy theo nhân viên** (`tickets.sold_by`), doanh thu quầy, thưởng / vi phạm (ghi nhận kèm tiền), **lương ước tính** = lương cứng + giờ × lương giờ + % doanh thu quầy + thưởng − phạt; xuất CSV |
+| Tìm kiếm | Ô tìm kiếm ở Cơ sở & phòng (cơ sở, tỉnh, địa chỉ, phòng), Kho phim, Tài khoản & quyền, Nhân sự |
+
 ## Nghiệp vụ khách hàng (migration 005)
 | Bước | Cách làm |
 |---|---|
@@ -84,7 +95,7 @@ Mô hình **Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất**, 7 rạ
 
 ## Chạy
 - Online: https://clonetest222.github.io/faceid_demo/
-- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì), `010_seat_info.sql` (tra cứu ghế: vé, người mua, đơn), `011_seat_types.sql` (loại ghế tự định nghĩa, bảng giá riêng từng rạp), `012_zero.sql` (ghế bảo trì không bán được ở máy chủ; `reset_demo` xoá thêm thẻ quà tặng, lượt mã, tài khoản kiểm thử), `013_fixed_price.sql` (giá cứng cho loại ghế), `014_own_identity.sql` (VNeID/FaceID theo chính chủ: khai hồ sơ, đăng nhập bằng căn cước + mặt, nhân viên tra khách theo căn cước/SĐT), `015_price_tiers.sql` (bảng giá hạng A/B sửa được). Muốn về 0: Tổng quan → **Đặt lại dữ liệu demo** (hoặc `select reset_demo();`). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
+- Supabase: chạy lần lượt trong SQL Editor `supabase/schema.sql`, `002_verification.sql`, `003_fix_reset.sql`, `004_auth_qr.sql`, `005_customer.sql`, `006_chain.sql` (rồi `select reset_demo()` để xoá suất kiểu cũ), `007_promo.sql` (mã khuyến mãi dùng chung: mỗi khách một lần), `008_admin.sql` (quản trị chuỗi), `009_seats.sql` (loại ghế theo từng ghế: VIP, đôi, bảo trì), `010_seat_info.sql` (tra cứu ghế: vé, người mua, đơn), `011_seat_types.sql` (loại ghế tự định nghĩa, bảng giá riêng từng rạp), `012_zero.sql` (ghế bảo trì không bán được ở máy chủ; `reset_demo` xoá thêm thẻ quà tặng, lượt mã, tài khoản kiểm thử), `013_fixed_price.sql` (giá cứng cho loại ghế), `014_own_identity.sql` (VNeID/FaceID theo chính chủ: khai hồ sơ, đăng nhập bằng căn cước + mặt, nhân viên tra khách theo căn cước/SĐT), `015_price_tiers.sql` (bảng giá hạng A/B sửa được), `016_hr.sql` (nhân sự: hồ sơ, khoá tài khoản, ca làm việc, chấm công, nghỉ phép, thưởng/phạt, hiệu suất & lương). Muốn về 0: Tổng quan → **Đặt lại dữ liệu demo** (hoặc `select reset_demo();`). Web chỉ dùng publishable key trong `js/config.js` (không bao giờ đặt secret key vào repo).
 - Trên máy: `python -m http.server 8000` rồi mở `http://localhost:8000` (camera chỉ chạy trên HTTPS hoặc localhost).
 - Ghép nối điện thoại: `?pair=MÃ`.
 

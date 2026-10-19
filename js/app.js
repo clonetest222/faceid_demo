@@ -7,8 +7,9 @@ const ROUTES = {
   tongquan: { roles: ["quanly"], view: () => vTongQuan() }, suat: { roles: ["quanly"], view: () => vSuat() }, soat: { roles: ["nhanvien", "quanly"], view: () => vSoat() },
   quay: { roles: ["nhanvien", "quanly"], view: () => vQuay() }, kiemthu: { roles: ["quanly"], view: () => vKiemThu() }, quyen: { roles: ["quanly"], view: () => vQuyen() },
   coso: { roles: ["quanly", "kythuat"], view: () => vCoSo() }, phim: { roles: ["quanly"], view: () => vPhim() }, baocao: { roles: ["quanly"], view: () => vBaoCao() },
+  nhansu: { roles: ["quanly"], view: () => vNhanSu() }, calam: { roles: ["nhanvien", "kythuat", "phucvu", "quanly"], view: () => vCaLam() },
 };
-const HOME = { khach: "lich", nhanvien: "soat", kythuat: "coso", quanly: "tongquan" };
+const HOME = { khach: "lich", nhanvien: "soat", kythuat: "coso", phucvu: "calam", quanly: "tongquan" };
 let CUR_ROUTE = "", PHONE_MODE = false;
 const routeName = () => (location.hash.match(/^#\/([a-z]+)/) || [])[1] || "";
 function go(r) { if (routeName() === r) { render(); window.scrollTo({ top: 0 }); } else location.hash = "#/" + r; }
@@ -164,11 +165,11 @@ function makeServerMatch(key, account) {
   };
 }
 /** who: self | teacher | parent | gate-teacher | lab.  onDone(identity, r) khi đạt; onResult(r, identity) mọi kết quả */
-function verifyFace({ who, title, fixedKey, onDone = () => {}, onResult = () => {} }) {
+function verifyFace({ who, title, fixedKey, preset, onDone = () => {}, onResult = () => {} }) {
   FaceKit.preload();
   const ids = fixedKey ? IDENTITIES.filter(i => i.key === fixedKey) : who === "lab" || who === "gate-viewer" ? IDENTITIES : who === "teacher" ? IDENTITIES.filter(i => i.key === "gv") : IDENTITIES.filter(i => i.key !== "gv");
-  let chosen = ids[0], stopCam = null, pairH = null;
-  const own = who === "self" || who === "teacher", lookup = who === "gate-viewer";   // chính chủ khai hồ sơ · nhân viên tra khách
+  let chosen = preset || ids[0], stopCam = null, pairH = null;
+  const own = !preset && (who === "self" || who === "teacher"), lookup = who === "gate-viewer";   // chính chủ khai hồ sơ · nhân viên tra khách
   const me = Auth.user || {};
   const account = who === "gate-teacher" || who === "gate-viewer" ? "Soát vé · " + Auth.user.name : who === "lab" ? "Kiểm thử · " + Auth.user.name : S.user.name;
   const sh = openSheet("", { label: title, onClose: () => { stopCam && stopCam(); pairH && pairH.close(); render(); } });
@@ -250,7 +251,7 @@ function verifyFace({ who, title, fixedKey, onDone = () => {}, onResult = () => 
     if (m === "pk") { if (await setupPasskey()) sh.close(); }
   };
   sh.el.onchange = e => { if (e.target.id === "fk-file" && e.target.files[0]) { sh.set(`${sheetHead("Phân tích ảnh")}<div id="fk-host" class="grid gap-4"></div>`); FaceKit.runImage($("#fk-host", sh.el), e.target.files[0], { refKey: chosen.key, ref: FaceKit.getRef(chosen.key), serverMatch: makeServerMatch(chosen.key, account), onResult: done }); } };
-  consent();
+  preset ? methods() : consent();
 }
 
 /* Trang trên điện thoại khi mở link ?pair=MÃ */
@@ -486,6 +487,36 @@ const A = {
       if (list.length > 1) toast(`${seatType(seatKind(room(show(d.showId).roomId), list[0])).name}: đã lấy ${list.length} ghế ${list.join(", ")}`);
     }
     d.assign = null; save(); render(); },
+  /* nhân sự */
+  "hr-tab"(el) { HR.tab = el.dataset.v; HR.q = ""; render(); },
+  "hr-view"(el) { HR.view = el.dataset.v; render(); },
+  "hr-nav"(el) { const n = +el.dataset.v, d = new Date(hrDay() + "T00:00:00"); if (!n) HR.day = ymd(new Date()); else if (HR.tab === "ca" && HR.view === "week" || CUR_ROUTE === "calam") HR.day = ymd(addDays(d, 7 * n)); else if (HR.tab === "ca" && HR.view === "month") HR.day = ymd(new Date(d.getFullYear(), d.getMonth() + n, 1)); else HR.day = ymd(addDays(d, n)); render(); },
+  "hr-goto"(el) { HR.day = el.dataset.v; HR.view = "day"; render(); },
+  "hr-month"(el) { const n = +el.dataset.v, m = HR.month || ymd(new Date()).slice(0, 7), [y, mo] = m.split("-").map(Number); HR.month = n ? ymd(new Date(y, mo - 1 + n, 1)).slice(0, 7) : ymd(new Date()).slice(0, 7); render(); },
+  "staff-new"() { staffSheet(null); },
+  "staff-edit"(el) { const s = (HR.cache.staff || []).find(x => x.username === el.dataset.u); if (s) staffSheet(s); },
+  async "acc-active"(el) { const on = el.dataset.v === "1"; if (!on && !confirm(`Khoá tài khoản @${el.dataset.u}? Người này sẽ bị đăng xuất và không đăng nhập được.`)) return;
+    try { await Remote.rpc("account_set_s", { p_token: Auth.token, p_user: el.dataset.u, p_active: on, p_pass: null }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); }
+    hrInvalidate(); S.view.users = null; log("admin", `${on ? "Mở" : "Khoá"} tài khoản @${el.dataset.u}`); render(); toast(`${on ? "Đã mở khoá" : "Đã khoá"} @${el.dataset.u}`); },
+  async "acc-pass"(el) { const p = prompt(`Mật khẩu mới cho @${el.dataset.u} (ít nhất 6 ký tự):`); if (p == null) return; if (p.length < 6) return toast("Mật khẩu cần ít nhất 6 ký tự", "bad");
+    try { await Remote.rpc("account_set_s", { p_token: Auth.token, p_user: el.dataset.u, p_active: null, p_pass: p }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); }
+    log("admin", `Đặt lại mật khẩu @${el.dataset.u}`); toast("Đã đặt lại mật khẩu @" + el.dataset.u); },
+  "shift-new"(el) { shiftSheet({ username: el.dataset.u || "", day: el.dataset.day || hrDay() }); },
+  "shift-edit"(el) { const s = Object.values(HR.cache).flat().find(x => x && x.id == el.dataset.id && x.start_at); if (s) shiftSheet(s); },
+  async "shift-confirm"(el) { try { await Remote.rpc("shift_confirm_s", { p_token: Auth.token, p_id: +el.dataset.id, p_ok: el.dataset.v === "1" }); } catch (e) { return toast(Auth.message(e), "bad"); } hrInvalidate(); render(); toast(el.dataset.v === "1" ? "Đã nhận ca" : "Đã từ chối ca"); },
+  async "attend"(el) {
+    const id = +el.dataset.id, action = el.dataset.v;
+    const go = async (method, rec) => { try { const r = await Remote.rpc("attend_s", { p_token: Auth.token, p_shift: id, p_action: action, p_method: method, p_face_record: rec || null }); hrInvalidate(); render(); toast(action === "in" ? `Đã vào ca lúc ${hhmm(r.check_in)}${r.late_min > 5 ? ` · trễ ${r.late_min} phút` : ""}` : `Đã ra ca lúc ${hhmm(r.check_out)}`); } catch (e) { toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); } };
+    if (el.dataset.face) { if (!Auth.user.citizenKey) return toast("Liên kết khuôn mặt ở Tài khoản trước", "bad");
+      return verifyFace({ who: "attend", title: "Chấm công bằng FaceID", preset: { key: Auth.user.citizenKey, name: Auth.user.name, dob: Auth.user.dob, note: "" }, onDone(id2, r) { go("face", r.recordId); } }); }
+    go(Auth.user.role === "quanly" && !(HR.cache[`shifts:${hrDay()}:${hrDay()}`] || []).some(s => s.id === id && s.username === Auth.user.username) ? "manual" : "manual"); },
+  "leave-new"() { leaveSheet(); },
+  async "leave-decide"(el) { try { await Remote.rpc("leave_decide_s", { p_token: Auth.token, p_id: +el.dataset.id, p_status: el.dataset.v }); } catch (e) { return toast(Auth.message(e), "bad"); } hrInvalidate(); render(); toast(el.dataset.v === "approved" ? "Đã duyệt" : "Đã từ chối"); },
+  "note-new"(el) { noteSheet(el.dataset.u, el.dataset.v); },
+  "hr-csv"() { const m = HR.month || ymd(new Date()).slice(0, 7), [y, mo] = m.split("-").map(Number), rows = HR.cache[`stats:${m}-01:${ymd(new Date(y, mo, 0))}`] || []; if (!rows.length) return toast("Chưa có dữ liệu");
+    const sal = s => Math.round(Number(s.salary_base) + Number(s.hours) * Number(s.hourly_rate) + Number(s.revenue) * Number(s.bonus_pct) / 100 + Number(s.rewards) - Number(s.violations));
+    const csv = ["Nhân viên,Tài khoản,Chức vụ,Rạp,Ca xác nhận,Ca,Giờ,Trễ (lần),Trễ (phút),Vắng,Vé quầy,Doanh thu quầy,Thưởng,Phạt,Lương ước tính", ...rows.map(s => [s.display_name, s.username, s.position || "", s.cinema_id || "", s.confirmed, s.shifts, s.hours, s.late_count, s.late_min, s.absent, s.tickets, s.revenue, s.rewards, s.violations, sal(s)].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" })); a.download = `luong-${m}.csv`; a.click(); toast("Đã xuất CSV lương tháng " + m); },
   /* quản trị chuỗi: cơ sở, phòng, phim, suất */
   "cinema-new"() { cinemaSheet(null); },
   "cinema-edit"(el) { cinemaSheet(cinema(el.dataset.id)); },
@@ -915,6 +946,72 @@ function priceSheet({ title, sub, cur, saveLabel, resetLabel = "", save: onSave,
     async reset(b, sh) { try { await onReset(); } catch (e) { return fail(e); } sh.close(); save(); render(); },
   }, { label: "Bảng giá", wide: true });
 }
+/* ---------- hộp thoại nhân sự: nhân viên, ca, nghỉ phép, thưởng/phạt ---------- */
+const HR_ROLES = [["nhanvien", "Nhân viên bán vé / soát vé"], ["kythuat", "Nhân viên kỹ thuật"], ["phucvu", "Nhân viên phục vụ"], ["quanly", "Quản lý cơ sở / hệ thống"]];
+function staffSheet(s) {
+  const isNew = !s, fixed = staffCinemaId(); s = s || { username: "", display_name: "", role: "nhanvien", cinema_id: fixed || workCinema().id, phone: "", email: "", dob: null, position: "", department: "", active: true, hired_at: ymd(new Date()), contract_type: "thử việc", contract_until: null, hourly_rate: 30000, salary_base: 0, bonus_pct: 0, insurance: false, notes: "" };
+  const html = `${sheetHead(isNew ? "Thêm nhân viên" : `Hồ sơ · ${esc(s.display_name)}`, isNew ? "Tạo hồ sơ và tài khoản đăng nhập; nhân viên liên kết khuôn mặt ở Tài khoản để đăng nhập FaceID / chấm công." : `@${esc(s.username)} · ${s.vneid ? "đã liên kết FaceID/VNeID" : "chưa liên kết FaceID"}`)}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Họ và tên", input("sf-name", s.display_name, 'autocomplete="off"'))}${field("Tên đăng nhập", input("sf-user", s.username, `autocapitalize="none" placeholder="vd: banve01" ${isNew ? "" : "disabled"}`), isNew ? "chữ thường, số, dấu chấm, gạch dưới" : "")}
+      ${field(isNew ? "Mật khẩu" : "Mật khẩu mới (để trống = giữ nguyên)", input("sf-pass", "", 'type="password" autocomplete="new-password" placeholder="Ít nhất 6 ký tự"'))}${field("Vai trò (phân quyền)", sel("sf-role", HR_ROLES, s.role))}
+      ${field("Chức vụ", input("sf-position", s.position || "", 'placeholder="Bán vé, Soát vé, Trưởng ca…"'))}${field("Phòng ban", input("sf-dept", s.department || "", 'placeholder="Quầy vé / Phòng chiếu / Sảnh"'))}
+      ${field("Cơ sở làm việc", fixed ? input("sf-cinema-fixed", cinema(fixed).name, "disabled") : sel("sf-cinema", [["", "Toàn chuỗi (quản lý hệ thống)"], ...CINEMAS.map(c => [c.id, `${c.id} · ${c.name}`])], s.cinema_id || ""))}${field("Ngày sinh", input("sf-dob", s.dob || "", 'type="date"'))}
+      ${field("Số điện thoại", input("sf-phone", s.phone || "", 'type="tel" inputmode="numeric" placeholder="0912 345 678"'))}${field("Email", input("sf-email", s.email || "", 'type="email" placeholder="ten@cinevin.vn"'))}
+      ${field("Ngày vào làm", input("sf-hired", s.hired_at || "", 'type="date"'))}${field("Hợp đồng", sel("sf-contract", [["thử việc", "Thử việc"], ["chính thức", "Chính thức"], ["thời vụ", "Thời vụ"], ["cộng tác", "Cộng tác viên"]], s.contract_type || "thử việc"))}
+      ${field("Hợp đồng đến ngày", input("sf-until", s.contract_until || "", 'type="date"'))}${field("Lương cứng / tháng", input("sf-base", s.salary_base || 0, 'type="number" min="0" step="100000" inputmode="numeric"'))}
+      ${field("Lương theo giờ", input("sf-rate", s.hourly_rate || 0, 'type="number" min="0" step="1000" inputmode="numeric"'), "nhân với giờ chấm công")}${field("Thưởng % doanh thu quầy", input("sf-bonus", s.bonus_pct || 0, 'type="number" min="0" max="100" step="0.5" inputmode="decimal"'))}
+      <div class="flex flex-wrap items-end gap-4 pb-2 sm:col-span-2">${chk("sf-ins", "Có bảo hiểm xã hội", !!s.insurance)}${isNew ? "" : chk("sf-active", "Đang làm việc (bỏ chọn = khoá tài khoản)", s.active !== false)}</div>
+      <div class="sm:col-span-2">${field("Ghi chú", input("sf-notes", s.notes || "", 'placeholder="Ca ưu tiên, kỹ năng, lưu ý…"'))}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button></div>`;
+  adminSheet(html, {
+    async save(b, sh) {
+      const p = { username: isNew ? v("sf-user").toLowerCase() : s.username, pass: v("sf-pass"), name: v("sf-name"), role: v("sf-role"), cinema_id: fixed || v("sf-cinema") || null, phone: v("sf-phone"), email: v("sf-email"), dob: v("sf-dob") || null, position: v("sf-position"), department: v("sf-dept"), active: isNew ? true : $("#sf-active").checked, hired_at: v("sf-hired") || null, contract_type: v("sf-contract"), contract_until: v("sf-until") || null, hourly_rate: +v("sf-rate") || 0, salary_base: +v("sf-base") || 0, bonus_pct: +v("sf-bonus") || 0, insurance: $("#sf-ins").checked, notes: v("sf-notes") };
+      if (p.name.length < 2) return toast("Nhập họ tên", "bad"); if (!/^[a-z0-9_.]{3,32}$/.test(p.username)) return toast(Auth.message({ message: "bad_username" }), "bad"); if (isNew && p.pass.length < 6) return toast("Mật khẩu ít nhất 6 ký tự", "bad");
+      if (p.role === "quanly" && !p.cinema_id && !isChainManager()) return toast("Chỉ quản lý chuỗi tạo được quản lý hệ thống", "bad");
+      if (!ON()) return toast("Cần kết nối máy chủ", "bad");
+      try { await Remote.rpc("staff_save_s", { p_token: Auth.token, p }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); }
+      hrInvalidate(); S.view.users = null; log("admin", `${isNew ? "Thêm" : "Sửa"} nhân viên @${p.username} (${p.role}${p.cinema_id ? ", rạp " + p.cinema_id : ""})`); sh.close(); render(); toast(`Đã lưu ${p.name}`); },
+  }, { label: "Nhân viên", wide: true });
+}
+function shiftSheet(s) {
+  const isNew = !s.id, wc = workCinema(), staff = (HR.cache.staff || []).filter(x => x.active && (x.cinema_id === wc.id || (!x.cinema_id && isChainManager())));
+  const d = s.day || hrDay(), st = s.start_at ? hhmm(s.start_at) : "08:00", en = s.end_at ? hhmm(s.end_at) : "13:00";
+  const html = `${sheetHead(isNew ? "Thêm ca làm việc" : `Ca #${s.id} · ${esc(s.display_name || s.username)}`, `${esc(wc.name)}${!isNew ? ` · ${SHIFT_ST[s.status][0]}${s.check_in ? ` · vào ${hhmm(s.check_in)}` : ""}` : ""}`)}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Nhân viên", sel("sh2-user", staff.map(x => [x.username, `${x.display_name} · ${x.position || Auth.ROLE_TXT[x.role]}`]), s.username || (staff[0] || {}).username))}${field("Ngày", input("sh2-day", d, 'type="date"'))}
+      ${field("Bắt đầu", input("sh2-start", st, 'type="time"'))}${field("Kết thúc", input("sh2-end", en, 'type="time"'), "qua nửa đêm thì kết thúc tính sang ngày sau")}
+      ${field("Vị trí", sel("sh2-duty", DUTIES.map(x => [x[0], x[1]]), s.duty || "quay"))}${field("Ghi chú", input("sh2-note", s.note || "", 'placeholder="Trực page, hỗ trợ suất tối…"'))}
+      ${isNew ? `<div class="flex items-end pb-2 sm:col-span-2">${chk("sh2-repeat", "Lặp lại 7 ngày liên tiếp (phân ca cả tuần)", false)}</div>` : ""}</div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu ca</button>${!isNew ? `<button type="button" class="${B.ghost} ml-auto text-err" data-act="del">${ic("trash-2")}Xoá ca</button>` : ""}</div>`;
+  adminSheet(html, {
+    async save(b, sh) {
+      const u = v("sh2-user"), day = v("sh2-day"), t1 = v("sh2-start"), t2 = v("sh2-end"); if (!u || !day || !t1 || !t2) return toast("Điền đủ nhân viên, ngày, giờ", "bad");
+      const mk = (dd, t) => { const x = new Date(dd + "T" + t + ":00"); return x; };
+      const reps = isNew && $("#sh2-repeat")?.checked ? 7 : 1; let n = 0, err = "";
+      for (let k = 0; k < reps; k++) { const day2 = ymd(addDays(new Date(day + "T00:00:00"), k)); let a = mk(day2, t1), z = mk(day2, t2); if (z <= a) z = addDays(z, 1);
+        const p = { id: s.id || null, cinema_id: wc.id, username: u, start_at: a.toISOString(), end_at: z.toISOString(), kind: kindOf(a.getHours()), duty: v("sh2-duty"), note: v("sh2-note") };
+        try { await Remote.rpc("shift_save_s", { p_token: Auth.token, p }); n++; } catch (e) { err = hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e); if (reps === 1) return toast(err, "bad"); } }
+      hrInvalidate(); sh.close(); render(); toast(`Đã lưu ${n} ca${err ? ` · bỏ qua ca trùng: ${err}` : ""}`, err ? "bad" : ""); },
+    async del(b, sh) { if (!confirm("Xoá ca này?")) return; try { await Remote.rpc("shift_delete_s", { p_token: Auth.token, p_id: s.id }); } catch (e) { return toast(Auth.message(e), "bad"); } hrInvalidate(); sh.close(); render(); toast("Đã xoá ca"); },
+  }, { label: "Ca làm việc", wide: true });
+}
+function leaveSheet() {
+  const html = `${sheetHead("Xin nghỉ phép / tăng ca", "Gửi quản lý cơ sở duyệt.")}
+    <div class="grid gap-3 sm:grid-cols-2">${field("Loại", sel("lv-kind", [["nghi", "Nghỉ phép"], ["tangca", "Đăng ký tăng ca"]], "nghi"))}${field("Số giờ (tăng ca)", input("lv-hours", "", 'type="number" min="1" max="12" step="0.5" inputmode="decimal" placeholder="2"'))}${field("Từ ngày", input("lv-from", ymd(addDays(new Date(), 1)), 'type="date"'))}${field("Đến ngày", input("lv-to", ymd(addDays(new Date(), 1)), 'type="date"'))}<div class="sm:col-span-2">${field("Lý do", input("lv-reason", "", 'placeholder="Việc gia đình, khám bệnh…"'))}</div></div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("send")}Gửi đơn</button></div>`;
+  adminSheet(html, { async save(b, sh) {
+    const p = { kind: v("lv-kind"), day_from: v("lv-from"), day_to: v("lv-to") || v("lv-from"), hours: +v("lv-hours") || null, reason: v("lv-reason") }; if (!p.day_from) return toast("Chọn ngày", "bad");
+    try { await Remote.rpc("leave_request_s", { p_token: Auth.token, p }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); }
+    hrInvalidate(); sh.close(); render(); toast("Đã gửi đơn, chờ quản lý duyệt"); } }, { label: "Nghỉ phép" });
+}
+function noteSheet(username, kind) {
+  const reward = kind === "reward", st = (HR.cache.staff || []).find(x => x.username === username);
+  const html = `${sheetHead(reward ? "Khen thưởng" : "Ghi nhận vi phạm", `${esc((st || {}).display_name || username)} · ${reward ? "cộng vào lương tháng" : "trừ vào lương tháng"}`)}
+    <div class="grid gap-3">${field(reward ? "Tiền thưởng" : "Tiền phạt", input("nt-amount", reward ? 200000 : 50000, 'type="number" min="0" step="10000" inputmode="numeric"'))}${field("Nội dung", input("nt-note", "", `placeholder="${reward ? "Doanh thu quầy vượt chỉ tiêu, khách khen…" : "Đi trễ, bỏ ca, sai quy trình soát vé…"}"`))}</div>
+    <div class="flex flex-wrap items-center gap-2"><button type="button" class="${B.primary} min-h-11 md:min-h-10" data-act="save">${ic("save")}Lưu</button></div>`;
+  adminSheet(html, { async save(b, sh) {
+    const p = { username, kind, amount: +v("nt-amount") || 0, note: v("nt-note") }; if (!p.note) return toast("Nhập nội dung", "bad");
+    try { await Remote.rpc("staff_note_s", { p_token: Auth.token, p }); } catch (e) { return toast(hrNeed(e) ? "Máy chủ chưa chạy migration 016" : Auth.message(e), "bad"); }
+    hrInvalidate(); sh.close(); render(); toast(reward ? "Đã ghi khen thưởng" : "Đã ghi vi phạm"); } }, { label: reward ? "Khen thưởng" : "Vi phạm" });
+}
 function seatTypeSheet(t, after) {
   const isNew = !t; t = t || { id: "", name: "", persons: 1, surchargeA: 0, surchargeB: 0, fixedA: null, fixedB: null, color: "sky", icon: "sofa", sellable: true, sort: 10 };
   const fixedMode = t.fixedA != null || t.fixedB != null;
@@ -1079,6 +1176,7 @@ document.addEventListener("change", e => {
   const el = e.target;
   if (el.id === "g-commit") { S.view.gdraft.commit = el.checked; save(); render(); }
   if (el.id === "log-type") { S.view.logType = el.value; save(); render(); }
+  if (el.dataset && el.dataset.act === "hr-only") { HR.onlyShift = el.checked; render(); }
   if (el.id === "gate-file" && el.files[0]) gateImage(el.files[0]);
   if (el.id === "haar-file" && el.files[0]) { const file = el.files[0]; LAB.haar.err = ""; LAB.haar.stats = { status: "Đang chạy Haar trên ảnh…" }; render(); FaceKit.preload();
     Haar.runImage(file, m => { const s = $("#haar-stats"); if (s) s.innerHTML = haarStats({ status: m }); }).then(r => { LAB.haar.img = r.dataUrl; LAB.haar.stats = { ms: r.ms, tinyMs: r.tinyMs, faces: r.faces, eyes: r.eyes, fps: null, blinks: null };
@@ -1107,7 +1205,9 @@ document.addEventListener("submit", e => {
   Auth.register(vals).then(r => { LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; LOGIN.field = r.field || ""; render(); refill(); const x = $("#li-" + ({ user: "user", pass: "pass", name: "name", email: "email", phone: "phone" }[r.field] || "user")); x && x.focus(); return; }
     LOGIN = { err: "", field: "", busy: false, show: false }; bindProfile(); save(); location.hash = "#/lich"; render(); offerVneid(); });
 });
+const SEARCH_BOXES = { "hr-q": v => HR.q = v, "coso-q": v => S.view.cosoQ = v, "phim-q": v => S.view.phimQ = v, "user-q": v => S.view.userQ = v };
 document.addEventListener("input", e => {
+  if (SEARCH_BOXES[e.target.id]) { const id = e.target.id, pos = e.target.selectionStart; SEARCH_BOXES[id](e.target.value); render(); const n = $("#" + id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) {} } return; }
   if (e.target.id === "ns-time") { let v = e.target.value.replace(/[^\d:]/g, ""); if (/^\d{3,4}$/.test(v)) v = v.slice(0, v.length - 2) + ":" + v.slice(-2); S.view.ns.time = v;
     if (/^\d{1,2}:\d{2}$/.test(v) || v === "") { render(); const x = $("#ns-time"); if (x) { x.focus(); x.setSelectionRange(v.length, v.length); } } }
 });
