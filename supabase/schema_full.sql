@@ -2491,6 +2491,12 @@ begin
   end loop;
 end $$;
 
+-- Realtime: khi PK không còn là mã nghiệp vụ, sự kiện DELETE chỉ mang PK → gửi đủ hàng cũ để client xoá đúng ghế / vé / đoàn
+alter table public.seat_locks replica identity full;
+alter table public.tickets replica identity full;
+alter table public.groups replica identity full;
+alter table public.group_members replica identity full;
+
 -- Chỉ mục cho truy vấn thường dùng
 create index if not exists tickets_show on public.tickets (show_id, status);
 create index if not exists tickets_owner on public.tickets (owner_user, created_at);
