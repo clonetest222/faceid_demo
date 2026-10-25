@@ -83,10 +83,19 @@ function seatZoomFit(force) {
 function stripFocus() {
   $$("[data-strip]").forEach(box => {
     const wrap = box.parentElement, mark = () => { wrap.toggleAttribute("data-at-start", box.scrollLeft <= 2); wrap.toggleAttribute("data-at-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 2); };
-    if (!box.dataset.bound) { box.dataset.bound = "1"; box.addEventListener("scroll", mark, { passive: true }); }
+    if (!box.dataset.bound) { box.dataset.bound = "1"; box.addEventListener("scroll", mark, { passive: true }); stripDrag(box); }
     const on = box.querySelector("[aria-pressed=true]"); if (on) { const x = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2; if (Math.abs(box.scrollLeft - x) > 8) box.scrollTo({ left: Math.max(0, x) }); }
     mark();
   });
+}
+function stripDrag(box) {
+  let x0 = 0, s0 = 0, moved = false, on = false;
+  box.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse" || e.button !== 0) return; on = true; moved = false; x0 = e.clientX; s0 = box.scrollLeft; });
+  box.addEventListener("pointermove", e => { if (!on) return; const dx = e.clientX - x0; if (!moved && Math.abs(dx) > 6) { moved = true; box.classList.add("is-dragging"); try { box.setPointerCapture(e.pointerId); } catch (err) {} } if (moved) { box.scrollLeft = s0 - dx; e.preventDefault(); } });   // chỉ bắt con trỏ khi đã kéo thật, để cú bấm thường vẫn tới đúng nút
+  const end = () => { if (!on) return; on = false; if (moved) setTimeout(() => box.classList.remove("is-dragging"), 0); };
+  box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
+  box.addEventListener("dragstart", e => { if (on || moved) e.preventDefault(); });   // không cho trình duyệt kéo-thả ảnh poster (nó huỷ chuỗi pointer)
+  box.addEventListener("click", e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
 }
 function stopMedia(next) {
   if (GATE.stop && next !== "soat") { GATE.stop(); GATE.stop = null; }
@@ -462,7 +471,7 @@ async function labQrVerify(payload, via) {
 /* ============================ hành động ============================ */
 const A = {
   logout() { stopMedia(""); releaseDraft(); Auth.logout(); save(); location.hash = "#/home"; render(); },
-  "home-tab"(el) { S.view.homeTab = el.dataset.v; save(); if (routeName() !== "home") location.hash = "#/home"; else render(); },
+  "home-tab"(el) { const go = () => document.getElementById("sec-" + el.dataset.v)?.scrollIntoView({ behavior: "smooth", block: "start" }); if (routeName() !== "home") { location.hash = "#/home"; setTimeout(go, 150); } else go(); },
   "film-detail"(el) { S.view.detailFilm = el.dataset.v; save(); go("chitiet"); },
   "film-book"(el) { S.view.lichMode = "phim"; S.view.lichFilm = el.dataset.v; const s0 = firstShowOf(el.dataset.v); if (s0) S.view.day = dayKey(s0.start); save(); go("lich"); },
   "cf-prev"() { cfGo("prev"); }, "cf-next"() { cfGo("next"); }, "cf-dot"(el) { cfGo(el.dataset.v); },

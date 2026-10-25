@@ -12,13 +12,13 @@ const comingSoon = () => S.films.filter(f => f.active !== false && isUpcoming(f)
 const firstShowOf = fid => S.shows.filter(s => s.filmId === fid && s.status !== "cancelled" && new Date(s.start) > new Date()).sort((a, b) => new Date(a.start) - new Date(b.start))[0];
 
 /* ---------- các mảnh ---------- */
-const POSTER_CARD = (f, { upcoming = false } = {}) => `<article class="group grid content-start gap-2.5">
+const POSTER_CARD = (f, { upcoming = false, cls = "" } = {}) => `<article class="group grid content-start gap-2.5 ${cls}">
   <button type="button" data-act="${upcoming ? "film-detail" : "film-book"}" data-v="${f.id}" class="relative block aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-2xl bg-secondary text-left" aria-label="${upcoming ? "Chi tiết" : "Đặt vé"} ${esc(f.title)}">
     ${f.img ? `<img src="${f.img}" alt="Poster ${esc(f.title)}" loading="lazy" class="size-full object-cover transition-transform duration-500 group-hover:scale-105">` : `<span class="grid size-full place-items-center text-muted">${ic("film", "size-8")}</span>`}
     <span class="absolute left-2 top-2">${rate(f.rating)}</span>
     ${upcoming ? `<span class="absolute bottom-2 left-2 rounded-md bg-foreground/80 px-2 py-0.5 text-xs font-medium text-surface backdrop-blur">${RELEASE_TXT(f)}</span>` : fmeta(f).hot ? `<span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">${ic("flame", "size-3")}Hot</span>` : ""}
   </button>
-  <div class="min-w-0"><h3 class="line-clamp-1 text-sm font-semibold">${esc(f.title)}</h3><p class="text-xs text-muted">${esc(f.genre)} · ${f.dur} phút</p></div>
+  <div class="min-w-0"><h3 class="line-clamp-1 text-sm font-semibold">${esc(f.title)}</h3><p class="line-clamp-1 text-xs text-muted">${esc(f.genre)} · ${f.dur} phút</p></div>
   ${upcoming ? `<button type="button" class="${B.outline} min-h-9" data-act="remind" data-v="${f.id}">${ic("bell")}Nhắc tôi</button>`
     : `<div class="flex gap-2"><button type="button" class="${B.primary} min-h-9 flex-1" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé</button><button type="button" class="${B.icon} size-9 border border-border-strong bg-surface" data-act="film-detail" data-v="${f.id}" aria-label="Chi tiết ${esc(f.title)}">${ic("info")}</button></div>`}
 </article>`;
@@ -44,14 +44,12 @@ function coverflowHtml() {
     <div class="cf-overlay" data-cf-overlay>${cfOverlay(f)}</div>
     <button type="button" class="cf-arrow cf-arrow-l" data-act="cf-prev" aria-label="Phim trước">${ic("chevron-left", "size-6")}</button>
     <button type="button" class="cf-arrow cf-arrow-r" data-act="cf-next" aria-label="Phim sau">${ic("chevron-right", "size-6")}</button>
-    <div class="cf-dots" role="tablist" aria-label="Chọn phim">${films.length <= 12 ? films.map((_, i) => `<button type="button" role="tab" aria-selected="${i === idx}" data-act="cf-dot" data-v="${i}" aria-label="Phim ${i + 1}"></button>`).join("") : `<span class="cf-counter"><b data-cf-counter>${idx + 1}</b> / ${films.length}</span>`}</div>
-    <p class="cf-hint">${nowShowing().length} phim đang chiếu · ${comingSoon().length} sắp chiếu · kéo để xoay</p>
+    <p class="cf-hint sr-only">${nowShowing().length} phim đang chiếu · ${comingSoon().length} sắp chiếu · kéo để xoay</p>
   </section>`;
 }
 function cfOverlay(f) {
   const up = isUpcoming(f);
-  const d1 = (fmeta(f).desc || "").split(/(?<=[.!?])\s/)[0] || "", short = d1.length > 150 ? d1.slice(0, 147).replace(/\s\S*$/, "") + "…" : d1;
-  return `<p class="cf-tag"><b>${esc(f.title)}</b> · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}${up ? " · " + RELEASE_TXT(f) : ""}${short ? "<br>" + esc(short) : ""}</p>
+  return `<p class="cf-tag"><b>${esc(f.title)}</b> · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}${up ? " · " + RELEASE_TXT(f) : ""}</p>
     <div class="cf-cta">${up ? `<button type="button" class="${B.primary} min-h-11 px-5" data-act="remind" data-v="${f.id}">${ic("bell")}Nhắc tôi</button>` : `<button type="button" class="${B.primary} min-h-11 px-5" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé ngay</button>`}<button type="button" class="${BTN} min-h-11 border border-white/35 bg-white/10 text-white backdrop-blur hover:bg-white/20" data-act="film-detail" data-v="${f.id}">Chi tiết</button></div>`;
 }
 const cfWrap = (d, n) => ((d % n) + n * 1.5) % n - n / 2;   // khoảng cách ngắn nhất trên vòng
@@ -111,7 +109,7 @@ function quickBookHtml() {
   const col = (label, inner) => `<label class="grid gap-1 text-xs font-medium text-muted">${label}${inner}</label>`;
   return `<section class="glass relative z-20 -mt-10 mb-8 rounded-2xl p-3 sm:mx-6 sm:-mt-12 sm:p-4" aria-label="Đặt vé nhanh">
     <div class="grid gap-2 sm:grid-cols-[1.2fr_1.2fr_1fr_1fr_auto] sm:items-end">
-      ${col("Rạp", selectBox("qb-cinema", CINEMAS.map(x => [x.id, x.name]), c.id, { act: "qb-cinema" }))}
+      ${col("Rạp", selectBox("qb-cinema", CINEMAS.map(x => [x.id, x.name, `${x.city} ${x.address}`]), c.id, { act: "qb-cinema" }))}
       ${col("Phim", selectBox("qb-film", films.map(f => [f.id, f.title]), fid, { act: "qb-film", placeholder: "Chưa có suất" }))}
       ${col("Ngày", selectBox("qb-day", days.map(d => [d, dayLabel(d)]), day, { act: "qb-day", placeholder: "—" }))}
       ${col("Suất", selectBox("qb-show", times.map(s => [s.id, `${hhmm(s.start)} · ${formatOf(s)}${freeSeats(s) === 0 ? " · hết ghế" : ""}`]), sid, { act: "qb-show", placeholder: "—" }))}
@@ -142,17 +140,19 @@ function footerHtml() {
 
 /* ---------- Trang chủ ---------- */
 function vHome() {
-  const tab = S.view.homeTab === "sapchieu" ? "sapchieu" : "dangchieu", c = curCinema();
+  const c = curCinema();
   const showing = nowShowing().sort((a, b) => (fmeta(b).hot ? 1 : 0) - (fmeta(a).hot ? 1 : 0)), soon = comingSoon();
   const loading = !S.shows.length && Remote.status === "connecting";
-  const grid = list => `<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">${list.join("")}</div>`;
-  const films = tab === "dangchieu"
-    ? (loading ? `<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">${skelRows(5, "aspect-[2/3]")}</div>` : showing.length ? grid(showing.map(f => POSTER_CARD(f))) : card(emptyState("film", "Chưa có phim đang chiếu", "Quản lý chưa xếp lịch. Quay lại sau.")))
-    : soon.length ? grid(soon.map(f => POSTER_CARD(f, { upcoming: true }))) : card(emptyState("calendar", "Chưa có phim sắp chiếu", "Theo dõi để nhận thông báo khi có phim mới."));
-  const tabs = seg([["dangchieu", `Đang chiếu`], ["sapchieu", `Sắp chiếu`]], tab, "home-tab");
+  // hai dải kéo ngang (vuốt / kéo chuột / nút ‹ ›) như app CGV; "Xem tất cả" sang Lịch chiếu
+  const W = "w-[150px] shrink-0 sm:w-[168px] lg:w-[184px]";
+  const strip = list => hscroll(list.join(""), "strip-home", "gap-3 sm:gap-4");
+  const seeAll = `<a href="#/lich" class="inline-flex min-h-9 shrink-0 items-center gap-0.5 text-sm font-medium text-primary hover:underline">Xem tất cả${ic("chevron-right", "size-4")}</a>`;
+  const nowBlock = loading ? strip(Array.from({ length: 6 }, () => `<div class="skel aspect-[2/3] rounded-2xl ${W}"></div>`)) : showing.length ? strip(showing.map(f => POSTER_CARD(f, { cls: W }))) : card(emptyState("film", "Chưa có phim đang chiếu", "Quản lý chưa xếp lịch. Quay lại sau."));
+  const soonBlock = soon.length ? strip(soon.map(f => POSTER_CARD(f, { upcoming: true, cls: W }))) : card(emptyState("calendar", "Chưa có phim sắp chiếu", "Theo dõi để nhận thông báo khi có phim mới."));
   const body = `<h1 class="sr-only">CineVin – đặt vé xem phim online tại ${esc(c.name)} và 6 cơ sở khác</h1>
     ${coverflowHtml()}${quickBookHtml()}
-    <section class="mb-10" aria-labelledby="h-phim">${SECTION_HEAD(`<span id="h-phim">${tab === "dangchieu" ? "Phim đang chiếu" : "Phim sắp chiếu"}</span>`, tab === "dangchieu" ? `Tại ${esc(c.name)} và toàn hệ thống · lịch 10 ngày tới` : "Đặt lịch nhắc để không bỏ lỡ suất đầu tiên", tabs)}${films}</section>
+    <section class="mb-10" id="sec-dangchieu" aria-labelledby="h-phim">${SECTION_HEAD(`<span id="h-phim">Phim đang chiếu</span>`, `Tại ${esc(c.name)} và toàn hệ thống · lịch 10 ngày tới`, seeAll)}${nowBlock}</section>
+    <section class="mb-10 scroll-mt-24" id="sec-sapchieu" aria-labelledby="h-sapchieu">${SECTION_HEAD(`<span id="h-sapchieu">Phim sắp chiếu</span>`, "Đặt lịch nhắc để không bỏ lỡ suất đầu tiên", seeAll)}${soonBlock}</section>
     <section class="mb-10" aria-labelledby="h-uudai">${SECTION_HEAD(`<span id="h-uudai">Ưu đãi và tiện ích</span>`, "Những thứ làm CineVin khác rạp thường")}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${PERKS.map(([i, t, d, k]) => `<article class="flex gap-3 rounded-2xl border border-border bg-surface p-4"><span class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-light text-primary">${ic(i, "size-5")}</span><div class="min-w-0"><p class="text-xs font-medium uppercase tracking-wide text-muted">${k}</p><h3 class="mt-0.5 font-semibold">${t}</h3><p class="mt-1 text-pretty text-sm text-muted">${d}</p></div></article>`).join("")}</div></section>
     <section class="mb-6 overflow-hidden rounded-3xl bg-foreground text-surface" aria-labelledby="h-cach">

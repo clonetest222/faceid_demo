@@ -26,11 +26,14 @@ const INPUT = "h-11 md:h-10 w-full rounded-xl border border-border-strong bg-sur
 const field = (label, inner, hint = "", bad = false, id = "") => `<label class="grid gap-1.5" ${id ? `for="${id}"` : ""}><span class="text-sm font-medium">${label}</span>${inner}${hint ? `<span class="text-xs ${bad ? "text-[var(--error-text)]" : "text-muted"}">${hint}</span>` : ""}</label>`;
 const input = (id, value = "", attrs = "") => `<input id="${id}" value="${esc(value)}" class="${INPUT}" ${attrs}>`;
 /** Ô chọn dạng nút + danh sách nổi (không dùng <select> gốc). opts [[value,label]]. Giá trị đọc ở data-value. */
-function selectBox(id, opts, value, { act = "", placeholder = "Chọn…", extra = "" } = {}) {
+/* ô chọn; danh sách dài (>6 mục) tự có ô tìm ở đầu menu: gõ để lọc (không phân biệt dấu), Enter chọn mục đầu */
+const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+function selectBox(id, opts, value, { act = "", placeholder = "Chọn…", extra = "", search = opts.length > 6 } = {}) {
   const cur = opts.find(o => String(o[0]) === String(value));
+  const finder = search ? `<div class="sticky -top-1 z-10 -mx-1 -mt-1 mb-0.5 bg-surface-overlay p-1"><div class="relative"><span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted">${ic("search", "size-4")}</span><input type="text" data-sel-search placeholder="Tìm…" autocomplete="off" aria-label="Tìm trong danh sách" class="h-9 w-full rounded-lg border border-border bg-surface pl-8 pr-2 text-sm outline-hidden focus:border-focus focus:ring-2 focus:ring-focus"></div></div>` : "";
   return `<div class="relative" data-select="${id}" data-value="${esc(value ?? "")}" ${act ? `data-sel-act="${act}"` : ""} ${extra}>
     <button type="button" id="${id}" aria-haspopup="listbox" aria-expanded="false" class="flex h-11 md:h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-border-strong bg-surface px-3 text-left text-base md:text-sm outline-hidden hover:bg-button-hover aria-expanded:border-focus aria-expanded:ring-2 aria-expanded:ring-focus" data-sel-open><span class="truncate ${cur ? "" : "text-muted"}">${esc(cur ? cur[1] : placeholder)}</span>${ic("chevron-down", "size-4 text-muted")}</button>
-    <div role="listbox" hidden class="ov-dialog absolute left-0 right-0 top-full z-40 mt-1 grid max-h-72 gap-0.5 overflow-y-auto rounded-xl border border-border bg-surface-overlay p-1 shadow-popover">${opts.map(([v, l]) => `<button type="button" role="option" aria-selected="${String(v) === String(value)}" data-sel-opt="${esc(v)}" class="flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-item-hover aria-selected:font-medium"><span>${esc(l)}</span>${String(v) === String(value) ? ic("check", "size-4") : ""}</button>`).join("")}</div>
+    <div role="listbox" hidden class="ov-dialog absolute left-0 right-0 top-full z-40 mt-1 grid max-h-72 gap-0.5 overflow-y-auto rounded-xl border border-border bg-surface-overlay p-1 shadow-popover">${finder}${opts.map(([v, l, k]) => `<button type="button" role="option" aria-selected="${String(v) === String(value)}" data-sel-opt="${esc(v)}" ${k ? `data-sel-keys="${esc(k)}"` : ""} class="flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-item-hover aria-selected:font-medium"><span>${esc(l)}</span>${String(v) === String(value) ? ic("check", "size-4") : ""}</button>`).join("")}<p hidden data-sel-empty class="px-2.5 py-2 text-sm text-muted">Không có mục khớp</p></div>
   </div>`;
 }
 const selVal = id => { const el = document.querySelector(`[data-select="${id}"]`); return el ? el.dataset.value : ""; };
@@ -58,7 +61,9 @@ new MutationObserver(() => { if (window.lucide && document.querySelector("i[data
 document.addEventListener("click", e => {
   const open = e.target.closest("[data-sel-open]");
   $$("[data-select] [role=listbox]:not([hidden])").forEach(l => { if (!open || l.parentElement !== open.parentElement) { l.hidden = true; l.parentElement.querySelector("[data-sel-open]").setAttribute("aria-expanded", "false"); } });
-  if (open) { const l = open.parentElement.querySelector("[role=listbox]"); l.hidden = !l.hidden; open.setAttribute("aria-expanded", String(!l.hidden)); return; }
+  if (open) { const l = open.parentElement.querySelector("[role=listbox]"); l.hidden = !l.hidden; open.setAttribute("aria-expanded", String(!l.hidden));
+    const q = l.querySelector("[data-sel-search]"); if (q && !l.hidden) { q.value = ""; selFilter(l, ""); if (matchMedia("(min-width: 768px)").matches) setTimeout(() => q.focus(), 0); } return; }
+  if (e.target.closest("[data-sel-search]")) return;
   const opt = e.target.closest("[data-sel-opt]");
   if (opt) {
     const box = opt.closest("[data-select]"); box.dataset.value = opt.dataset.selOpt;
@@ -70,3 +75,6 @@ document.addEventListener("click", e => {
   }
 }, true);
 document.addEventListener("keydown", e => { if (e.key === "Escape") $$("[data-select] [role=listbox]:not([hidden])").forEach(l => { l.hidden = true; }); });
+function selFilter(l, q) { const k = fold(q.trim()); let n = 0; l.querySelectorAll("[data-sel-opt]").forEach(o => { const on = !k || fold(o.textContent + " " + (o.dataset.selKeys || "")).includes(k); o.hidden = !on; n += on; }); const em = l.querySelector("[data-sel-empty]"); if (em) em.hidden = n > 0; }
+document.addEventListener("input", e => { const q = e.target.closest("[data-sel-search]"); if (q) selFilter(q.closest("[role=listbox]"), q.value); });
+document.addEventListener("keydown", e => { const q = e.target.closest?.("[data-sel-search]"); if (q && e.key === "Enter") { e.preventDefault(); q.closest("[role=listbox]").querySelector("[data-sel-opt]:not([hidden])")?.click(); } });

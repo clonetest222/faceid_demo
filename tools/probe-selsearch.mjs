@@ -1,0 +1,33 @@
+// Thử ô tìm trong dropdown đặt vé nhanh + ô tìm theo phim ở lịch chiếu. node tools/probe-selsearch.mjs
+import { spawn } from "node:child_process"; import { mkdtempSync, writeFileSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
+const EDGE = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", PORT = 9408, sleep = ms => new Promise(r => setTimeout(r, ms));
+const edge = spawn(EDGE, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "ss-"))}`, "--window-size=1280,900", "about:blank"], { stdio: "ignore" });
+for (let i = 0; i < 40; i++) { try { await fetch(`http://localhost:${PORT}/json/version`); break; } catch (e) { await sleep(250); } }
+const t = await (await fetch(`http://localhost:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
+const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise(r => ws.onopen = r);
+let id = 0; const pend = new Map(); ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } };
+const send = (method, params = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+const ev = async e => (await send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true })).result.result.value;
+const shot = async n => { const r = await send("Page.captureScreenshot", { format: "png" }); writeFileSync(join("e2e-shots", n + ".png"), Buffer.from(r.result.data, "base64")); };
+await send("Page.enable");
+await send("Page.navigate", { url: process.argv[2] || "http://localhost:8767/" }); await sleep(6000);
+await ev("sessionStorage.setItem('cinevin-promo','1'); document.querySelector('#modal-root [data-m=close]')?.click(); 1"); await sleep(300);
+await ev("document.querySelector('[data-select=qb-film]').scrollIntoView({block:'center'}); document.querySelector('#qb-film').click(); 1"); await sleep(300);
+console.log("menu mở, có ô tìm:", await ev("!document.querySelector('[data-select=qb-film] [role=listbox]').hidden + ' ' + !!document.querySelector('[data-select=qb-film] [data-sel-search]')"));
+console.log("mục trước lọc:", await ev("document.querySelectorAll('[data-select=qb-film] [data-sel-opt]:not([hidden])').length"));
+await ev("{ const q=document.querySelector('[data-select=qb-film] [data-sel-search]'); q.value='ngu mieu'; q.dispatchEvent(new Event('input',{bubbles:true})); } 1"); await sleep(200);
+console.log("mục sau lọc 'ngu mieu':", await ev("[...document.querySelectorAll('[data-select=qb-film] [data-sel-opt]:not([hidden])')].map(o=>o.textContent)"));
+await shot("sel_01_loc");
+await ev("{ const q=document.querySelector('[data-select=qb-film] [data-sel-search]'); q.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); } 1"); await sleep(800);
+console.log("sau Enter:", await ev("document.querySelector('#qb-film span').textContent + ' | ' + (S.view.qb||{}).film + ' | đóng=' + document.querySelector('[data-select=qb-film] [role=listbox]').hidden"));
+await ev("document.querySelector('#qb-cinema').click(); 1"); await sleep(200);
+console.log("rạp (7 mục) có ô tìm:", await ev("!!document.querySelector('[data-select=qb-cinema] [data-sel-search]')"));
+await ev("{ const q=document.querySelector('[data-select=qb-cinema] [data-sel-search]'); q.value='ha noi'; q.dispatchEvent(new Event('input',{bubbles:true})); } 1"); await sleep(200);
+console.log("rạp lọc 'ha noi':", await ev("[...document.querySelectorAll('[data-select=qb-cinema] [data-sel-opt]:not([hidden])')].map(o=>o.textContent)"));
+await ev("document.body.click(); location.hash='#/lich'; 1"); await sleep(800);
+await ev("document.querySelector('[data-act=lich-mode][data-v=phim]')?.click(); 1"); await sleep(600);
+console.log("lịch theo phim có ô tìm:", await ev("!!document.querySelector('#lich-q') + ' ' + document.querySelectorAll('[data-act=lich-film]').length"));
+await ev("{ const q=document.querySelector('#lich-q'); q.value='karaoke'; q.dispatchEvent(new Event('input',{bubbles:true})); } 1"); await sleep(600);
+console.log("lọc 'karaoke':", await ev("document.querySelectorAll('[data-act=lich-film]').length + ' | ' + document.querySelector('#lich-q')?.value"));
+await shot("sel_02_lich_phim");
+edge.kill(); process.exit(0);
