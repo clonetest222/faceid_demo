@@ -104,3 +104,7 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 .strip-posters .strip-nav { top: 72px; }
 [data-strip-wrap][data-at-start] .strip-nav-l, [data-strip-wrap][data-at-end] .strip-nav-r { opacity: .25; pointer-events: none; }
 @media (min-width: 640px) { .strip-nav { display: grid; } }
+
+/* sơ đồ ghế: khung cuộn hai chiều, chặn pinch-zoom của trình duyệt để tự xử lý */
+.seat-zoom-outer { overflow: auto; max-height: 70vh; padding: 4px 2px 8px; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+.seat-zoom-inner { transform-origin: 0 0; }

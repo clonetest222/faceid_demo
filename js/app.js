@@ -54,9 +54,30 @@ function render() {
   // gỡ khỏi trang thì trình duyệt tự dừng video → gắn lại khung cũ rồi phát tiếp, camera không bị đen
   for (const id in keep) { const n = $("#" + id); if (n && n.dataset.keep !== undefined) { n.replaceWith(keep[id]); keep[id].querySelectorAll("video").forEach(v => v.play().catch(() => {})); } }
   if (r === "home") { heroAuto(); maybePromo(); }
-  stripFocus();
+  stripFocus(); seatZoomFit(false);
   document.title = ({ home: "CineVin – Đặt vé xem phim online", chitiet: "Chi tiết phim", lich: "Lịch chiếu", ghe: "Chọn ghế", thanhtoan: "Thanh toán", ve: "Vé của tôi", doan: "Vé đoàn", taikhoan: "Tài khoản", tongquan: "Tổng quan", suat: "Suất chiếu", soat: "Soát vé", quay: "Bán tại quầy", kiemthu: "Kiểm thử", quyen: "Tài khoản & quyền" }[r] || "CineVin") + " – CineVin";
   if (r === "soat") gateCamStart();
+}
+/* ---------- sơ đồ ghế: phóng to / thu nhỏ (nút, Ctrl+lăn chuột, chụm hai ngón trên điện thoại); dùng CSS zoom để cuộn đúng kích thước ---------- */
+const SEAT_ZOOM = { z: 1, fit: 1, pinch: null };
+function seatZoomSet(z, pct = true) {
+  const outer = $("[data-seat-zoom]"), inner = $("[data-seat-zoom-inner]"); if (!outer || !inner) return;
+  SEAT_ZOOM.z = Math.min(2.4, Math.max(0.45, z)); inner.style.zoom = SEAT_ZOOM.z;
+  const p = $("[data-seat-zoom-pct]"); if (p && pct) p.textContent = Math.round(SEAT_ZOOM.z * 100) + "%";
+}
+/** Vừa khung: thu để cả hàng ghế lọt chiều ngang (điện thoại), tối đa 100% */
+function seatZoomFit(force) {
+  const outer = $("[data-seat-zoom]"), inner = $("[data-seat-zoom-inner]"); if (!outer || !inner) return;
+  inner.style.zoom = 1; const w = inner.scrollWidth || inner.offsetWidth; SEAT_ZOOM.fit = Math.min(1, (outer.clientWidth - 4) / Math.max(1, w));
+  if (force || !outer.dataset.zoomed) seatZoomSet(SEAT_ZOOM.fit); else seatZoomSet(SEAT_ZOOM.z);
+  if (!outer.dataset.bound) { outer.dataset.bound = "1";
+    outer.addEventListener("wheel", e => { if (!e.ctrlKey) return; e.preventDefault(); outer.dataset.zoomed = "1"; seatZoomSet(SEAT_ZOOM.z * (e.deltaY < 0 ? 1.1 : 0.9)); }, { passive: false });
+    const pts = new Map(); const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    outer.addEventListener("pointerdown", e => { if (e.pointerType !== "touch") return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2) SEAT_ZOOM.pinch = { d: dist(), z: SEAT_ZOOM.z }; });
+    outer.addEventListener("pointermove", e => { if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2 && SEAT_ZOOM.pinch) { e.preventDefault(); outer.dataset.zoomed = "1"; seatZoomSet(SEAT_ZOOM.pinch.z * dist() / SEAT_ZOOM.pinch.d); } }, { passive: false });
+    const up = e => { pts.delete(e.pointerId); if (pts.size < 2) SEAT_ZOOM.pinch = null; }; outer.addEventListener("pointerup", up); outer.addEventListener("pointercancel", up);
+    addEventListener("resize", () => seatZoomFit(false), { passive: true });
+  }
 }
 /** Dải ngày: đưa ngày đang chọn vào giữa khung cuộn ngang (không cuộn dọc trang) */
 function stripFocus() {
@@ -510,6 +531,7 @@ const A = {
   "add-dep"() { openAddDep(); },
   "del-dep"(el) { const i = S.dependents.findIndex(x => x.id === el.dataset.id); if (i >= 0) S.dependents.splice(i, 1); save(); render(); },
   "lich-day"(el) { S.view.day = el.dataset.v; save(); render(); },
+  "seat-zoom"(el) { const v = el.dataset.v; if (v === "fit") seatZoomFit(true); else seatZoomSet(SEAT_ZOOM.z * (v === "in" ? 1.25 : 0.8)); },
   "strip-scroll"(el) { const box = el.closest("[data-strip-wrap]")?.querySelector("[data-strip]"); if (box) box.scrollBy({ left: +el.dataset.v * Math.max(240, box.clientWidth * 0.7), behavior: "smooth" }); },
   "buy-more"(el) { const sh = show(el.dataset.show); if (!sh || new Date(sh.start) <= new Date()) return toast("Suất này đã chiếu – chọn suất khác", "bad"); releaseDraft(); S.draft = { id: rid("D"), showId: sh.id, seats: [], until: null, more: true }; save(); go("ghe"); toast("Ghế bạn đã mua hiện màu xanh – chọn thêm ghế cho người đi cùng"); },
   "pick-show"(el) { if (!Auth.user) { S.view.after = el.dataset.show; save(); toast("Đăng nhập để chọn ghế – mất 10 giây"); location.hash = "#/dangnhap"; return; } releaseDraft(); S.draft = { id: rid("D"), showId: el.dataset.show, seats: [], until: null }; save(); go("ghe"); },
