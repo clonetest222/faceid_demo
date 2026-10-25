@@ -9,10 +9,11 @@ function dayLabel(d) { const x = new Date(d), t = new Date(); t.setHours(0, 0, 0
 /* ---------- khung app khách ---------- */
 function customerShell(active, body, { bottomNav = true, footer = false, dark = false } = {}) {
   const u = Auth.user;
-  const nav = u ? [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["ve", "Vé của tôi", "ticket"], ["doan", "Vé đoàn", "users"], ["taikhoan", "Tài khoản", "circle-user-round"]]
+  const nav = u ? (u.guest ? [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["ve", "Vé của tôi", "ticket"], ["taikhoan", "Tài khoản", "circle-user-round"]]
+      : [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["ve", "Vé của tôi", "ticket"], ["doan", "Vé đoàn", "users"], ["taikhoan", "Tài khoản", "circle-user-round"]])
     : [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["dangnhap", "Đăng nhập", "log-in"]];
   const who = u ? `<a href="#/taikhoan" class="ml-auto flex items-center gap-2 rounded-xl p-1 hover:bg-item-hover" aria-label="Tài khoản">
-        <span class="hidden text-right sm:block"><span class="block text-sm font-medium leading-tight">${esc(S.user.linked ? S.user.name : u.name)}</span><span class="block text-xs text-muted">Khách · ${S.user.linked ? "đã liên kết VNeID" : "chưa liên kết VNeID"}</span></span>
+        <span class="hidden text-right sm:block"><span class="block text-sm font-medium leading-tight">${esc(S.user.linked ? S.user.name : u.name)}</span><span class="block text-xs text-muted">${u.guest ? "Khách vãng lai · " + esc(u.email || "") : "Khách · " + (S.user.linked ? "đã liên kết VNeID" : "chưa liên kết VNeID")}</span></span>
         ${avatar(S.user.linked ? S.user.name : u.name)}
       </a>`
     : `<div class="ml-auto flex items-center gap-2"><a href="#/dangky" class="${B.ghost} hidden min-h-9 px-3 sm:inline-flex">Tạo tài khoản</a><a href="#/dangnhap" class="${B.primary} min-h-9 px-4">${ic("log-in")}Đăng nhập</a></div>`;
@@ -186,7 +187,9 @@ function vThanhToan() {
   if (!d.assign || d.assign.length !== d.seats.length) d.assign = d.seats.map((_, i) => ({ viewer: { kind: S.user.linked && i === 0 ? "self" : "other" } }));
   const chk = checkOrder(sh, d.assign); let total = 0;
   const friendPending = d.assign.some(a => a.viewer.kind === "friend" && !a.viewer.user);
-  const opts = [["other", "Người đi cùng (chưa xác thực)"], ["self", `Tôi – ${S.user.name}${S.user.linked ? "" : " (chưa xác thực)"}`], ...S.dependents.map(x => ["dep:" + x.id, `Con – ${x.name} (${ageAt(x.dob, sh.start)} tuổi)`]), ...(Remote.v5 ? [["friend", "Bạn đi cùng có tài khoản CineVin…"]] : [])];
+  const guestMode = !Auth.user || Auth.user.guest;   // khách vãng lai: chưa có tài khoản / chưa xác thực → mọi ghế "người xem chưa xác thực"
+  const opts = guestMode ? [["other", "Người xem (chưa xác thực tuổi)"]]
+    : [["other", "Người đi cùng (chưa xác thực)"], ["self", `Tôi – ${S.user.name}${S.user.linked ? "" : " (chưa xác thực)"}`], ...S.dependents.map(x => ["dep:" + x.id, `Con – ${x.name} (${ageAt(x.dob, sh.start)} tuổi)`]), ...(Remote.v5 ? [["friend", "Bạn đi cùng có tài khoản CineVin…"]] : [])];
   const rows = d.seats.map((sid, i) => {
     const a = d.assign[i], r = chk.res[i], aud = audience(r.verified || r.level === "Cam kết" ? r.age : null), price = seatPrice(sh, sid, aud.key);
     if (!r.block) total += price;
@@ -203,7 +206,7 @@ function vThanhToan() {
   const v = d.voucher, disc = v ? (v.kind === "gift" ? Math.min(Number(v.amount), total) : Math.round(total * v.percent / 100)) : 0;
   const maxPts = Math.min(S.user.points || 0, Math.floor(Math.max(0, total - disc) / 1000)), usePts = Math.min(d.points || 0, maxPts);
   d.discount = disc; d.points = usePts; d.total = Math.max(0, total - disc - usePts * 1000);
-  const promo = Remote.v5 ? `<div class="mt-4 grid gap-2 border-t border-border pt-4">
+  const promo = Remote.v5 && Auth.user && !Auth.user.guest ? `<div class="mt-4 grid gap-2 border-t border-border pt-4">
           ${v ? `<div class="flex items-center justify-between gap-2 text-sm"><span class="flex items-center gap-2">${ic("ticket-percent", "size-4 text-success")}<span><b class="font-mono">${esc(v.code)}</b> · ${v.kind === "gift" ? "thẻ quà tặng" : "giảm " + v.percent + "%"}</span></span><span class="flex items-center gap-2 tabular-nums text-success">−${vnd(disc)}<button type="button" class="${B.icon} size-8" data-act="voucher-clear" aria-label="Bỏ mã">${ic("x")}</button></span></div>`
              : `<div class="flex gap-2"><input id="voucher" placeholder="Mã giảm giá / thẻ quà tặng" autocapitalize="characters" class="${INPUT} font-mono uppercase"><button type="button" class="${B.outline} min-h-11 md:min-h-10 shrink-0" data-act="voucher-apply">Áp dụng</button></div>`}
           <div class="flex items-center justify-between gap-2 text-sm"><span>Điểm thưởng <span class="text-muted">(có ${S.user.points || 0} · 1 điểm = 1.000 đ)</span></span>${usePts ? `<span class="flex items-center gap-2 tabular-nums text-success">−${vnd(usePts * 1000)}<button type="button" class="${B.icon} size-8" data-act="points-use" data-v="0" aria-label="Không dùng điểm">${ic("x")}</button></span>` : `<button type="button" class="${B.ghost} min-h-8 px-2" data-act="points-use" data-v="max" ${maxPts ? "" : "disabled"}>Dùng ${maxPts} điểm</button>`}</div>
@@ -211,7 +214,7 @@ function vThanhToan() {
   const min = RATINGS[f.rating];
   const age = min > 0 ? (S.user.linked
     ? `<div class="flex items-center gap-3 rounded-xl border border-border p-3"><span class="grid size-9 place-items-center rounded-lg bg-success-bg text-success">${ic("scan-face")}</span><div class="min-w-0 flex-1"><p class="text-sm font-medium">Xác minh tuổi (${f.rating})</p><p class="text-pretty text-xs text-muted">VNeID · ${esc(S.user.name)}, ${ageAt(S.user.dob, new Date())} tuổi${S.user.passkey ? ` · xác nhận chính chủ bằng ${esc(Passkey.label())} khi bấm thanh toán` : ""}</p></div>${tone("Đã xác minh", "ok")}</div>`
-    : `<div class="flex items-center gap-3 rounded-xl border border-border p-3"><span class="grid size-9 place-items-center rounded-lg bg-warning-bg text-warning">${ic("scan-face")}</span><div class="min-w-0 flex-1"><p class="text-sm font-medium">Xác minh tuổi (${f.rating})</p><p class="text-pretty text-xs text-muted">Chưa liên kết VNeID – tại cửa phải xuất trình giấy tờ.</p></div><button type="button" class="${B.outline} shrink-0" data-act="vneid-self">Liên kết</button></div>`) : "";
+    : `<div class="flex items-center gap-3 rounded-xl border border-border p-3"><span class="grid size-9 place-items-center rounded-lg bg-warning-bg text-warning">${ic("scan-face")}</span><div class="min-w-0 flex-1"><p class="text-sm font-medium">Xác minh tuổi (${f.rating})</p><p class="text-pretty text-xs text-muted">Chưa liên kết VNeID – tại cửa phải xuất trình giấy tờ.</p></div>${Auth.user && !Auth.user.guest ? `<button type="button" class="${B.outline} shrink-0" data-act="vneid-self">Liên kết</button>` : ""}</div>`) : "";
   const pay = S.view.payMethod || "momo";
   const methods = [["momo", "Ví MoMo", "wallet"], ["card", "Thẻ ngân hàng / VNPay QR", "credit-card"], ["counter", "Trả tại quầy (giữ 15 phút)", "store"]];
   const body = `<button type="button" data-act="back-seats" class="mb-3 inline-flex h-8 cursor-pointer items-center gap-1 text-sm text-muted hover:text-foreground">${ic("chevron-left")}Chọn ghế</button>
@@ -225,8 +228,8 @@ function vThanhToan() {
           ${promo}
           <div class="mt-4 grid gap-1 border-t border-border pt-4">${disc || usePts ? `<div class="flex items-center justify-between text-sm text-muted"><span>Giá vé</span><span class="tabular-nums">${vnd(total)}</span></div>` : ""}<div class="flex items-center justify-between"><span class="font-medium">Tổng thanh toán</span><span class="text-lg font-semibold tabular-nums">${vnd(d.total)}</span></div></div>
           ${S.user.confirmEvery && S.user.passkey ? `<p class="mt-2 flex items-center gap-1.5 text-xs text-muted">${ic("fingerprint", "size-3.5")}Sẽ xác nhận bằng ${esc(Passkey.label())} khi bấm thanh toán.</p>` : ""}
-          <button type="button" class="${B.primary} mt-3 w-full min-h-11 md:min-h-10" data-act="pay-ok" ${chk.ok && !friendPending ? "" : "disabled"}>Thanh toán ${vnd(d.total)}</button>
-          <p class="mt-2 text-center text-xs text-muted">Cổng thanh toán mô phỏng – không trừ tiền thật.</p>`)}
+          ${Auth.user ? `<button type="button" class="${B.primary} mt-3 w-full min-h-11 md:min-h-10" data-act="pay-ok" ${chk.ok && !friendPending ? "" : "disabled"}>Thanh toán ${vnd(d.total)}</button>
+          <p class="mt-2 text-center text-xs text-muted">Cổng thanh toán mô phỏng – không trừ tiền thật.${Remote.v21 && Auth.user.email ? ` Vé gửi về <b class="text-foreground">${esc(Auth.user.email)}</b>.` : ""}</p>` : guestCheckout()}`)}
       </aside>
     </div>`;
   return customerShell("lich", body, { bottomNav: false });
@@ -284,9 +287,13 @@ function vVe() {
   const seatTabs = !grp ? "" : split
     ? `<div class="mb-3 -mx-1 overflow-x-auto px-1 scrollbar-clean"><div class="flex w-max items-center gap-1.5"><span class="mr-1 text-xs text-muted">${sameShow.length} vé · ghế</span>${sameShow.map(x => `<button type="button" data-act="ticket-pick" data-code="${x.code}" aria-pressed="${x === t}" class="h-8 cursor-pointer rounded-full px-3 text-sm tabular-nums ${x === t ? "bg-foreground text-surface" : "bg-secondary hover:bg-secondary-hover"}">${esc(x.seat)}</button>`).join("")}<button type="button" data-act="qr-split" class="ml-1 h-8 cursor-pointer rounded-full border border-border-strong px-3 text-xs hover:bg-button-hover">Gộp lại</button></div></div>`
     : `<div class="mb-3 flex items-start gap-3 rounded-xl bg-background p-3"><span class="grid size-9 shrink-0 place-items-center rounded-lg bg-surface text-foreground">${ic("users")}</span><span class="min-w-0 flex-1"><span class="block text-sm font-medium">1 QR cho cả đơn · ${sameShow.length} vé</span><span class="block text-xs text-muted">Ghế ${esc(sameShow.map(x => x.seat).join(", "))}. Nhân viên quét một lần, cả nhóm cùng vào.</span></span><button type="button" data-act="qr-split" class="shrink-0 text-xs font-medium underline underline-offset-2">Tách từng vé</button></div>`;
+  const mailLine = Remote.v21 && Auth.user.email && t.channel === "Online" && t.ownerUser === Auth.user.username
+    ? `<p class="mt-3 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">${ic("mail", "size-3.5")}Vé đã gửi về <b class="text-foreground">${esc(Auth.user.email)}</b> · <button type="button" class="cursor-pointer font-medium text-foreground underline underline-offset-2" data-act="mail-view" data-ref="${esc(t.orderId || "")}">Xem email</button></p>` : "";
+  const guestBar = Auth.user.guest ? `<div class="mb-4">${banner("info", "", `Bạn đang mua không cần tài khoản (<b>${esc(Auth.user.email || "")}</b>). Vé đã gửi về email; mở lại bất cứ lúc nào ở <a href="#/tracuu" class="underline underline-offset-2">Tra cứu vé</a>. Tạo tài khoản bằng email này để giữ vé lâu dài và tích điểm.`, `<button type="button" class="${B.outline} shrink-0" data-act="guest-upgrade">${ic("user-plus")}Tạo tài khoản</button>`)}</div>` : "";
   const info = `<div class="flex items-start gap-3">${poster(f, "h-16 w-11 shrink-0")}<div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h2 class="truncate text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div><p class="text-sm text-muted">${dayLabel(sh.start)} · ${hhmm(sh.start)} · ${placeOf(sh)} · ${formatOf(sh)}</p></div></div>
     ${t.viewerUser && t.viewerUser === Auth.user.username && t.ownerUser !== Auth.user.username ? `<p class="mt-3 flex items-center gap-1.5 text-xs text-muted">${ic("gift", "size-3.5")}Vé do <b class="font-mono">@${esc(t.ownerUser)}</b> mua cho bạn.</p>` : t.viewerUser && t.ownerUser === Auth.user.username ? `<p class="mt-3 flex items-center gap-1.5 text-xs text-muted">${ic("user-check", "size-3.5")}Vé của bạn đi cùng <b>${esc(t.viewerName)}</b> (<span class="font-mono">@${esc(t.viewerUser)}</span>)${t.verified ? " · đã xác thực, vào thẳng" : " · kiểm tuổi ở cửa"}.</p>` : ""}
     <dl class="mt-4 grid grid-cols-3 gap-3 text-sm"><div><dt class="text-xs text-muted">Ghế</dt><dd class="font-medium">${grp && !split ? esc(sameShow.map(x => x.seat).join(", ")) : esc(t.seat)}</dd></div><div><dt class="text-xs text-muted">Mã vé</dt><dd class="font-mono font-medium">${t.code}</dd></div><div><dt class="text-xs text-muted">Tuổi</dt><dd class="font-medium">${t.needDoc ? "Kiểm tra tại cửa" : t.verified ? "Đã xác minh" : RATINGS[f.rating] ? "Kiểm tra tại cửa" : "Không giới hạn"}</dd></div></dl>
+    ${mailLine}
     ${new Date(sh.start) > new Date() || endOf(sh) > new Date() ? `<div class="mt-4 flex flex-wrap items-center justify-between gap-2">
       ${new Date(sh.start) > new Date() && freeSeats(sh) > 0 ? `<button type="button" class="${B.outline}" data-act="buy-more" data-show="${sh.id}">${ic("user-plus")}Mua thêm vé cùng suất</button>` : `<span class="text-xs text-muted">${freeSeats(sh) === 0 ? "Suất đã hết ghế" : "Suất đang chiếu"}</span>`}
       ${t.status === "valid" && t.channel === "Online" && new Date(sh.start) > new Date() ? `<button type="button" class="${B.ghost}" data-act="refund" data-code="${t.code}">Hoàn vé</button>` : ""}</div>` : ""}`;
@@ -297,7 +304,7 @@ function vVe() {
   const groups = []; ts.filter(x => !sameShow.includes(x)).forEach(x => { const k = x.showId + "|" + x.status; let g = groups.find(y => y.k === k); if (!g) groups.push(g = { k, showId: x.showId, items: [] }); g.items.push(x); });
   const vq = (S.view.veQ || "").trim().toLowerCase();
   const others = groups.filter(g => !vq || g.items.some(x => { const s2 = show(x.showId); return [film(s2.filmId).title, x.code, x.seat, cinemaOf(s2).name, ddmm(s2.start), x.status === "used" ? "đã xem" : x.status === "refunded" ? "đã hoàn" : "sắp chiếu"].join(" ").toLowerCase().includes(vq); }));
-  const body = head + `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
+  const body = head + guestBar + `<div class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
     <section class="rounded-xl border border-border bg-surface p-4 sm:p-5">${top}</section>
     <section>${h2("Vé khác", searchBox("ve-q", "Tìm vé theo phim, mã, ghế, rạp, ngày…", S.view.veQ, "w-full max-w-[320px]"))}${others.length ? `<div class="overflow-hidden rounded-xl border border-border bg-surface">${others.map(g => { const x = g.items[0], s2 = show(g.showId), f2 = film(s2.filmId), seats = g.items.map(y => y.seat);
       return `<button type="button" data-act="ticket-pick" data-code="${x.code}" class="flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-surface-hover">${poster(f2, "h-14 w-10 shrink-0")}<span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(f2.title)}${g.items.length > 1 ? ` <span class="text-sm font-normal text-muted">· ${g.items.length} vé</span>` : ""}</span><span class="block truncate text-xs text-muted">${dayLabel(s2.start)} · ${hhmm(s2.start)} · ${placeOf(s2)} · ghế ${esc(seats.slice(0, 6).join(", "))}${seats.length > 6 ? ` +${seats.length - 6}` : ""}</span></span>${ticketStatus(x)}</button>`; }).join("")}</div>` : `<p class="text-sm text-muted">${vq ? "Không có vé khớp từ khoá." : "Chưa có vé khác. Mua thêm vé cho bạn bè bằng nút “Mua thêm vé cùng suất”, hoặc <a href=\"#/lich\" class=\"font-medium text-foreground underline underline-offset-2\">xem lịch chiếu</a>."}</p>`}
@@ -364,8 +371,53 @@ function vDoan() {
 }
 
 /* ---------- Tài khoản ---------- */
+/* Khối "Nhận vé qua email" trong trang thanh toán cho khách chưa đăng nhập (021): email → mã 6 số → phiên khách → nút Thanh toán hiện ra */
+function guestCheckout() {
+  const g = GUEST, can = !Remote.v4 || Remote.v21;
+  const head = `<div class="mt-4 border-t border-border pt-4"><p class="text-sm font-medium">Nhận vé qua email</p><p class="mt-0.5 text-xs text-muted">Không cần tài khoản. Có tài khoản? <a href="#/dangnhap" class="underline underline-offset-2">Đăng nhập</a> để tích điểm (ghế đang giữ vẫn còn).</p>`;
+  if (!can) return `${head}<p class="mt-3 text-sm text-muted">Máy chủ chưa bật mua vé không cần tài khoản (migration 021) – đăng nhập để tiếp tục.</p></div>`;
+  const err = g.err ? `<p class="text-sm text-[var(--error-text)]" role="alert">${esc(g.err)}</p>` : "";
+  if (g.step === "code") return `${head}<form class="mt-3 grid gap-3" data-form="guest-verify" novalidate>
+      <p class="text-sm">${g.mailed ? `Supabase đã gửi mã 6 số tới <b>${esc(g.email)}</b> – kiểm tra hộp thư, cả mục Spam. Mã có hiệu lực 10 phút.` : `Mã 6 số cho <b>${esc(g.email)}</b>.`}</p>
+      ${g.demoCode ? `<div class="rounded-xl border border-dashed border-border-strong bg-background p-3 text-sm"><p class="text-xs text-muted">Chế độ demo (chưa cấu hình SMTP cho Supabase) nên mã hiện ở đây:</p><p class="mt-1 font-mono text-2xl font-bold tracking-[.3em]">${esc(g.demoCode)}</p></div>` : ""}
+      ${field("Mã xác nhận", `<input id="g-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="6 số" class="${INPUT} !h-12 text-center font-mono text-xl tracking-[.3em]">`)}${err}
+      <button type="submit" class="${B.primary} min-h-12" ${g.busy ? "disabled" : ""}>${g.busy ? "Đang kiểm tra…" : `${ic("check")}Xác nhận email`}</button>
+      <div class="flex justify-between text-xs"><button type="button" class="cursor-pointer text-muted underline underline-offset-2" data-act="guest-back">Đổi email</button><button type="button" class="cursor-pointer text-muted underline underline-offset-2" data-act="guest-resend">Gửi lại mã</button></div></form></div>`;
+  return `${head}<form class="mt-3 grid gap-3" data-form="guest-send" novalidate>
+      ${field("Email nhận vé", `<input id="g-email" type="email" autocomplete="email" inputmode="email" placeholder="ban@example.com" class="${INPUT} !h-12" value="${esc(g.email)}">`)}
+      <div class="grid gap-3 sm:grid-cols-2">${field("Họ và tên", `<input id="g-name" autocomplete="name" placeholder="Nguyễn Văn A" class="${INPUT} !h-12" value="${esc(g.name)}">`)}${field("Số điện thoại (tuỳ chọn)", `<input id="g-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="09xx xxx xxx" class="${INPUT} !h-12" value="${esc(g.phone)}">`)}</div>${err}
+      <button type="submit" class="${B.primary} min-h-12" ${g.busy ? "disabled" : ""}>${g.busy ? "Đang gửi mã…" : `${ic("mail")}Gửi mã xác nhận`}</button>
+      <p class="text-pretty text-xs text-muted">Mã 6 số gửi về email để chắc bạn nhận được vé; email dùng một lần (10 phút) bị từ chối. Phim giới hạn tuổi sẽ kiểm giấy tờ tại cửa.</p></form></div>`;
+}
+
+/* Tra cứu vé mua không tài khoản: mã vé / mã đơn + email → phiên xem vé 2 giờ (021). Link trong mail: #/tracuu?ma=<mã đơn> */
+function vTraCuu() {
+  const ma = (location.hash.match(/[?&]ma=([^&]+)/) || [])[1] || "";
+  const body = pageHead("Tra cứu vé", "Vé mua không cần tài khoản: nhập mã vé hoặc mã đơn (có trong email) và email đã dùng khi mua") + `
+    <div class="grid gap-4 lg:grid-cols-[480px_minmax(0,1fr)] lg:items-start">
+      ${card(`<form class="grid gap-4" data-form="tracuu" novalidate>
+        ${field("Mã vé hoặc mã đơn", `<input id="tc-code" placeholder="VD: V8K2M1 hoặc D7H3…" autocapitalize="characters" spellcheck="false" class="${INPUT} !h-12 font-mono uppercase" value="${esc(decodeURIComponent(ma))}">`)}
+        ${field("Email đã nhận vé", `<input id="tc-email" type="email" inputmode="email" autocomplete="email" placeholder="ban@example.com" class="${INPUT} !h-12">`)}
+        ${TRACUU.err ? `<p class="text-sm text-[var(--error-text)]" role="alert">${esc(TRACUU.err)}</p>` : ""}
+        <button type="submit" class="${B.primary} min-h-12" ${TRACUU.busy ? "disabled" : ""}>${TRACUU.busy ? "Đang tìm…" : `${ic("search")}Mở vé`}</button>
+        <p class="text-pretty text-xs text-muted">Mở xong bạn xem được mã QR vào rạp, mua thêm vé cùng suất hoặc hoàn vé trước giờ chiếu 30 phút. Có tài khoản? <a href="#/dangnhap" class="underline underline-offset-2">Đăng nhập</a>.</p></form>`)}
+      ${card(`<h2 class="text-base font-semibold">Mua vé không cần tài khoản</h2><ol class="mt-3 grid gap-3 text-sm text-muted">${[["Chọn suất và ghế", "Bấm giờ chiếu ở Lịch chiếu, chọn ghế trên sơ đồ – không cần đăng nhập, ghế giữ 5 phút."], ["Xác nhận email, thanh toán", "Nhập email + họ tên, nhận mã 6 số (email dùng một lần bị từ chối), nhập mã rồi thanh toán."], ["Nhận vé qua email", "Mail có phim, rạp, ghế, mã vé và nút mở QR. QR đổi mỗi 15 giây nên luôn mở trên điện thoại."]].map(([t, d], i) => `<li class="flex gap-3"><span class="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">${i + 1}</span><span><b class="text-foreground">${t}</b><br>${d}</span></li>`).join("")}</ol>`)}
+    </div>`;
+  return customerShell("tracuu", body);
+}
+
 function vTaiKhoan() {
   const u = S.user, a = Auth.user, v5 = Remote.v5 && a.token;
+  if (a.guest) {   // khách vãng lai: chỉ email/tên, mời tạo tài khoản thật (vé chuyển sang)
+    const body = pageHead("Tài khoản khách", `${esc(a.name)} · mua không cần tài khoản`, `<button type="button" class="${B.outline}" data-act="logout">${ic("log-out")}Thoát</button>`) + `
+      <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
+        ${card(`<h2 class="mb-3 text-base font-semibold">Thông tin nhận vé</h2><dl class="grid gap-2 text-sm">${[["Email", esc(a.email || "")], ["Họ tên", esc(a.name)], ["Số điện thoại", a.phone ? esc(a.phone) : `<span class="text-muted">chưa có</span>`], ["Phiên", a.offline ? tone("Ngoại tuyến – trình duyệt", "warn") : tone("Khách vãng lai · 2 giờ", "neutral")]].map(([k, v]) => `<div class="flex justify-between gap-3 border-b border-border py-1.5 last:border-0"><dt class="text-muted">${k}</dt><dd class="text-right">${v}</dd></div>`).join("")}</dl>
+          <p class="mt-3 text-pretty text-xs text-muted">Vé của bạn đã gửi về email. Hết phiên vẫn mở lại được ở <a href="#/tracuu" class="underline underline-offset-2">Tra cứu vé</a> bằng mã vé + email.</p>`)}
+        ${card(`<h2 class="text-base font-semibold">Tạo tài khoản để giữ vé &amp; tích điểm</h2><ul class="mt-2 grid gap-1 pl-5 text-sm text-muted" style="list-style:disc"><li>Vé đã mua chuyển sang tài khoản mới (cùng email)</li><li>Tích 5% điểm thưởng, dùng mã khuyến mãi, thẻ quà tặng khi hoàn vé</li><li>Xác thực VNeID + FaceID để mua vé theo tuổi và vào thẳng phim T13–T18</li></ul>
+          <button type="button" class="${B.primary} mt-4 w-full" data-act="guest-upgrade">${ic("user-plus")}Tạo tài khoản với ${esc(a.email || "email này")}</button>`)}
+      </div>`;
+    return customerShell("taikhoan", body);
+  }
   // null/undefined = cần tải lại (sau khi thanh toán, hoàn vé); cờ loading tránh gọi trùng khi render nhiều lần
   if (v5 && !S.view.vouchers && !S.view.vouchersLoading) { S.view.vouchersLoading = true; Remote.rpc("my_vouchers", { p_token: a.token }).then(r => { S.view.vouchers = r; }).catch(() => { S.view.vouchers = []; }).finally(() => { S.view.vouchersLoading = false; render(); }); }
   const idCard = u.linked

@@ -4,7 +4,7 @@
 "use strict";
 const Remote = (() => {
   const cfg = window.CINEVIN_CONFIG || {};
-  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null, v8 = null, v11 = false, v15 = false, catTimer = null;
+  let sb = null, online = false, status = "offline", listeners = [], v2 = false, v4 = null, v5 = null, v6 = null, v8 = null, v11 = false, v15 = false, v21 = null, catTimer = null;
   /** Danh mục rạp/phòng (006) và phim/phân phối (008) từ máy chủ → thay dữ liệu mẫu trong app */
   async function reloadCatalog() {
     if (!sb || !v6) return;
@@ -61,7 +61,7 @@ const Remote = (() => {
       // bảng nhật ký xác thực (migration 002) – có thì tải, chưa có thì bỏ qua
       const vf = await sb.from("verifications").select("*").order("id", { ascending: false }).limit(60);
       v2 = !vf.error; S.verifs = v2 ? vf.data : [];
-      await hasV4(); await hasV5();
+      await hasV4(); await hasV5(); await hasV21();
       subscribe(S, onChange);
       online = true; status = "online"; emit();
       return true;
@@ -109,6 +109,36 @@ const Remote = (() => {
     catch (e) { v5 = /not_logged_in/.test(e.message || "") ? true : (/PGRST202|Could not find/.test((e.message || "") + (e.code || "")) ? false : null); }
     return !!v5;
   }
+  /** Đã chạy migration 021 (mua vé không cần tài khoản, mail vé, tra cứu) chưa */
+  async function hasV21() {
+    if (v21 !== null) return v21;
+    if (!(await hasV5())) return false;
+    try { await rpc("my_mails", { p_token: "00000000-0000-0000-0000-000000000000", p_ref: null }); v21 = true; }
+    catch (e) { v21 = /not_logged_in/.test(e.message || "") ? true : (/PGRST202|Could not find/.test((e.message || "") + (e.code || "")) ? false : null); }
+    return !!v21;
+  }
+  /* Mua vé không cần tài khoản (021): mã xác nhận do Supabase Auth gửi/kiểm tra. Dùng client RIÊNG để phiên Auth tạm không đụng client dữ liệu/realtime. */
+  let sbAuth = null;
+  const authClient = () => { if (!sbAuth && ensureClient()) sbAuth = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }); return sbAuth; };
+  async function otpSend(email) {
+    const a = authClient(); if (!a) throw new Error("offline");
+    const { error } = await a.auth.signInWithOtp({ email, options: { shouldCreateUser: true } }); if (error) throw error;
+  }
+  /** verifyOtp → JWT có email đã xác minh → RPC guest_verify_auth (đi kèm JWT) → trả phiên khách; xong thì bỏ phiên Auth */
+  async function otpVerify(email, code) {
+    const a = authClient(); if (!a) throw new Error("offline");
+    const { error } = await a.auth.verifyOtp({ email, token: code, type: "email" }); if (error) throw error;
+    try { const { data, error: e2 } = await a.rpc("guest_verify_auth"); if (e2) throw e2; return data; }
+    finally { await a.auth.signOut({ scope: "local" }).catch(() => {}); }
+  }
+  /** Gửi mail vé đang chờ của phiên p_token qua Edge Function send-mail (SMTP Gmail); trả {sent:[{id,ok,error}]} */
+  async function sendMail(token, ref) {
+    if (!ensureClient()) throw new Error("offline");
+    const { data, error } = await sb.functions.invoke("send-mail", { body: { token, ref: ref || null } });
+    if (error) { let msg = error.message || "function_error"; try { const ctx = error.context; if (ctx && ctx.json) { const b = await ctx.json(); if (b && b.error) msg = b.error; } } catch (e) {} throw new Error(msg); }
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  }
   /** Chỉ tạo client (trang điện thoại ghép nối không cần tải toàn bộ dữ liệu) */
   function ensureClient() {
     if (sb) return true;
@@ -123,7 +153,7 @@ const Remote = (() => {
 
   return {
     init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, hasV5, DEVICE,
-    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, get v11() { return !!v11; }, reloadCatalog, get hasClient() { return !!sb; },
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, get v11() { return !!v11; }, get v21() { return !!v21; }, hasV21, otpSend, otpVerify, sendMail, reloadCatalog, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();

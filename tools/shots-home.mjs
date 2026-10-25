@@ -39,7 +39,10 @@ console.log("số ngày lịch:", await ev("showDays().length"));
 await ev("location.hash='#/lich'"); await sleep(900); await shot("home_06_lich_khach");
 // khách vãng lai bấm suất → sang đăng nhập, sau đăng nhập đi thẳng chọn ghế
 await ev("(()=>{let b=document.querySelector('[data-act=pick-show]:not([disabled])'); if(!b){document.querySelectorAll('[data-act=lich-day]')[1].click();} return 1})()"); await sleep(700); await ev("document.querySelector('[data-act=pick-show]:not([disabled])').click()"); await sleep(800);
-console.log("về đăng nhập:", location => true, await ev("location.hash"), "after=", await ev("S.view.after"));
+console.log("khách vãng lai vào thẳng sơ đồ ghế:", await ev("location.hash + ' draft=' + !!S.draft + ' ghế=' + document.querySelectorAll('[data-act=toggle-seat]').length"));
+await shot("home_06b_ghe_khach", false);
+await ev("location.hash='#/dangnhap'"); await sleep(800);
+console.log("về đăng nhập:", await ev("location.hash"), "draft còn=", await ev("!!S.draft"));
 await ev("document.querySelector('#li-user').value='khach';document.querySelector('#li-pass').value='khach123';document.querySelector('[data-form]').requestSubmit()"); await wait("!!Auth.user && location.hash.startsWith('#/ghe')", 10000); await sleep(800);
 console.log("sau đăng nhập:", await ev("location.hash"));
 await shot("home_07_ghe_sau_dangnhap", false);

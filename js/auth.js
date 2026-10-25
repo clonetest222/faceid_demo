@@ -61,6 +61,12 @@ const Auth = (() => {
     seat_sold_blocked: "Ghế đã bán / đang giữ cho suất sắp chiếu – không đánh dấu bảo trì được. Hoàn hoặc đổi vé trước.",
     forbidden: "Tài khoản không có quyền làm việc này.",
     not_logged_in: "Phiên đăng nhập đã hết – đăng nhập lại.",
+    email_registered: "Email này đã có tài khoản CineVin – đăng nhập để mua vé và tích điểm.",
+    use_login: "Vé này thuộc tài khoản đã đăng ký – đăng nhập để xem.",
+    unknown_ticket: "Không tìm thấy vé khớp mã và email này.",
+    email_disposable: "Email dùng một lần (10 phút, tạm thời) không được chấp nhận – dùng email thật để nhận vé.",
+    too_many_requests: "Bạn đã xin mã quá 3 lần trong 10 phút – kiểm tra hộp thư (cả mục spam) rồi thử lại sau.",
+    otp_missing: "Chưa có mã cho email này – bấm Gửi mã.", otp_expired: "Mã đã hết hạn (10 phút) – bấm Gửi lại mã.", otp_locked: "Nhập sai quá 5 lần – bấm Gửi lại mã.",
   };
   const message = e => { const m = String((e && (e.message || e)) || "");
     const sb = /seat_sold_blocked ([A-Z0-9, ]+)/.exec(m); if (sb) return `Ghế ${sb[1]} đã bán / đang giữ cho suất sắp chiếu – không đánh dấu bảo trì được. Hoàn hoặc đổi vé trước.`;
@@ -70,7 +76,7 @@ const Auth = (() => {
   const store = u => { user = u; try { u ? localStorage.setItem(KEY, JSON.stringify(u)) : localStorage.removeItem(KEY); } catch (e) {} };
   const fromServer = r => ({ token: r.token, username: r.username, role: r.role, name: r.name, email: r.email || null, phone: r.phone || null,
     citizenKey: r.citizen_key || null, dob: r.dob || null, vneidAt: r.vneid_verified_at || null, vneidMethod: r.vneid_method || null,
-    points: r.points == null ? null : r.points, confirmEvery: !!r.confirm_every, cinemaId: r.cinema_id === undefined ? undefined : (r.cinema_id || null), offline: false });
+    points: r.points == null ? null : r.points, confirmEvery: !!r.confirm_every, cinemaId: r.cinema_id === undefined ? undefined : (r.cinema_id || null), guest: !!r.guest, offline: false });
   const localUsers = () => { let extra = []; try { extra = JSON.parse(localStorage.getItem(LOCAL)) || []; } catch (e) {} return [...DEMO, ...extra]; };
   const okUser = u => /^[a-z0-9_.]{3,32}$/.test(u);
   const norm = s => String(s || "").trim();
@@ -127,6 +133,49 @@ const Auth = (() => {
     store({ token: null, username: u, role: "khach", name: norm(name), email: em || null, phone: ph || null, offline: true });
     return { ok: true };
   }
+  /** Mua vé không cần tài khoản (021): bước 1 – máy chủ kiểm email (chặn email dùng một lần, email đã có tài khoản), ghi tên/SĐT;
+      chế độ 'auth': Supabase Auth gửi mã 6 số qua SMTP đã cấu hình; chế độ 'demo': máy chủ trả mã để hiện trên trang */
+  const AUTH_ERR = [[/not authorized/i, "Máy chủ chưa cấu hình SMTP nên Supabase chỉ gửi được tới email thành viên dự án – xem README để cấu hình Gmail."],
+    [/rate limit|only request this after/i, "Gửi mã quá nhanh – đợi 60 giây rồi bấm Gửi lại mã."], [/expired|invalid/i, "Mã không đúng hoặc đã hết hạn – kiểm tra lại hoặc bấm Gửi lại mã."],
+    [/signups not allowed|Signups not allowed/i, "Supabase đang tắt đăng ký email (Authentication → Providers → Email) – bật lại để gửi mã."]];
+  const authMsg = e => { const m = String((e && (e.message || e)) || ""); for (const [re, t] of AUTH_ERR) if (re.test(m)) return t; return message(e); };
+  async function guestSend({ email, name, phone = "" }) {
+    const em = norm(email).toLowerCase(), ph = norm(phone).replace(/[^\d+]/g, "");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return { ok: false, message: ERR.bad_email, field: "email" };
+    if (norm(name).length < 2) return { ok: false, message: ERR.bad_name, field: "name" };
+    if (ph && !/^(\+84|0)\d{9}$/.test(ph)) return { ok: false, message: ERR.bad_phone, field: "phone" };
+    if (await Remote.hasV4()) {
+      if (!(await Remote.hasV21())) return { ok: false, message: "Máy chủ chưa bật mua vé không cần tài khoản (migration 021) – hãy đăng nhập." };
+      let r;
+      try { r = await Remote.rpc("guest_email_check", { p_email: em, p_name: norm(name), p_phone: ph || null }); }
+      catch (e) { const m = e.message || ""; return { ok: false, message: message(e), field: /email/.test(m) ? "email" : /name/.test(m) ? "name" : /phone/.test(m) ? "phone" : "" }; }
+      if (r.mode === "auth") { try { await Remote.otpSend(r.email); } catch (e) { return { ok: false, message: authMsg(e), field: "email" }; } }
+      return { ok: true, email: r.email, mode: r.mode, mailed: r.mode === "auth", demoCode: r.demo_code || null, expiresAt: r.expires_at };
+    }
+    return { ok: true, email: em, mode: "offline", mailed: false, demoCode: "000000", offline: { name: norm(name), phone: ph || null } };
+  }
+  /** Bước 2 – nhập mã: 'auth' → Supabase verifyOtp rồi guest_verify_auth; 'demo' → guest_verify; sai mã trả ok=false (còn n lần) */
+  async function guestVerify(email, code, mode = "demo", offline = null) {
+    const em = norm(email).toLowerCase(), c = String(code || "").replace(/\D/g, "");
+    if (c.length !== 6) return { ok: false, message: "Nhập đủ 6 số trong email." };
+    if (mode === "offline" || !(await Remote.hasV4())) {
+      if (c !== "000000") return { ok: false, message: "Mã không đúng (ngoại tuyến: 000000)." };
+      store({ token: null, username: "g_" + em.replace(/[^a-z0-9]/g, "").slice(0, 12).padEnd(3, "x"), role: "khach", name: (offline || {}).name || "Khách", email: em, phone: (offline || {}).phone || null, points: 0, guest: true, offline: true });
+      return { ok: true };
+    }
+    try {
+      if (mode === "auth") { store(fromServer(await Remote.otpVerify(em, c))); return { ok: true }; }
+      const r = await Remote.rpc("guest_verify", { p_email: em, p_code: c });
+      if (r && r.ok === false) return { ok: false, message: r.attempts_left > 0 ? `Mã không đúng – còn ${r.attempts_left} lần thử.` : "Mã đã bị khoá – bấm Gửi lại mã." };
+      store(fromServer(r)); return { ok: true };
+    } catch (e) { return { ok: false, message: authMsg(e) }; }
+  }
+  /** Tra cứu vé đã mua không tài khoản: mã vé / mã đơn + email → phiên khách mới (021) */
+  async function lookup(code, email) {
+    if (!(await Remote.hasV21())) return { ok: false, message: "Máy chủ chưa bật tra cứu vé (migration 021)." };
+    try { const r = await Remote.rpc("lookup_order", { p_code: norm(code), p_email: norm(email).toLowerCase() }); store(fromServer(r)); return { ok: true, order: r.order, ticket: r.ticket }; }
+    catch (e) { return { ok: false, message: message(e) }; }
+  }
   function logout() { if (user && user.token) Remote.rpc("logout", { p_token: user.token }).catch(() => {}); store(null); }
   /** Cập nhật phiên từ JSON máy chủ trả về (sau liên kết VNeID, đổi tuỳ chọn, thanh toán…) */
   function refresh(r) { if (r && r.username) store(fromServer(r)); }
@@ -140,5 +189,5 @@ const Auth = (() => {
     try { const r = await Remote.rpc("session_info", { p_token: user.token }); if (!r) { store(null); return false; } store(fromServer(r)); } catch (e) {}
     return true;
   }
-  return { get user() { return user; }, get token() { return user && user.token; }, login, loginFace, loginVneid, loginVneid2, register, logout, refresh, setPoints, check, message, DEMO, ROLE_TXT };
+  return { get user() { return user; }, get token() { return user && user.token; }, login, loginFace, loginVneid, loginVneid2, register, guestSend, guestVerify, lookup, logout, refresh, setPoints, check, message, DEMO, ROLE_TXT };
 })();

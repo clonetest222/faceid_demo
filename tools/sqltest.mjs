@@ -11,8 +11,8 @@ const q = async (sql, params) => (await db.query(sql, params)).rows;
 const err = async (sql, params) => { try { await db.query(sql, params); return null; } catch (e) { return e.message; } };
 const j = async (sql, params) => (await q(sql, params))[0].j;
 
-await db.exec(`create role anon; create role authenticated; create schema if not exists extensions; create publication supabase_realtime;`);
-for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql", "015_price_tiers.sql", "015_price_tiers.sql", "016_hr.sql", "016_hr.sql", "017_account.sql", "017_account.sql", "018_shift_request.sql", "018_shift_request.sql", "019_keys.sql", "019_keys.sql", "020_films_cgv.sql", "020_films_cgv.sql"]) {
+await db.exec(`create role anon; create role authenticated; create role service_role; create schema if not exists extensions; create publication supabase_realtime;`);
+for (const f of ["schema.sql", "002_verification.sql", "003_fix_reset.sql", "004_auth_qr.sql", "005_customer.sql", "005_customer.sql", "006_chain.sql", "006_chain.sql", "007_promo.sql", "007_promo.sql", "008_admin.sql", "008_admin.sql", "009_seats.sql", "009_seats.sql", "010_seat_info.sql", "010_seat_info.sql", "011_seat_types.sql", "011_seat_types.sql", "012_zero.sql", "012_zero.sql", "013_fixed_price.sql", "013_fixed_price.sql", "014_own_identity.sql", "014_own_identity.sql", "015_price_tiers.sql", "015_price_tiers.sql", "016_hr.sql", "016_hr.sql", "017_account.sql", "017_account.sql", "018_shift_request.sql", "018_shift_request.sql", "019_keys.sql", "019_keys.sql", "020_films_cgv.sql", "020_films_cgv.sql", "021_guest.sql", "021_guest.sql"]) {
   try { await db.exec(fs.readFileSync(new URL(f, DIR), "utf8")); ok("chạy " + f, true); } catch (e) { ok("chạy " + f, false, e.message); process.exit(1); }
 }
 
@@ -262,6 +262,69 @@ ok("019 khoá ngoại: vé của tài khoản không tồn tại bị chặn; xo
 // ---- 020: kho phim demo CGV
 ok("020 nạp 60 phim CGV (27 đang chiếu, 33 sắp chiếu) kèm ngày khởi chiếu, tóm tắt; chạy lại không nhân đôi", (await q(`select count(*)::int n, count(*) filter (where status='soon')::int s, count(*) filter (where synopsis is not null)::int d from films where source='cgv'`))[0].n === 60 && (await q(`select count(*) filter (where status='soon')::int s from films where source='cgv'`))[0].s === 33);
 // phân phối cho cơ sở: lúc chạy migration chưa có rạp (rạp do ensure_cinemas gieo khi mở web) → ensure_films lo phân phối khi khởi động
+// ---- 021: mua vé không cần tài khoản: OTP (demo / Supabase Auth), chặn email dùng một lần, mail vé qua Edge Function, tra cứu, nâng cấp
+ok("021 otp_mode mặc định demo", (await q(`select otp_mode() m`))[0].m === "demo");
+ok("021 email dùng một lần bị chặn (kể cả tên miền con)", /email_disposable/.test(await err(`select guest_email_check('ai@10minutemail.com','Lan',null)`)) && /email_disposable/.test(await err(`select guest_email_check('ai@x.yopmail.com','Lan',null)`)));
+ok("021 email sai / thiếu tên bị chặn", /bad_email/.test(await err(`select guest_email_check('abc','Lan',null)`)) && /bad_name/.test(await err(`select guest_email_check('x@y.vn','L',null)`)));
+ok("021 email đã có tài khoản thật → email_registered (mời đăng nhập)", /email_registered/.test(await err(`select guest_email_check('minh.anh@example.com','Ai Đó',null)`)));
+const o1 = await j(`select guest_email_check(' Lan.Vang@Example.com ','Lan Vãng Lai','0987 654 321') j`);
+ok("021 demo: trả mã 6 số, hết hạn 10 phút", o1.email === "lan.vang@example.com" && o1.mode === "demo" && /^\d{6}$/.test(o1.demo_code) && (new Date(o1.expires_at) - Date.now()) < 10.1 * 60e3, JSON.stringify(o1));
+ok("021 mã lưu băm bcrypt, không lưu mã thô", (await q(`select code_hash from email_otps where email='lan.vang@example.com' order by id desc limit 1`))[0].code_hash.startsWith("$2"));
+const wrong = await j(`select guest_verify('lan.vang@example.com','000000') j`);
+ok("021 sai mã → ok=false otp_wrong, còn 4 lần, lần thử được ghi", wrong.ok === false && wrong.error === "otp_wrong" && wrong.attempts_left === 4 && (await q(`select attempts from email_otps where email='lan.vang@example.com' order by id desc limit 1`))[0].attempts === 1);
+const g1 = await j(`select guest_verify('LAN.VANG@example.com', $1) j`, [o1.demo_code.slice(0, 3) + " " + o1.demo_code.slice(3)]);
+ok("021 đúng mã (có khoảng trắng) → tài khoản khách g_<băm>, guest=true, 0 điểm, SĐT, phiên 2 giờ", /^g_[0-9a-f]{12}$/.test(g1.username) && g1.guest === true && g1.points === 0 && g1.phone === "0987654321" && g1.name === "Lan Vãng Lai" && (new Date(g1.expires_at) - Date.now()) < 2.1 * 3600e3, JSON.stringify({ u: g1.username }));
+ok("021 mã đã dùng không dùng lại được", /otp_missing/.test(await err(`select guest_verify('lan.vang@example.com', $1)`, [o1.demo_code])));
+const o2 = await j(`select guest_email_check('lan.vang@example.com','Lan Mới',null) j`); const g2 = await j(`select guest_verify('lan.vang@example.com', $1) j`, [o2.demo_code]);
+ok("021 cùng email lần sau → cùng tài khoản khách, cập nhật tên, phiên mới", g2.username === g1.username && g2.name === "Lan Mới" && g2.token !== g1.token);
+await q(`select guest_email_check('lan.vang@example.com','Lan',null)`);
+ok("021 quá 3 yêu cầu / 10 phút → too_many_requests", /too_many_requests/.test(await err(`select guest_email_check('lan.vang@example.com','Lan',null)`)));
+// chế độ auth: Supabase Auth gửi mã; web verifyOtp xong gọi guest_verify_auth() với JWT (giả lập claims)
+await q(`update app_config set v='auth' where k='otp_mode'`);
+const oa = await j(`select guest_email_check('hoa.auth@example.com','Hoa Auth','0911222333') j`);
+ok("021 auth: bước 1 không trả mã, chỉ ghi tên/SĐT chờ", oa.mode === "auth" && oa.demo_code === undefined && (await q(`select code_hash, name from email_otps where email='hoa.auth@example.com' order by id desc limit 1`))[0].code_hash === "");
+ok("021 auth: không có JWT → not_logged_in", /not_logged_in/.test(await err(`select guest_verify_auth()`)));
+ok("021 auth: JWT role anon → not_logged_in", /not_logged_in/.test(await err(`select set_config('request.jwt.claims', '{"role":"anon","email":"hoa.auth@example.com"}', true), guest_verify_auth()`)));
+const ga = (await q(`select set_config('request.jwt.claims', '{"role":"authenticated","email":"Hoa.Auth@example.com"}', true) s, guest_verify_auth() j`))[0].j;
+ok("021 auth: JWT authenticated có email → tài khoản khách với tên/SĐT đã khai, phiên 2 giờ", /^g_/.test(ga.username) && ga.guest === true && ga.name === "Hoa Auth" && ga.phone === "0911222333" && ga.email === "hoa.auth@example.com");
+ok("021 auth: email trong JWT thuộc danh sách chặn → email_disposable", /email_disposable/.test(await err(`select set_config('request.jwt.claims', '{"role":"authenticated","email":"x@mailinator.com"}', true), guest_verify_auth()`)));
+ok("021 auth: email đã có tài khoản thật trong JWT → email_registered", /email_registered/.test(await err(`select set_config('request.jwt.claims', '{"role":"authenticated","email":"minh.anh@example.com"}', true), guest_verify_auth()`)));
+await q(`select set_config('request.jwt.claims', null, true)`); await q(`update app_config set v='demo' where k='otp_mode'`);
+// thanh toán + mail vé
+await q(`select add_show_s($1,'SG1','f1','086-R1',now()+interval '6h',now()+interval '8h')`, [ql.token]);
+await q(`select hold_seat('SG1','C1','HG1',now()+interval '5 min')`); await q(`select hold_seat('SG1','C2','HG1',now()+interval '5 min')`);
+const gpay = await j(`select sell_order_u($1,'SG1','HG1','[{"code":"VG1","order_id":"HG1","seat":"C1","price":85000,"channel":"Online","viewer_name":"Lan Mới"},{"code":"VG2","order_id":"HG1","seat":"C2","price":85000,"channel":"Online"}]'::jsonb,null,50) j`, [g2.token]);
+ok("021 khách vãng lai thanh toán: không dùng/tích điểm, trả đủ, mailed_to = email", gpay.points_used === 0 && gpay.points_earned === 0 && Number(gpay.paid) === 170000 && gpay.mailed_to === "lan.vang@example.com", JSON.stringify(gpay));
+ok("021 vé thuộc tài khoản khách", (await q(`select count(*)::int n from tickets where owner_user=$1 and order_id='HG1'`, [g2.username]))[0].n === 2);
+const mb = await q(`select * from mail_outbox where username=$1 and kind='ticket'`, [g2.username]);
+ok("021 mail vé xếp vào outbox pending: đủ ghế, mã vé, tổng tiền, link tra cứu", mb.length === 1 && mb[0].status === "pending" && mb[0].to_email === "lan.vang@example.com" && /C1/.test(mb[0].html) && /VG2/.test(mb[0].html) && /170\.000/.test(mb[0].html) && /#\/tracuu\?ma=HG1/.test(mb[0].html) && /^Vé CineVin/.test(mb[0].subject), mb[0] && mb[0].subject);
+const tk = await q(`select * from mail_take($1, 'HG1')`, [g2.token]);
+ok("021 Edge Function mail_take: lấy mail của chủ phiên, đánh dấu queued; lấy lần 2 rỗng", tk.length === 1 && tk[0].to_email === "lan.vang@example.com" && tk[0].html.includes("<table") && (await q(`select status from mail_outbox where id=$1`, [tk[0].id]))[0].status === "queued" && (await q(`select count(*)::int n from mail_take($1, 'HG1')`, [g2.token]))[0].n === 0);
+ok("021 mail_mark cần service_role: anon/authenticated bị forbidden", /forbidden/.test(await err(`select set_config('request.jwt.claims', '{"role":"authenticated"}', true), mail_mark($1, true, null)`, [tk[0].id])));
+await q(`select set_config('request.jwt.claims', '{"role":"service_role"}', true), mail_mark($1, false, 'SMTP 535 auth failed')`, [tk[0].id]);
+ok("021 mail_mark gửi lỗi → failed + lý do; mail_take lấy lại được để thử lần nữa", (await q(`select status, error from mail_outbox where id=$1`, [tk[0].id]))[0].error === "SMTP 535 auth failed" && (await q(`select count(*)::int n from mail_take($1, null)`, [g2.token]))[0].n === 1);
+await q(`select set_config('request.jwt.claims', '{"role":"service_role"}', true), mail_mark($1, true, null)`, [tk[0].id]);
+ok("021 mail_mark gửi thành công → sent, có sent_at", (await q(`select status, sent_at from mail_outbox where id=$1`, [tk[0].id]))[0].status === "sent");
+await q(`select set_config('request.jwt.claims', null, true)`);
+ok("021 anon không gọi được mail_take / mail_mark", !(await q(`select has_function_privilege('anon','public.mail_take(uuid,text)','execute') p`))[0].p && !(await q(`select has_function_privilege('anon','public.mail_mark(bigint,boolean,text)','execute') p`))[0].p && (await q(`select has_function_privilege('service_role','public.mail_take(uuid,text)','execute') p`))[0].p);
+const mm = await q(`select * from my_mails($1, null)`, [g2.token]);
+ok("021 my_mails trả mail vé của tôi kèm trạng thái sent", mm.length === 1 && mm[0].ref === "HG1" && mm[0].status === "sent" && mm[0].html.includes("<table"));
+ok("021 khach chưa có email → không có mail", (await q(`select count(*)::int n from mail_outbox where username='khach'`))[0].n === 0);
+const lk = await j(`select lookup_order('vg1','LAN.VANG@example.com') j`);
+ok("021 tra cứu bằng mã vé + email → phiên khách mới, biết mã đơn", lk.username === g2.username && lk.order === "HG1" && lk.ticket === "VG1" && lk.token !== g2.token);
+ok("021 tra cứu bằng mã đơn cũng được", (await j(`select lookup_order('HG1','lan.vang@example.com') j`)).order === "HG1");
+ok("021 sai email → unknown_ticket (không lộ vé người khác)", /unknown_ticket/.test(await err(`select lookup_order('VG1','khac@example.com')`)));
+ok("021 vé của tài khoản thật → use_login", /use_login/.test(await err(`select lookup_order('VT01','minh.anh@example.com')`)) || /unknown_ticket/.test(await err(`select lookup_order('VT01','x@y.z')`)));
+ok("021 QR vé lấy được bằng phiên tra cứu", /^CV1\.VG1\./.test((await j(`select ticket_qr($1,'VG1') j`, [lk.token])).payload));
+const up = await j(`select register('lanvang','matkhau1','Lan Vãng Lai','lan.vang@example.com','0987654321') j`);
+ok("021 đăng ký bằng email đã mua vãng lai → tài khoản thật, vé chuyển sang, tài khoản khách bị xoá, 120 điểm", up.username === "lanvang" && up.guest === false && up.points === 120 && (await q(`select count(*)::int n from tickets where owner_user='lanvang' and order_id='HG1'`))[0].n === 2 && (await q(`select count(*)::int n from app_users where username=$1`, [g2.username]))[0].n === 0 && (await q(`select count(*)::int n from mail_outbox where username='lanvang'`))[0].n === 1);
+ok("021 tên đăng nhập dạng g_… và email dùng một lần bị cấm khi đăng ký", /bad_username/.test(await err(`select register('g_abcdef123456','matkhau1','X Y',null,null)`)) && /email_disposable/.test(await err(`select register('tamthoi','matkhau1','X Y','a@mailinator.com',null)`)));
+await q(`select hold_seat('SG1','C3','HG2',now()+interval '5 min')`);
+const pay3 = await j(`select sell_order_u($1,'SG1','HG2','[{"code":"VG3","order_id":"HG2","seat":"C3","price":85000,"channel":"Online"}]'::jsonb,null,0) j`, [up.token]);
+ok("021 tài khoản thật có email: thanh toán tích điểm và có mail vé", pay3.points_earned === 4 && pay3.mailed_to === "lan.vang@example.com" && (await q(`select count(*)::int n from mail_outbox where username='lanvang'`))[0].n === 2);
+await q(`select blocklist_set_s($1,'Spam-Tam.Xyz',true)`, [ql.token]);
+ok("021 quản lý thêm tên miền chặn → có hiệu lực; bỏ → hết chặn", /email_disposable/.test(await err(`select guest_email_check('a@spam-tam.xyz','Ai',null)`)) && (await q(`select blocklist_set_s($1,'spam-tam.xyz',false)`, [ql.token]), !/email_disposable/.test(await err(`select guest_email_check('a@spam-tam.xyz','Ai',null)`) || "")));
+ok("021 anon không gọi được _email_check / _mail_order / _guest_session", !(await q(`select has_function_privilege('anon','public._email_check(text)','execute') p`))[0].p && !(await q(`select has_function_privilege('anon','public._mail_order(text,text)','execute') p`))[0].p && !(await q(`select has_function_privilege('anon','public._guest_session(text,text,text)','execute') p`))[0].p);
 ok("huỷ liên kết VNeID", (await j(`select unlink_vneid($1) j`, [kh.token])).citizen_key === null);
 ok("anon không gọi được _find_user", !(await q(`select has_function_privilege('anon','public._find_user(text)','execute') p`))[0].p);
 console.log(`\n${pass} PASS, ${fail} FAIL`);
