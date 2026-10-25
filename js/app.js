@@ -475,6 +475,7 @@ const A = {
   logout() { stopMedia(""); releaseDraft(); Auth.logout(); save(); location.hash = "#/home"; render(); },
   "home-tab"(el) { const go = () => document.getElementById("sec-" + el.dataset.v)?.scrollIntoView({ behavior: "smooth", block: "start" }); if (routeName() !== "home") { location.hash = "#/home"; setTimeout(go, 150); } else go(); },
   "film-detail"(el) { S.view.detailFilm = el.dataset.v; save(); go("chitiet"); },
+  "soon-all"() { soonSheet(); },
   "film-book"(el) { S.view.lichMode = "phim"; S.view.lichFilm = el.dataset.v; const s0 = firstShowOf(el.dataset.v); if (s0) S.view.day = dayKey(s0.start); save(); go("lich"); },
   "cf-prev"() { cfGo("prev"); }, "cf-next"() { cfGo("next"); }, "cf-dot"(el) { cfGo(el.dataset.v); },
   // bấm bất kỳ poster nào trong dải xoay → đặt vé phim đó (phim sắp chiếu → trang chi tiết); kéo thì không tính là bấm

@@ -105,8 +105,16 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 .strip-nav-l { left: -10px; } .strip-nav-r { right: -10px; }
 .strip-posters .strip-nav { top: 72px; }
 .strip-home .strip-nav { top: 126px; } @media (min-width: 1024px) { .strip-home .strip-nav { top: 138px; } }
-[data-strip-wrap][data-at-start] .strip-nav-l, [data-strip-wrap][data-at-end] .strip-nav-r { opacity: .25; pointer-events: none; }
-@media (min-width: 640px) { .strip-nav { display: grid; } }
+/* ≥640px: nút ‹ › chỉ hiện khi còn cuộn được về phía đó (ở đầu dải: không nút, thẻ đầu thẳng hàng với ô tìm / lề trang);
+   phía có nút phủ một dải mờ trắng để nút không đè thô lên thẻ */
+@media (min-width: 640px) {
+  .strip-nav { display: grid; }
+  [data-strip-wrap][data-at-start] .strip-nav-l, [data-strip-wrap][data-at-end] .strip-nav-r { display: none; }
+  [data-strip-wrap]::before, [data-strip-wrap]::after { content: ""; position: absolute; top: 0; bottom: 0; width: 64px; z-index: 2; pointer-events: none; }
+  [data-strip-wrap]::before { left: 0; background: linear-gradient(to right, rgb(255 255 255 / .92), rgb(255 255 255 / 0)); }
+  [data-strip-wrap]::after { right: 0; background: linear-gradient(to left, rgb(255 255 255 / .92), rgb(255 255 255 / 0)); }
+  [data-strip-wrap][data-at-start]::before, [data-strip-wrap][data-at-end]::after { display: none; }
+}
 
 /* sơ đồ ghế: khung cuộn hai chiều, chặn pinch-zoom của trình duyệt để tự xử lý */
 .seat-zoom-outer { overflow: auto; max-height: 70vh; padding: 4px 2px 8px; touch-action: pan-x pan-y; overscroll-behavior: contain; }

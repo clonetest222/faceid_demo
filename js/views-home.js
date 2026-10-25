@@ -4,7 +4,7 @@
 const HOME_IMG = id => `https://images.unsplash.com/photo-${id}?w=1600&q=70&auto=format&fit=crop`;
 /** Mô tả, ảnh nền, phim hot: từ danh mục CGV (js/films-cgv.js) */
 const fmeta = f => { const m = CGV_BY_ID[f.id] || {}; return { desc: m.desc || "", backdrop: m.backdrop || f.img, hot: !!m.hot, director: m.director || "", cast: m.cast || "", unrated: !!m.unrated }; };
-const RELEASE_TXT = f => f.release ? `Khởi chiếu ${ddmm(new Date(f.release))}` : "";
+const RELEASE_TXT = f => { if (!f.release) return "Sắp chiếu"; const d = new Date(f.release); return `Khởi chiếu ${ddmm(d)}${d.getFullYear() !== new Date().getFullYear() ? "/" + d.getFullYear() : ""}`; };
 /** Phim có suất từ hôm nay trở đi (đang chiếu) và phim sắp chiếu (chưa có suất, có ngày khởi chiếu tương lai) */
 /* đang chiếu = có suất từ hôm nay trở đi ở bất kỳ cơ sở nào (phim thử nghiệm không có suất thì không hiện) */
 const nowShowing = () => { const t0 = new Date(); t0.setHours(0, 0, 0, 0); return S.films.filter(f => f.active !== false && !isUpcoming(f) && S.shows.some(s => s.filmId === f.id && s.status !== "cancelled" && new Date(s.start) >= t0)); };
@@ -152,7 +152,7 @@ function vHome() {
   const body = `<h1 class="sr-only">CineVin – đặt vé xem phim online tại ${esc(c.name)} và 6 cơ sở khác</h1>
     ${coverflowHtml()}${quickBookHtml()}
     <section class="mb-10" id="sec-dangchieu" aria-labelledby="h-phim">${SECTION_HEAD(`<span id="h-phim">Phim đang chiếu</span>`, `Tại ${esc(c.name)} và toàn hệ thống · lịch 10 ngày tới`, seeAll)}${nowBlock}</section>
-    <section class="mb-10 scroll-mt-24" id="sec-sapchieu" aria-labelledby="h-sapchieu">${SECTION_HEAD(`<span id="h-sapchieu">Phim sắp chiếu</span>`, "Đặt lịch nhắc để không bỏ lỡ suất đầu tiên", seeAll)}${soonBlock}</section>
+    <section class="mb-10 scroll-mt-24" id="sec-sapchieu" aria-labelledby="h-sapchieu">${SECTION_HEAD(`<span id="h-sapchieu">Phim sắp chiếu</span>`, "Đặt lịch nhắc để không bỏ lỡ suất đầu tiên", `<button type="button" data-act="soon-all" class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-0.5 text-sm font-medium text-primary hover:underline">Xem tất cả${ic("chevron-right", "size-4")}</button>`)}${soonBlock}</section>
     <section class="mb-10" aria-labelledby="h-uudai">${SECTION_HEAD(`<span id="h-uudai">Ưu đãi và tiện ích</span>`, "Những thứ làm CineVin khác rạp thường")}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${PERKS.map(([i, t, d, k]) => `<article class="flex gap-3 rounded-2xl border border-border bg-surface p-4"><span class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-light text-primary">${ic(i, "size-5")}</span><div class="min-w-0"><p class="text-xs font-medium uppercase tracking-wide text-muted">${k}</p><h3 class="mt-0.5 font-semibold">${t}</h3><p class="mt-1 text-pretty text-sm text-muted">${d}</p></div></article>`).join("")}</div></section>
     <section class="mb-6 overflow-hidden rounded-3xl bg-foreground text-surface" aria-labelledby="h-cach">
@@ -163,6 +163,17 @@ function vHome() {
         <img src="${HOME_IMG("1478720568477-152d9b164e26")}" alt="Phòng chiếu CineVin" loading="lazy" class="aspect-[4/3] w-full rounded-2xl object-cover">
       </div></section>`;
   return customerShell("home", body, { footer: true, dark: true });
+}
+
+/* Popup "Phim sắp chiếu": lưới mọi phim sắp chiếu theo ngày khởi chiếu; bấm phim → trang chi tiết (Nhắc tôi khi mở bán) */
+function soonSheet() {
+  const soon = comingSoon();
+  const sh = openSheet(`${sheetHead("Phim sắp chiếu", `${soon.length} phim · bấm vào phim để xem chi tiết và đặt nhắc khi mở bán`)}
+    <div class="grid grid-cols-3 gap-3 sm:grid-cols-4">${soon.map(f => `<button type="button" data-act="film-detail" data-v="${f.id}" class="group grid cursor-pointer content-start gap-1.5 text-left"><span class="relative block aspect-[2/3] overflow-hidden rounded-xl bg-secondary">${f.img ? `<img src="${f.img}" alt="" loading="lazy" class="size-full object-cover transition-transform duration-300 group-hover:scale-105">` : ""}<span class="absolute left-1.5 top-1.5">${rate(f.rating)}</span><span class="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-md bg-foreground/80 px-1.5 py-0.5 text-[10px] font-medium text-surface">${RELEASE_TXT(f)}</span></span><span class="block h-[34px] line-clamp-2 text-xs font-medium leading-snug">${esc(f.title)}</span></button>`).join("")}</div>
+    ${soon.length ? "" : `<p class="text-sm text-muted">Chưa có phim sắp chiếu.</p>`}
+    <button type="button" class="${B.outline}" data-m="close">Đóng</button>`, { wide: true, label: "Phim sắp chiếu" });
+  sh.el.onclick = e => { const b = e.target.closest("[data-act=film-detail]"); if (b) { sh.close(); A["film-detail"](b); return; } if (e.target.closest('[data-m="close"]')) sh.close(); };
+  return sh;
 }
 
 /* ---------- Chi tiết phim ---------- */
