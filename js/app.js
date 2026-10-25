@@ -16,7 +16,7 @@ const PUBLIC = new Set(["home", "lich", "chitiet", "tracuu", "ghe", "thanhtoan"]
 let CUR_ROUTE = "", PHONE_MODE = false;
 const routeName = () => (location.hash.match(/^#\/([a-z]+)/) || [])[1] || "";
 function go(r) { if (routeName() === r) { render(); window.scrollTo({ top: 0 }); } else location.hash = "#/" + r; }
-window.addEventListener("hashchange", () => { document.body.removeAttribute("data-menu-open"); if (PROMO_SHEET) { PROMO_SHEET.close(); PROMO_SHEET = null; } render(); window.scrollTo({ top: 0 }); });
+window.addEventListener("hashchange", () => { document.body.removeAttribute("data-menu-open"); if (S.view.theatre) { S.view.theatre = false; document.body.classList.remove("theatre-open"); } if (PROMO_SHEET) { PROMO_SHEET.close(); PROMO_SHEET = null; } render(); window.scrollTo({ top: 0 }); });
 
 /* Vẽ lại khi dữ liệu realtime đổi; hoãn nếu người dùng đang gõ trong ô nhập */
 let rerenderPending = false;
@@ -39,7 +39,7 @@ function render() {
       try { app.innerHTML = ROUTES[r].view(); } catch (e) { console.error(e); app.innerHTML = `<div class="p-6">${banner("bad", "Lỗi hiển thị", esc(e.message), `<button class="${B.outline}" data-act="reset-local">Đặt lại dữ liệu trên máy</button>`)}</div>`; }
       document.title = r === "home" ? "CineVin – Đặt vé xem phim online, lịch chiếu 7 rạp" : r === "tracuu" ? "Tra cứu vé – CineVin" : r === "ghe" ? "Chọn ghế – CineVin" : r === "thanhtoan" ? "Thanh toán – CineVin" : r === "chitiet" ? `${(S.films.find(f => f.id === S.view.detailFilm) || {}).title || "Phim"} – Lịch chiếu & đặt vé | CineVin` : "Lịch chiếu – CineVin";
       if (r === "home") { heroAuto(); maybePromo(); }
-      stripFocus(); seatZoomFit(false); return;
+      stripFocus(); seatZoomFit(false); seat3dSync(); return;
     }
     CUR_ROUTE = r === "dangky" ? "dangky" : "dangnhap"; stopMedia(); app.innerHTML = vLogin(CUR_ROUTE === "dangky"); document.title = "Đăng nhập – CineVin"; return;
   }
@@ -54,7 +54,7 @@ function render() {
   // gỡ khỏi trang thì trình duyệt tự dừng video → gắn lại khung cũ rồi phát tiếp, camera không bị đen
   for (const id in keep) { const n = $("#" + id); if (n && n.dataset.keep !== undefined) { n.replaceWith(keep[id]); keep[id].querySelectorAll("video").forEach(v => v.play().catch(() => {})); } }
   if (r === "home") { heroAuto(); maybePromo(); }
-  stripFocus(); seatZoomFit(false);
+  stripFocus(); seatZoomFit(false); seat3dSync();
   document.title = ({ home: "CineVin – Đặt vé xem phim online", chitiet: "Chi tiết phim", lich: "Lịch chiếu", ghe: "Chọn ghế", thanhtoan: "Thanh toán", ve: "Vé của tôi", doan: "Vé đoàn", taikhoan: "Tài khoản", tongquan: "Tổng quan", suat: "Suất chiếu", soat: "Soát vé", quay: "Bán tại quầy", kiemthu: "Kiểm thử", quyen: "Tài khoản & quyền" }[r] || "CineVin") + " – CineVin";
   if (r === "soat") gateCamStart();
 }
@@ -96,6 +96,45 @@ function stripDrag(box) {
   box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
   box.addEventListener("dragstart", e => { if (on || moved) e.preventDefault(); });   // không cho trình duyệt kéo-thả ảnh poster (nó huỷ chuỗi pointer)
   box.addEventListener("click", e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+}
+/* Ngồi xuống ghế đang đứng cạnh (đi lại trong rạp): ghế trống → giữ ghế rồi về góc nhìn từ ghế; đã chọn → chỉ ngồi */
+function seatSit(sid) {
+  const d = S.draft; if (!d) return; const sh = show(d.showId), r = room(sh.roomId), groups = seatGroups(r);
+  const mine = myTickets().some(t => t.showId === sh.id && t.seat === sid && t.status !== "refunded"), s = seatState(sh.id, sid);
+  if (mine || (s && s.st === "sold") || (s && s.st === "held" && s.by !== d.id) || !seatType(seatKind(r, sid)).sellable) return toast(mine ? "Ghế của bạn (đã có vé)" : "Ghế này đã có người");
+  const after = () => { S.view.seat3dMode = "seat"; S.view.seat3dFocus = sid; render(); toast(`Đã ngồi vào ${sid} · E để đứng dậy`); };
+  if (d.seats.includes(sid)) { d.seats.splice(d.seats.indexOf(sid), 1); d.seats.push(sid); save(); return after(); }   // đưa ghế vừa ngồi lên làm ghế đang xem
+  if (d.seats.length >= S.params.maxTickets) return toast(`Đã đủ ${S.params.maxTickets} vé mỗi đơn – bỏ bớt ghế trước`);
+  const g = groups.get(sid); A["toggle-seat"]({ dataset: { seat: sid, group: g && g.length > 1 ? g.join(",") : undefined } }); setTimeout(after, 50);
+}
+/* Joystick cảm ứng ở màn rạp (điện thoại): kéo núm trong vòng tròn → vector tiến/lùi, trái/phải */
+function bindJoystick() {
+  const j = $("[data-joystick]"); if (!j || j.dataset.bound) return; j.dataset.bound = "1"; const knob = $("[data-joy-knob]", j), base = j.firstElementChild; let id = null;
+  const set = e => { const b = base.getBoundingClientRect(), R = b.width / 2; let dx = e.clientX - (b.left + R), dy = e.clientY - (b.top + R); const m = Math.hypot(dx, dy); if (m > R) { dx = dx / m * R; dy = dy / m * R; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`; Seat3D.setJoystick(dx / R, dy / R); };
+  j.addEventListener("pointerdown", e => { id = e.pointerId; j.setPointerCapture(id); set(e); });
+  j.addEventListener("pointermove", e => { if (id === e.pointerId) set(e); });
+  const end = e => { if (id !== e.pointerId) return; id = null; knob.style.transform = ""; Seat3D.setJoystick(0, 0); };
+  j.addEventListener("pointerup", end); j.addEventListener("pointercancel", end);
+  const run = $("[data-run-btn]"); if (run) { run.addEventListener("pointerdown", () => { Seat3D.setRun(true); run.classList.add("is-on"); }); ["pointerup", "pointercancel", "pointerleave"].forEach(t => run.addEventListener(t, () => { Seat3D.setRun(false); run.classList.remove("is-on"); })); }
+}
+/* Khung phòng chiếu 3D (js/seat3d.js): gắn vào [data-seat3d] của trang chọn ghế sau mỗi lần vẽ; rời trang thì giải phóng WebGL */
+function seat3dSync() {
+  if (typeof Seat3D === "undefined") return;
+  if (!$("[data-theatre]") && document.body.classList.contains("theatre-open")) document.body.classList.remove("theatre-open");
+  const el = $("[data-theatre-stage]") || $$("[data-seat3d]").find(x => x.getClientRects().length) || null; if (!el) { if (Seat3D.active) Seat3D.destroy(); return; }
+  const d = S.draft; if (!d || !show(d.showId)) return;
+  const sh = show(d.showId), r = room(sh.roomId), f = film(sh.filmId), groups = seatGroups(r);
+  const mine = new Set(myTickets().filter(t => t.showId === sh.id && t.status !== "refunded").map(t => t.seat));
+  const stateOf = sid => { if (mine.has(sid)) return "mine"; const s = seatState(sh.id, sid); if (s && s.st === "sold") return "sold"; if (s && s.st === "held") return s.by === d.id ? "selected" : "held"; return seatType(seatKind(r, sid)).sellable ? "free" : "blocked"; };
+  bindJoystick();
+  Seat3D.mount(el, { room: r, groups, selected: d.seats.slice(), focus: d.seats[d.seats.length - 1], poster: f.img, title: f.title, mode: S.view.seat3dMode === "overview" ? "overview" : S.view.seat3dMode === "walk" && S.view.theatre ? "walk" : "seat", view: S.view.seat3dView || "first", stateOf,
+    onNear: n => { const p = $("[data-near-prompt]"), t = $("[data-near-text]"); if (!p) return; p.classList.toggle("hidden", !n); p.classList.toggle("flex", !!n); if (n && t) t.textContent = `Ngồi xuống · Hàng ${n.row}, Ghế ${n.number}`; },
+    onSit: sid => seatSit(sid),
+    canSit: sid => { const s = stateOf(sid); return s === "free" || s === "selected"; },
+    kindOf: sid => { const k = seatKind(r, sid); return k === "vip" ? "vip" : k === "couple" ? "couple" : seatType(k).sellable ? "std" : "blocked"; },
+    onPick: sid => { const s = stateOf(sid); if (s === "sold" || s === "held" || s === "mine" || s === "blocked") return toast(s === "blocked" ? "Ghế này không bán" : s === "mine" ? "Ghế của bạn (đã có vé)" : "Ghế đã bán hoặc đang có người giữ");
+      const g = groups.get(sid); A["toggle-seat"]({ dataset: { seat: sid, group: g && g.length > 1 ? g.join(",") : undefined } }); } });
 }
 function stopMedia(next) {
   if (GATE.stop && next !== "soat") { GATE.stop(); GATE.stop = null; }
@@ -628,6 +667,22 @@ const A = {
   "work-cinema-set"(el) { SEL["work-cinema"](null, el.dataset.v); },
   "seat-blocked"(el) { toast(`Ghế ${el.dataset.seat} đang bảo trì – không chọn được, mời chọn ghế khác`, "bad"); },
   "cancel-draft"() { releaseDraft(); save(); go("lich"); },
+  "seat-view"(el) { S.view.seatView = el.dataset.v; save(); render(); },
+  "seat3d-mode"(el) { S.view.seat3dMode = el.dataset.v; render(); },
+  "seat-priority"(el) { S.view.seatPriority = el.dataset.v; save(); render(); },
+  // Vào rạp (toàn màn hình) / thoát; đi lại; ngồi xuống ghế gần; đổi ngôi nhìn; toàn màn hình (điện thoại cố khoá xoay ngang)
+  "enter-theatre"() { S.view.theatre = true; if (S.view.seat3dMode !== "walk") S.view.seat3dMode = S.view.seat3dMode || "seat"; document.body.classList.add("theatre-open"); render(); },
+  "exit-theatre"() { S.view.theatre = false; if (S.view.seat3dMode === "walk") S.view.seat3dMode = "seat"; document.body.classList.remove("theatre-open"); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); render(); },
+  "exit-theatre-pay"() { S.view.theatre = false; document.body.classList.remove("theatre-open"); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); },
+  async "theatre-fullscreen"() { const el = $("[data-theatre]"); if (!el) return; try { if (document.fullscreenElement) await document.exitFullscreen(); else { await (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: "hide" }); try { await screen.orientation.lock("landscape"); } catch (e) {} } } catch (e) { toast("Trình duyệt không cho toàn màn hình – rạp vẫn phủ kín cửa sổ"); } },
+  "seat3d-view"() { S.view.seat3dView = S.view.seat3dView === "third" ? "first" : "third"; seat3dSync(); },
+  "seat-sit"() { const n = Seat3D.near; if (n) seatSit(n.id); },
+  // gợi ý ghế đẹp: ghế trống có góc nhìn tốt nhất (giữa phòng, chính diện), cả nhóm ghế đôi phải trống
+  "seat-best"() { const d = S.draft; if (!d) return; const sh = show(d.showId), r = room(sh.roomId), groups = seatGroups(r);
+    if (d.seats.length >= S.params.maxTickets) return toast(`Đã đủ ${S.params.maxTickets} vé mỗi đơn`);
+    const free = sid => !seatState(sh.id, sid) && seatType(seatKind(r, sid)).sellable && !d.seats.includes(sid) && !myTickets().some(t => t.showId === sh.id && t.seat === sid && t.status !== "refunded");
+    const prio = Seat3D.PRIO[S.view.seatPriority] ? S.view.seatPriority : "balanced", sid = Seat3D.best(r, free, groups, prio); if (!sid) return toast("Hết ghế trống");
+    const g = groups.get(sid), q = Seat3D.rate(r, sid, prio); A["toggle-seat"]({ dataset: { seat: sid, group: g && g.length > 1 ? g.join(",") : undefined } }); toast(`Ghế tốt nhất: ${sid} · ${q.text} · ${q.score100}/100`); },
   "to-checkout"() { go("thanhtoan"); },
   "back-seats"() { go("ghe"); },
   "pay-method"(el) { S.view.payMethod = el.dataset.v; render(); },
@@ -665,8 +720,8 @@ const A = {
   async "mail-view"(el) { if (!Remote.v21 || !Auth.token) return toast("Máy chủ chưa bật gửi mail (migration 021)"); let rows = [];
     try { rows = await Remote.rpc("my_mails", { p_token: Auth.token, p_ref: el.dataset.ref || null }); } catch (e) { return toast(Auth.message(e), "bad"); }
     const m = rows && rows[0]; if (!m) return toast("Chưa có mail cho đơn này");
-    const st = { pending: "chưa gửi – Edge Function send-mail chưa deploy / chưa cấu hình SMTP; đây là nội dung sẽ gửi", queued: "đang gửi…", sent: "đã gửi thành công" + (m.sent_at ? "" : ""), failed: "gửi lỗi: " + (m.error || "") }[m.status] || m.status;
-    const sh = openSheet(`${sheetHead("Email vé", `Tới <b>${esc(m.to_email)}</b> · ${esc(st)}`)}<p class="text-sm font-medium">${esc(m.subject)}</p><iframe title="Nội dung email" sandbox="" class="h-[60vh] w-full rounded-xl border border-border bg-white" srcdoc="${esc(m.html)}"></iframe><div class="flex gap-2">${m.status !== "sent" ? `<button type="button" class="${B.primary} flex-1" data-m="resend">${ic("send")}Gửi lại</button>` : ""}<button type="button" class="${B.outline} flex-1" data-m="close">Đóng</button></div>`, { label: "Email vé" });
+    const st = { pending: "chưa gửi – Edge Function send-mail chưa deploy / chưa cấu hình SMTP; đây là nội dung sẽ gửi", skipped: "địa chỉ thử nghiệm – không gửi thật, chỉ xem ở đây", queued: "đang gửi…", sent: "đã gửi thành công" + (m.sent_at ? "" : ""), failed: "gửi lỗi: " + (m.error || "") }[m.status] || m.status;
+    const sh = openSheet(`${sheetHead("Email vé", `Tới <b>${esc(m.to_email)}</b> · ${esc(st)}`)}<p class="text-sm font-medium">${esc(m.subject)}</p><iframe title="Nội dung email" sandbox="" class="h-[60vh] w-full rounded-xl border border-border bg-white" srcdoc="${esc(m.html)}"></iframe><div class="flex gap-2">${m.status !== "sent" && m.status !== "skipped" ? `<button type="button" class="${B.primary} flex-1" data-m="resend">${ic("send")}Gửi lại</button>` : ""}<button type="button" class="${B.outline} flex-1" data-m="close">Đóng</button></div>`, { label: "Email vé" });
     sh.el.onclick = e => { if (e.target.closest('[data-m="close"]')) sh.close(); else if (e.target.closest('[data-m="resend"]')) { sh.close(); mailSend(m.ref, true); } }; },
   "guest-back"() { Object.assign(GUEST, { step: "form", err: "", demoCode: null }); render(); },
   async "guest-resend"() { GUEST.err = ""; GUEST.busy = true; render(); const r = await Auth.guestSend({ email: GUEST.email, name: GUEST.name, phone: GUEST.phone }); GUEST.busy = false;
@@ -1284,6 +1339,7 @@ function showSheet(s) {
   }, { label: "Suất chiếu", wide: true });
 }
 const SEL = {
+  "seat-priority"(b, v) { S.view.seatPriority = v; save(); render(); },
   "qb-cinema"(b, v) { S.view.qb = { cinema: v }; save(); render(); }, "qb-film"(b, v) { S.view.qb = { ...S.view.qb, film: v, day: null, show: null }; save(); render(); },
   "qb-day"(b, v) { S.view.qb = { ...S.view.qb, day: v, show: null }; save(); render(); }, "qb-show"(b, v) { S.view.qb = { ...S.view.qb, show: v }; save(); },
   "work-cinema"(box, v) { if (!isChainManager()) return; setWorkCinema(v); S.view.ns = null; S.view.pos = { showId: null, seats: [], types: {}, docs: {} }; S.view.gate = {}; save(); render(); toast(`Đang thao tác tại ${cinema(v).name}`); },
@@ -1379,6 +1435,7 @@ document.addEventListener("input", e => {
   if (e.target.id === "ns-time") { let v = e.target.value.replace(/[^\d:]/g, ""); if (/^\d{3,4}$/.test(v)) v = v.slice(0, v.length - 2) + ":" + v.slice(-2); S.view.ns.time = v;
     if (/^\d{1,2}:\d{2}$/.test(v) || v === "") { render(); const x = $("#ns-time"); if (x) { x.focus(); x.setSelectionRange(v.length, v.length); } } }
 });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.view.theatre && !document.fullscreenElement) A["exit-theatre"](); });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "gate-code") { e.preventDefault(); gateProcess(e.target.value, "gõ tay"); } if (e.key === "Escape") document.body.removeAttribute("data-menu-open"); });
 // đồng hồ watermark QR + đếm ngược đổi mã
 setInterval(() => {
@@ -1393,9 +1450,18 @@ Store.onRemoteChange(() => { if (ON() || $("#modal-root").innerHTML) return; con
 /* ============================ khởi động ============================ */
 Remote.onStatus(() => { $$("[data-net]").forEach(n => n.outerHTML = netBadge()); });
 const params = new URLSearchParams(location.search);
+/* Link xác nhận trong mail (Confirm signup / Magic Link) đưa về web kèm #access_token=…&type=signup|magiclink → nhận phiên, xác nhận email khách vãng lai, quay về thanh toán */
+const AUTH_HASH = /^#access_token=|[&#]type=(signup|magiclink)/.test(location.hash) ? new URLSearchParams(location.hash.slice(1)) : null;
+if (AUTH_HASH) history.replaceState(null, "", location.pathname + "#/thanhtoan");
 if (params.has("pair")) phonePage((params.get("pair") || "").toUpperCase());
 else {
   render();
+  if (AUTH_HASH && AUTH_HASH.get("access_token")) Remote.hasV21().then(async ok => {
+    if (!ok) return;
+    try { const r = await Remote.otpFromLink(AUTH_HASH.get("access_token"), AUTH_HASH.get("refresh_token")); Auth.refresh(r); GUEST.step = "form"; GUEST.err = ""; bindProfile(); save();
+      location.hash = S.draft && show(S.draft.showId) ? "#/thanhtoan" : "#/home"; render(); toast(`Email đã xác nhận · chào ${Auth.user.name}${S.draft ? " – bấm Thanh toán" : ""}`); }
+    catch (e) { toast("Link xác nhận không còn hiệu lực – nhập mã hoặc bấm Gửi lại mã", "bad"); if (!(S.draft && show(S.draft.showId))) { location.hash = "#/lich"; render(); } }
+  });
   Remote.init(S, buildSchedule(), t => scheduleRender(t)).then(async ok => {
     if (ok) save();
     const still = await Auth.check();

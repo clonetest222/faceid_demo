@@ -2614,8 +2614,8 @@ on conflict (cinema_id, film_id) do nothing;
 --     lấy bằng mail_take(), gửi qua SMTP Gmail, báo kết quả bằng mail_mark(). Chưa deploy function → mail 'pending', web vẫn xem được nội dung.
 --   • Tra cứu vé: mã vé / mã đơn + email → phiên khách 2 giờ → QR, mua thêm, hoàn vé.
 --   • Đăng ký tài khoản bằng đúng email đã mua vãng lai → vé chuyển sang tài khoản mới.
--- BẬT GỬI MAIL THẬT (xem README mục "Mua vé không cần tài khoản"): Authentication → SMTP Settings (Gmail + mật khẩu ứng dụng),
---   Email Templates → Magic Link thêm {{ .Token }}, deploy Edge Function send-mail với secret SMTP_USER / SMTP_PASS, rồi:
+-- BẬT GỬI MAIL THẬT (xem README mục "Mua vé không cần tài khoản"): Authentication → Emails → SMTP Settings (Gmail + mật khẩu ứng dụng),
+--   Authentication → Emails → Templates → Magic Link thêm {{ .Token }}, deploy Edge Function send-mail với secret SMTP_USER / SMTP_PASS, rồi:
 --   update app_config set v = 'auth' where k = 'otp_mode';
 --   update app_config set v = 'https://clonetest222.github.io/faceid_demo/' where k = 'site_url';
 --   Theo dõi mail: select id, to_email, status, error, created_at from mail_outbox order by id desc;
@@ -2641,6 +2641,9 @@ create table if not exists public.mail_outbox (
   request_id bigint, error text,
   created_at timestamptz not null default now(), sent_at timestamptz
 );
+-- 'skipped' = địa chỉ thử nghiệm (example.com, .test, .invalid…): chỉ lưu để xem trên web, không gửi (tránh mail bật lại khi chạy kiểm thử trên máy chủ thật)
+alter table public.mail_outbox drop constraint if exists mail_outbox_status_check;
+alter table public.mail_outbox add constraint mail_outbox_status_check check (status in ('pending', 'queued', 'sent', 'failed', 'skipped'));
 create index if not exists mail_outbox_user on public.mail_outbox (username, id desc);
 alter table public.mail_outbox enable row level security;   -- không policy: chỉ qua hàm
 
@@ -2844,6 +2847,9 @@ begin
     coalesce(site, 'https://clonetest222.github.io/faceid_demo/'), p_order);
 end $$;
 
+-- địa chỉ thử nghiệm: không gửi thật
+create or replace function public._email_is_test(p text)
+returns boolean language sql immutable as $$ select lower(coalesce(p, '')) ~ '@(example\.(com|org|net)|[a-z0-9.-]+\.(test|invalid|localhost|example))$' $$;
 -- Xếp mail vé cho đơn p_order vào outbox (Edge Function send-mail sẽ lấy đi gửi)
 create or replace function public._mail_order(p_user text, p_order text)
 returns void language plpgsql security definer set search_path = public as $$
@@ -2854,7 +2860,8 @@ begin
   h := _mail_ticket_html(p_order, u.display_name); if h is null then return; end if;
   select format('Vé CineVin · %s · %s', coalesce(f.title, s.film_id), to_char(s.start_at at time zone 'Asia/Ho_Chi_Minh', 'HH24:MI DD/MM')) into subj
     from tickets t join shows s on s.id = t.show_id left join films f on f.id = s.film_id where t.order_id = p_order limit 1;
-  insert into mail_outbox (to_email, to_name, username, subject, html, kind, ref) values (u.email, u.display_name, u.username, subj, h, 'ticket', p_order);
+  insert into mail_outbox (to_email, to_name, username, subject, html, kind, ref, status)
+  values (u.email, u.display_name, u.username, subj, h, 'ticket', p_order, case when _email_is_test(u.email) then 'skipped' else 'pending' end);
 end $$;
 
 -- Thanh toán (ghi đè bản 016): khách vãng lai không tích/dùng điểm; có email thì xếp mail vé

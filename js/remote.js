@@ -131,6 +131,13 @@ const Remote = (() => {
     try { const { data, error: e2 } = await a.rpc("guest_verify_auth"); if (e2) throw e2; return data; }
     finally { await a.auth.signOut({ scope: "local" }).catch(() => {}); }
   }
+  /** Khách bấm link trong mail (mẫu Confirm signup / Magic Link): Supabase chuyển về web kèm #access_token=… → đặt phiên Auth tạm rồi guest_verify_auth */
+  async function otpFromLink(access_token, refresh_token) {
+    const a = authClient(); if (!a) throw new Error("offline");
+    const { error } = await a.auth.setSession({ access_token, refresh_token: refresh_token || access_token }); if (error) throw error;
+    try { const { data, error: e2 } = await a.rpc("guest_verify_auth"); if (e2) throw e2; return data; }
+    finally { await a.auth.signOut({ scope: "local" }).catch(() => {}); }
+  }
   /** Gửi mail vé đang chờ của phiên p_token qua Edge Function send-mail (SMTP Gmail); trả {sent:[{id,ok,error}]} */
   async function sendMail(token, ref) {
     if (!ensureClient()) throw new Error("offline");
@@ -153,7 +160,7 @@ const Remote = (() => {
 
   return {
     init, rpc, fetchTicket, fetchSeatTicket, fetchGroup, ensureClient, hasV4, hasV5, DEVICE,
-    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, get v11() { return !!v11; }, get v21() { return !!v21; }, hasV21, otpSend, otpVerify, sendMail, reloadCatalog, get hasClient() { return !!sb; },
+    get online() { return online; }, get status() { return status; }, get v2() { return v2; }, get v4() { return !!v4; }, get v5() { return !!v5; }, get v6() { return !!v6; }, get v8() { return !!v8; }, get v11() { return !!v11; }, get v21() { return !!v21; }, hasV21, otpSend, otpVerify, otpFromLink, sendMail, reloadCatalog, get hasClient() { return !!sb; },
     onStatus(f) { listeners.push(f); },
   };
 })();

@@ -63,7 +63,7 @@
   }
   .bg-surface *, .bg-surface-overlay * { --button-hover: var(--button-hover-surface); }
 </style>
-<link rel="stylesheet" href="css/app.css?v=202610251729">
+<link rel="stylesheet" href="css/app.css?v=202610251836">
 </head>
 <body class="bg-background font-sans text-sm text-foreground">
 <div id="app"></div>
@@ -78,25 +78,29 @@ if (!location.hash || location.hash.indexOf("#/home") === 0) document.getElement
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202610251729"></script>
-<script src="js/util.js?v=202610251729"></script>
-<script src="js/ui.js?v=202610251729"></script>
-<script src="js/remote.js?v=202610251729"></script>
-<script src="js/auth.js?v=202610251729"></script>
-<script src="js/face.js?v=202610251729"></script>
-<script src="js/haar.js?v=202610251729"></script>
-<script src="js/passkey.js?v=202610251729"></script>
-<script src="js/nfc.js?v=202610251729"></script>
-<script src="js/pair.js?v=202610251729"></script>
-<script src="js/scan.js?v=202610251729"></script>
-<script src="js/films-cgv.js?v=202610251729"></script>
-<script src="js/data.js?v=202610251729"></script>
-<script src="js/views-customer.js?v=202610251729"></script>
-<script src="js/views-home.js?v=202610251729"></script>
-<script src="js/views-staff.js?v=202610251729"></script>
-<script src="js/views-hr.js?v=202610251729"></script>
-<script src="js/views-lab.js?v=202610251729"></script>
-<script src="js/agecheck.js?v=202610251729"></script>
-<script src="js/app.js?v=202610251729"></script>
+<!-- three.js cho phòng chiếu 3D (trang chọn ghế): nạp dạng module, báo "three-ready" khi xong -->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">import * as THREE from "three"; import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js"; import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js"; window.THREE = THREE; window.THREE_X = { RoundedBoxGeometry, mergeGeometries }; window.dispatchEvent(new Event("three-ready"));</script>
+<script src="js/config.js?v=202610251836"></script>
+<script src="js/util.js?v=202610251836"></script>
+<script src="js/ui.js?v=202610251836"></script>
+<script src="js/remote.js?v=202610251836"></script>
+<script src="js/auth.js?v=202610251836"></script>
+<script src="js/face.js?v=202610251836"></script>
+<script src="js/haar.js?v=202610251836"></script>
+<script src="js/passkey.js?v=202610251836"></script>
+<script src="js/nfc.js?v=202610251836"></script>
+<script src="js/pair.js?v=202610251836"></script>
+<script src="js/scan.js?v=202610251836"></script>
+<script src="js/films-cgv.js?v=202610251836"></script>
+<script src="js/data.js?v=202610251836"></script>
+<script src="js/views-customer.js?v=202610251836"></script>
+<script src="js/seat3d.js?v=202610251836"></script>
+<script src="js/views-home.js?v=202610251836"></script>
+<script src="js/views-staff.js?v=202610251836"></script>
+<script src="js/views-hr.js?v=202610251836"></script>
+<script src="js/views-lab.js?v=202610251836"></script>
+<script src="js/agecheck.js?v=202610251836"></script>
+<script src="js/app.js?v=202610251836"></script>
 </body>
 </html>
