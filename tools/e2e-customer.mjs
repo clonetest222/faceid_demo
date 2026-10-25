@@ -83,7 +83,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
       await T.shot("cust_05_face_sai");
       await T.setFile("#lf-file", join(FACES, "sheldon2.png"));
       await T.waitFor(`!!Auth.user`, 60000); await sleep(800); await T.ev(H);
-      check("Đăng nhập FaceID đúng người → vào thẳng, không cần mật khẩu", (await T.ev(`Auth.user && Auth.user.username`)) === user && (await T.ev(`location.hash`)) === "#/lich");
+      check("Đăng nhập FaceID đúng người → vào thẳng, không cần mật khẩu", (await T.ev(`Auth.user && Auth.user.username`)) === user && (await T.ev(`location.hash`)) === "#/home");
       await T.waitFor(`(S.verifs||[]).filter(v=>v.kind==='login'&&v.detail&&v.detail.user==='${user}').length >= 2`, 10000);
       const nLogin = await T.ev(`(S.verifs||[]).filter(v=>v.kind==='login'&&v.detail&&v.detail.user==='${user}').length`);
       check("Mỗi lần đăng nhập FaceID (kể cả thất bại) có bản ghi", nLogin >= 2, nLogin + " bản ghi");
@@ -99,7 +99,7 @@ const sheetDone = async (T, ms = 60000) => { await T.waitFor(`/thành công|khô
     }
     await T.ev(`$v('li-user','${user}');$v('li-pass','matkhau1');document.querySelector('[data-form]').requestSubmit()`); await T.waitFor(`!!Auth.user`, 15000); await sleep(800); await T.ev(H);
     // 4. thanh toán với mã khuyến mãi + điểm
-    await T.waitFor(`document.querySelectorAll('[data-act="pick-show"]').length > 0`, 15000);
+    await T.ev(`if(!location.hash.startsWith('#/lich'))location.hash='#/lich'`); await sleep(700); await T.waitFor(`document.querySelectorAll('[data-act="pick-show"]').length > 0`, 15000);
     const nDays = await T.ev(`document.querySelectorAll('[data-act="lich-day"]').length`); let ok = false;
     for (let d = 0; d < Math.max(1, nDays) && !ok; d++) { if (d) { await T.ev(`$c('[data-act="lich-day"]',${d})`); await sleep(500); }
       ok = await T.ev(`(()=>{const b=[...document.querySelectorAll('[data-act="pick-show"]:not([disabled])')].find(b=>S.shows.find(s=>s.id===b.dataset.show&&s.filmId==='f1'&&new Date(s.start)>Date.now()+3600e3));if(!b)return false;b.click();return true})()`); }

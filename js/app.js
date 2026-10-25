@@ -2,6 +2,7 @@
 "use strict";
 /* ============================ điều hướng ============================ */
 const ROUTES = {
+  home: { roles: ["khach"], view: () => vHome() }, chitiet: { roles: ["khach"], view: () => vChiTiet() },
   lich: { roles: ["khach"], view: () => vLich() }, ghe: { roles: ["khach"], view: () => vGhe() }, thanhtoan: { roles: ["khach"], view: () => vThanhToan() },
   ve: { roles: ["khach"], view: () => vVe() }, doan: { roles: ["khach"], view: () => vDoan() }, taikhoan: { roles: ["khach"], view: () => vTaiKhoan() },
   tongquan: { roles: ["quanly"], view: () => vTongQuan() }, suat: { roles: ["quanly"], view: () => vSuat() }, soat: { roles: ["nhanvien", "quanly"], view: () => vSoat() },
@@ -9,11 +10,13 @@ const ROUTES = {
   coso: { roles: ["quanly", "kythuat"], view: () => vCoSo() }, phim: { roles: ["quanly"], view: () => vPhim() }, baocao: { roles: ["quanly"], view: () => vBaoCao() },
   nhansu: { roles: ["quanly"], view: () => vNhanSu() }, calam: { roles: ["nhanvien", "kythuat", "phucvu", "quanly"], view: () => vCaLam() },
 };
-const HOME = { khach: "lich", nhanvien: "soat", kythuat: "coso", phucvu: "calam", quanly: "tongquan" };
+const HOME = { khach: "home", nhanvien: "soat", kythuat: "coso", phucvu: "calam", quanly: "tongquan" };
+/* Trang khách vãng lai xem được không cần đăng nhập (như trang chủ CGV); chọn ghế mới phải đăng nhập */
+const PUBLIC = new Set(["home", "lich", "chitiet"]);
 let CUR_ROUTE = "", PHONE_MODE = false;
 const routeName = () => (location.hash.match(/^#\/([a-z]+)/) || [])[1] || "";
 function go(r) { if (routeName() === r) { render(); window.scrollTo({ top: 0 }); } else location.hash = "#/" + r; }
-window.addEventListener("hashchange", () => { document.body.removeAttribute("data-menu-open"); render(); window.scrollTo({ top: 0 }); });
+window.addEventListener("hashchange", () => { document.body.removeAttribute("data-menu-open"); if (PROMO_SHEET) { PROMO_SHEET.close(); PROMO_SHEET = null; } render(); window.scrollTo({ top: 0 }); });
 
 /* Vẽ lại khi dữ liệu realtime đổi; hoãn nếu người dùng đang gõ trong ô nhập */
 let rerenderPending = false;
@@ -30,7 +33,16 @@ function render() {
   if (PHONE_MODE) return;
   const app = $("#app"), user = Auth.user;
   let r = routeName();
-  if (!user) { CUR_ROUTE = r === "dangky" ? "dangky" : "dangnhap"; stopMedia(); app.innerHTML = vLogin(CUR_ROUTE === "dangky"); document.title = "Đăng nhập – CineVin"; return; }
+  if (!user) {
+    if (r !== "dangnhap" && r !== "dangky" && (!r || PUBLIC.has(r))) {
+      r = r || "home"; if (CUR_ROUTE !== r) stopMedia(r); CUR_ROUTE = r;
+      try { app.innerHTML = ROUTES[r].view(); } catch (e) { console.error(e); app.innerHTML = `<div class="p-6">${banner("bad", "Lỗi hiển thị", esc(e.message), `<button class="${B.outline}" data-act="reset-local">Đặt lại dữ liệu trên máy</button>`)}</div>`; }
+      document.title = r === "home" ? "CineVin – Đặt vé xem phim online, lịch chiếu 7 rạp" : r === "chitiet" ? `${(S.films.find(f => f.id === S.view.detailFilm) || {}).title || "Phim"} – Lịch chiếu & đặt vé | CineVin` : "Lịch chiếu – CineVin";
+      if (r === "home") { heroAuto(); maybePromo(); }
+      return;
+    }
+    CUR_ROUTE = r === "dangky" ? "dangky" : "dangnhap"; stopMedia(); app.innerHTML = vLogin(CUR_ROUTE === "dangky"); document.title = "Đăng nhập – CineVin"; return;
+  }
   if (!r || r === "dangnhap" || r === "dangky" || !ROUTES[r]) { history.replaceState(null, "", "#/" + HOME[user.role]); r = HOME[user.role]; }
   bindProfile();
   if (CUR_ROUTE !== r) stopMedia(r);
@@ -41,7 +53,8 @@ function render() {
   catch (e) { console.error(e); app.innerHTML = `<div class="p-6">${banner("bad", "Lỗi hiển thị", esc(e.message), `<button class="${B.outline}" data-act="reset-local">Đặt lại dữ liệu trên máy</button>`)}</div>`; }
   // gỡ khỏi trang thì trình duyệt tự dừng video → gắn lại khung cũ rồi phát tiếp, camera không bị đen
   for (const id in keep) { const n = $("#" + id); if (n && n.dataset.keep !== undefined) { n.replaceWith(keep[id]); keep[id].querySelectorAll("video").forEach(v => v.play().catch(() => {})); } }
-  document.title = ({ lich: "Lịch chiếu", ghe: "Chọn ghế", thanhtoan: "Thanh toán", ve: "Vé của tôi", doan: "Vé đoàn", taikhoan: "Tài khoản", tongquan: "Tổng quan", suat: "Suất chiếu", soat: "Soát vé", quay: "Bán tại quầy", kiemthu: "Kiểm thử", quyen: "Tài khoản & quyền" }[r] || "CineVin") + " – CineVin";
+  if (r === "home") { heroAuto(); maybePromo(); }
+  document.title = ({ home: "CineVin – Đặt vé xem phim online", chitiet: "Chi tiết phim", lich: "Lịch chiếu", ghe: "Chọn ghế", thanhtoan: "Thanh toán", ve: "Vé của tôi", doan: "Vé đoàn", taikhoan: "Tài khoản", tongquan: "Tổng quan", suat: "Suất chiếu", soat: "Soát vé", quay: "Bán tại quầy", kiemthu: "Kiểm thử", quyen: "Tài khoản & quyền" }[r] || "CineVin") + " – CineVin";
   if (r === "soat") gateCamStart();
 }
 function stopMedia(next) {
@@ -86,7 +99,12 @@ function vLogin(reg) {
 }
 function afterLogin(msg) {
   LOGIN = { err: "", field: "", busy: false, show: false, mode: LOGIN.mode };
-  bindProfile(); save(); location.hash = "#/" + HOME[Auth.user.role]; render(); toast(msg || `Xin chào ${Auth.user.name}`);
+  bindProfile(); save(); location.hash = "#/" + HOME[Auth.user.role]; resumeAfterLogin(); render(); toast(msg || `Xin chào ${Auth.user.name}`);
+}
+/* Khách vãng lai bấm suất → đăng nhập xong đi thẳng vào chọn ghế của suất đó */
+function resumeAfterLogin() {
+  const sid = S.view.after; if (!sid || !Auth.user || Auth.user.role !== "khach") return; S.view.after = null;
+  if (!show(sid)) return; releaseDraft(); S.draft = { id: rid("D"), showId: sid, seats: [], until: null }; save(); location.hash = "#/ghe";
 }
 async function doLogin(u, p) {
   LOGIN = { ...LOGIN, busy: true, err: "", field: "" }; render();
@@ -412,7 +430,16 @@ async function labQrVerify(payload, via) {
 
 /* ============================ hành động ============================ */
 const A = {
-  logout() { stopMedia(""); releaseDraft(); Auth.logout(); save(); location.hash = "#/dangnhap"; render(); },
+  logout() { stopMedia(""); releaseDraft(); Auth.logout(); save(); location.hash = "#/home"; render(); },
+  "home-tab"(el) { S.view.homeTab = el.dataset.v; save(); if (routeName() !== "home") location.hash = "#/home"; else render(); },
+  "film-detail"(el) { S.view.detailFilm = el.dataset.v; save(); go("chitiet"); },
+  "film-book"(el) { S.view.lichMode = "phim"; S.view.lichFilm = el.dataset.v; const s0 = firstShowOf(el.dataset.v); if (s0) S.view.day = dayKey(s0.start); save(); go("lich"); },
+  "hero-dot"(el) { heroGo(el.dataset.v); heroAuto(); },
+  "quick-book"() { const sid = selVal("qb-show"); if (!sid) return toast("Chọn suất trước"); A["pick-show"]({ dataset: { show: sid } }); },
+  "promo-copy"() { navigator.clipboard?.writeText("CHAONHOM05").catch(() => {}); toast("Đã sao chép mã CHAONHOM05 – nhập ở bước thanh toán"); },
+  "promo-go"() { if (PROMO_SHEET) { PROMO_SHEET.close(); PROMO_SHEET = null; } go("lich"); },
+  remind(el) { const f = film(el.dataset.v); toast(`Sẽ nhắc bạn khi ${f.title} mở bán`); },
+  "share-film"(el) { const f = film(el.dataset.v), url = location.origin + location.pathname + "#/chitiet"; if (navigator.share) navigator.share({ title: f.title, url }).catch(() => {}); else { navigator.clipboard?.writeText(url).catch(() => {}); toast("Đã sao chép liên kết"); } },
   menu() { document.body.toggleAttribute("data-menu-open"); },
   "toggle-pass"() { const v = $("#li-pass")?.value || "", u = $("#li-user")?.value || "", n = $("#li-name")?.value || ""; LOGIN.show = !LOGIN.show; render(); if ($("#li-pass")) $("#li-pass").value = v; if ($("#li-user")) $("#li-user").value = u; if ($("#li-name")) $("#li-name").value = n; },
   "demo-login"(el) { const d = Auth.DEMO.find(x => x.username === el.dataset.u); doLogin(d.username, d.pass); },
@@ -472,7 +499,7 @@ const A = {
   "del-dep"(el) { const i = S.dependents.findIndex(x => x.id === el.dataset.id); if (i >= 0) S.dependents.splice(i, 1); save(); render(); },
   "lich-day"(el) { S.view.day = el.dataset.v; save(); render(); },
   "buy-more"(el) { const sh = show(el.dataset.show); if (!sh || new Date(sh.start) <= new Date()) return toast("Suất này đã chiếu – chọn suất khác", "bad"); releaseDraft(); S.draft = { id: rid("D"), showId: sh.id, seats: [], until: null, more: true }; save(); go("ghe"); toast("Ghế bạn đã mua hiện màu xanh – chọn thêm ghế cho người đi cùng"); },
-  "pick-show"(el) { releaseDraft(); S.draft = { id: rid("D"), showId: el.dataset.show, seats: [], until: null }; save(); go("ghe"); },
+  "pick-show"(el) { if (!Auth.user) { S.view.after = el.dataset.show; save(); toast("Đăng nhập để chọn ghế – mất 10 giây"); location.hash = "#/dangnhap"; return; } releaseDraft(); S.draft = { id: rid("D"), showId: el.dataset.show, seats: [], until: null }; save(); go("ghe"); },
   // ghế nhóm (đôi, ghế 3, sofa…): một nút = cả nhóm ghế → giữ / nhả tất cả thành viên, đơn có đủ n ghế
   async "toggle-seat"(el) { const d = S.draft, list = el.dataset.group ? el.dataset.group.split(",") : [el.dataset.seat];
     if (!d || !show(d.showId)) return go("lich");   // đơn đã bị nhả (hết hạn / huỷ ở tab khác) trong lúc sơ đồ còn hiển thị
@@ -1194,6 +1221,8 @@ function showSheet(s) {
   }, { label: "Suất chiếu", wide: true });
 }
 const SEL = {
+  "qb-cinema"(b, v) { S.view.qb = { cinema: v }; save(); render(); }, "qb-film"(b, v) { S.view.qb = { ...S.view.qb, film: v, day: null, show: null }; save(); render(); },
+  "qb-day"(b, v) { S.view.qb = { ...S.view.qb, day: v, show: null }; save(); render(); }, "qb-show"(b, v) { S.view.qb = { ...S.view.qb, show: v }; save(); },
   "work-cinema"(box, v) { if (!isChainManager()) return; setWorkCinema(v); S.view.ns = null; S.view.pos = { showId: null, seats: [], types: {}, docs: {} }; S.view.gate = {}; save(); render(); toast(`Đang thao tác tại ${cinema(v).name}`); },
   "nu-cinema"(box, v) { S.view.nu.cinema = v || null; },
   assign(box, v) { const d = S.draft, i = +box.dataset.i; d.assign[i] = { viewer: v.startsWith("dep:") ? { kind: "dep", depId: v.slice(4) } : { kind: v } }; save(); render(); if (v === "friend") { const x = $("#friend-" + i); x && x.focus(); } },
@@ -1240,7 +1269,7 @@ document.addEventListener("submit", e => {
   const refill = () => { for (const [k, id] of [["username", "li-user"], ["pass", "li-pass"], ["name", "li-name"], ["email", "li-email"], ["phone", "li-phone"]]) { const x = $("#" + id); if (x) x.value = vals[k]; } };
   LOGIN.busy = true; LOGIN.err = ""; render(); refill();
   Auth.register(vals).then(r => { LOGIN.busy = false; if (!r.ok) { LOGIN.err = r.message; LOGIN.field = r.field || ""; render(); refill(); const x = $("#li-" + ({ user: "user", pass: "pass", name: "name", email: "email", phone: "phone" }[r.field] || "user")); x && x.focus(); return; }
-    LOGIN = { err: "", field: "", busy: false, show: false }; bindProfile(); save(); location.hash = "#/lich"; render(); offerVneid(); });
+    LOGIN = { err: "", field: "", busy: false, show: false }; bindProfile(); save(); location.hash = "#/home"; resumeAfterLogin(); render(); offerVneid(); });
 });
 const SEARCH_BOXES = { "hr-q": v => HR.q = v, "coso-q": v => S.view.cosoQ = v, "phim-q": v => S.view.phimQ = v, "user-q": v => S.view.userQ = v,
   "lich-q": v => S.view.lichQ = v, "ve-q": v => S.view.veQ = v, "doan-q": v => S.view.doanQ = v, "suat-q": v => S.view.suatQ = v, "quay-q": v => S.view.quayQ = v, "soat-q": v => S.view.soatQ = v, "tq-q": v => S.view.tqQ = v, "log-q": v => S.view.logQ = v };
@@ -1269,7 +1298,7 @@ else {
   Remote.init(S, buildSchedule(), t => scheduleRender(t)).then(async ok => {
     if (ok) save();
     const still = await Auth.check();
-    if (!still && routeName() !== "dangky") location.hash = "#/dangnhap";
+    if (!still && !PUBLIC.has(routeName() || "home") && routeName() !== "dangky" && routeName() !== "dangnhap") location.hash = "#/home";
     render();
   });
 }

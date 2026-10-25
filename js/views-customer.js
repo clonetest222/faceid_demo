@@ -7,23 +7,27 @@ const cinemaButton = (cls = "") => { const c = curCinema(); return `<button type
 function dayLabel(d) { const x = new Date(d), t = new Date(); t.setHours(0, 0, 0, 0); const diff = Math.round((new Date(x).setHours(0, 0, 0, 0) - t) / 864e5); return (diff === 0 ? "Hôm nay" : diff === 1 ? "Ngày mai" : WEEKDAY[x.getDay()]) + " " + ddmm(x); }
 
 /* ---------- khung app khách ---------- */
-function customerShell(active, body, { bottomNav = true } = {}) {
+function customerShell(active, body, { bottomNav = true, footer = false } = {}) {
   const u = Auth.user;
-  const nav = [["lich", "Lịch chiếu", "calendar-days"], ["ve", "Vé của tôi", "ticket"], ["doan", "Vé đoàn", "users"], ["taikhoan", "Tài khoản", "circle-user-round"]];
-  return `
-  <header class="sticky top-0 z-30 border-b border-border bg-surface">
-    <div class="mx-auto flex h-16 max-w-[1200px] items-center gap-6 px-4 sm:px-6">
-      <a href="#/lich" aria-label="CineVin – lịch chiếu">${LOGO}</a>
-      ${cinemaButton("hidden max-w-[260px] md:flex")}
-      <nav class="hidden items-center gap-1 md:flex" aria-label="Điều hướng chính">${nav.slice(0, 3).map(([k, l]) => `<a href="#/${k}" ${k === active ? 'aria-current="page"' : ""} class="flex h-10 items-center rounded-xl px-3 text-sm ${k === active ? "bg-secondary font-medium text-foreground" : "text-foreground/70 hover:bg-item-hover hover:text-foreground"}">${l}</a>`).join("")}</nav>
-      <a href="#/taikhoan" class="ml-auto flex items-center gap-2 rounded-xl p-1 hover:bg-item-hover" aria-label="Tài khoản">
+  const nav = u ? [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["ve", "Vé của tôi", "ticket"], ["doan", "Vé đoàn", "users"], ["taikhoan", "Tài khoản", "circle-user-round"]]
+    : [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["dangnhap", "Đăng nhập", "log-in"]];
+  const who = u ? `<a href="#/taikhoan" class="ml-auto flex items-center gap-2 rounded-xl p-1 hover:bg-item-hover" aria-label="Tài khoản">
         <span class="hidden text-right sm:block"><span class="block text-sm font-medium leading-tight">${esc(S.user.linked ? S.user.name : u.name)}</span><span class="block text-xs text-muted">Khách · ${S.user.linked ? "đã liên kết VNeID" : "chưa liên kết VNeID"}</span></span>
         ${avatar(S.user.linked ? S.user.name : u.name)}
-      </a>
+      </a>`
+    : `<div class="ml-auto flex items-center gap-2"><a href="#/dangky" class="${B.ghost} hidden min-h-9 px-3 sm:inline-flex">Tạo tài khoản</a><a href="#/dangnhap" class="${B.primary} min-h-9 px-4">${ic("log-in")}Đăng nhập</a></div>`;
+  return `
+  <header class="glass-bar sticky top-0 z-30 border-b border-border/60">
+    <div class="mx-auto flex h-16 max-w-[1200px] items-center gap-6 px-4 sm:px-6">
+      <a href="#/home" aria-label="CineVin – trang chủ">${LOGO}</a>
+      ${cinemaButton("hidden max-w-[260px] md:flex")}
+      <nav class="hidden items-center gap-1 md:flex" aria-label="Điều hướng chính">${nav.filter(n => n[0] !== "taikhoan" && n[0] !== "dangnhap").map(([k, l]) => `<a href="#/${k}" ${k === active ? 'aria-current="page"' : ""} class="flex h-10 items-center rounded-xl px-3 text-sm ${k === active ? "bg-secondary font-medium text-foreground" : "text-foreground/70 hover:bg-item-hover hover:text-foreground"}">${l}</a>`).join("")}</nav>
+      ${who}
     </div>
   </header>
   <main class="mx-auto max-w-[1200px] p-4 sm:p-6 ${bottomNav ? "pb-24 md:pb-6" : ""}">${body}</main>
-  ${bottomNav ? `<nav class="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="Điều hướng dưới">${nav.map(([k, l, i]) => `<a href="#/${k}" ${k === active ? 'aria-current="page"' : ""} class="flex flex-col items-center justify-center gap-1 text-xs ${k === active ? "font-medium text-primary" : "text-muted"}">${ic(i, "size-5")}${l}</a>`).join("")}</nav>` : ""}`;
+  ${footer ? footerHtml() : ""}
+  ${bottomNav ? `<nav class="glass-bar fixed inset-x-0 bottom-0 z-30 grid h-16 border-t border-border/60 pb-[env(safe-area-inset-bottom)] md:hidden" style="grid-template-columns:repeat(${nav.length},1fr)" aria-label="Điều hướng dưới">${nav.map(([k, l, i]) => `<a href="#/${k}" ${k === active ? 'aria-current="page"' : ""} class="flex flex-col items-center justify-center gap-1 text-xs ${k === active ? "font-medium text-primary" : "text-muted"}">${ic(i, "size-5")}${l}</a>`).join("")}</nav>` : ""}`;
 }
 
 /* ---------- Lịch chiếu ---------- */
@@ -45,7 +49,7 @@ function vLich() {
   const cur = days.includes(S.view.day) ? S.view.day : (days.includes(today) ? today : days[0]);
   const now = new Date(), mode = S.view.lichMode === "phim" ? "phim" : "rap", c = curCinema();
   const tabs = `<div class="inline-flex rounded-xl border border-border bg-surface p-1" role="tablist">${[["rap", "Theo rạp"], ["phim", "Theo phim"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${mode === k}" data-act="lich-mode" data-v="${k}" class="h-9 cursor-pointer rounded-lg px-3 text-sm ${mode === k ? "bg-foreground text-surface" : "text-foreground/70 hover:bg-item-hover"}">${l}</button>`).join("")}</div>`;
-  const head = pageHead("Lịch chiếu", `${WEEKDAY[now.getDay()]}, ${dmy(now)} · bây giờ ${hhmm(now)}`, tabs);
+  const head = pageHead("Lịch chiếu", `${days.length} ngày tới · ${WEEKDAY[now.getDay()]}, ${dmy(now)} · bây giờ ${hhmm(now)}`, tabs);
   const loading = !S.shows.length && Remote.status === "connecting", lq = (S.view.lichQ || "").trim().toLowerCase();
   const matchFilm = f => !lq || [f.title, f.genre, f.rating].some(x => (x || "").toLowerCase().includes(lq));
   const pickDay = `<div class="mb-5 flex flex-wrap items-center gap-3">${dateStrip(days, cur, "lich-day")}${searchBox("lich-q", "Tìm phim theo tên, thể loại, nhãn tuổi…", S.view.lichQ, "min-w-[220px] flex-1")}</div>`;
@@ -84,7 +88,7 @@ function vLich() {
         <div class="mt-3 grid gap-2">${chipRow(list)}</div></article>`).join("")}</div>`;
     body = head + filmRow + pickDay + `<div class="mb-1 flex items-center gap-2"><h2 class="text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}<span class="text-sm text-muted">· ${dayLabel(cur)}</span></div>` + cityRow + list;
   }
-  return customerShell("lich", body);
+  return customerShell("lich", body, { footer: true });
 }
 /** Bảng chọn rạp: Tỉnh/Thành → các cơ sở (Nghệ An có 2 cơ sở cùng TP Vinh). */
 function cinemaSheetHtml(city) {

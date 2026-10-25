@@ -1,0 +1,40 @@
+// Chụp trang chủ công khai (khách vãng lai), chi tiết phim, lịch chiếu, popup; cả bản điện thoại 390px. Chạy: node tools/shots-home.mjs [URL] [thư mục]
+import { spawn } from "node:child_process"; import { writeFileSync, mkdtempSync, mkdirSync } from "node:fs"; import { tmpdir } from "node:os"; import { join, resolve } from "node:path";
+const EDGE = process.env.EDGE || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", BASE = process.argv[2] || "http://localhost:8767/", OUT = resolve(process.argv[3] || "e2e-shots"); mkdirSync(OUT, { recursive: true });
+const PORT = 9389, sleep = ms => new Promise(r => setTimeout(r, ms));
+const edge = spawn(EDGE, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "home-"))}`, "--window-size=1280,1000", "about:blank"], { stdio: "ignore" });
+for (let i = 0; i < 40; i++) { try { await fetch(`http://localhost:${PORT}/json/version`); break; } catch (e) { await sleep(250); } }
+const t0 = await (await fetch(`http://localhost:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
+const ws = new WebSocket(t0.webSocketDebuggerUrl); await new Promise(r => ws.onopen = r);
+let id = 0; const pend = new Map(), errs = []; ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } if (d.method === "Runtime.exceptionThrown") errs.push(d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text); };
+const send = (method, params = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+const ev = async e => { const r = await send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true }); if (r.result.exceptionDetails) throw new Error(r.result.exceptionDetails.text + " " + (r.result.exceptionDetails.exception?.description || "")); return r.result.result.value; };
+const wait = async (e, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await ev(e).catch(() => false)) return true; await sleep(300); } return false; };
+const shot = async (n, full = true) => { const r = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: full }); writeFileSync(join(OUT, n + ".png"), Buffer.from(r.result.data, "base64")); console.log("đã chụp " + n); };
+const size = (w, h) => send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: w < 600 });
+await send("Runtime.enable"); await send("Page.enable");
+await send("Page.navigate", { url: BASE }); await sleep(2500); await ev("localStorage.clear(); sessionStorage.clear(); location.hash=''; location.reload()"); await sleep(4000);
+await wait("Remote.v4 && S.shows.length > 0");
+await sleep(1500);
+console.log("popup:", await ev("!!document.querySelector('#modal-root [data-act=promo-go]')"));
+await shot("home_01_popup", false);
+await ev("document.querySelector('#modal-root [data-m=close]')?.click()"); await sleep(500);
+await shot("home_02_trang_chu");
+await ev("document.querySelector('[data-act=hero-dot][data-v=\"2\"]').click()"); await sleep(900); await shot("home_03_hero_khuyenmai", false);
+await ev("document.querySelector('[data-act=home-tab][data-v=sapchieu]').click()"); await sleep(600); await shot("home_04_sap_chieu", false);
+console.log("đang chiếu/sắp chiếu:", await ev("[nowShowing().length, comingSoon().length]"));
+await ev("document.querySelector('[data-act=film-detail][data-v=f4]').click()"); await sleep(900); await shot("home_05_chi_tiet");
+console.log("số ngày lịch:", await ev("showDays().length"));
+await ev("location.hash='#/lich'"); await sleep(900); await shot("home_06_lich_khach");
+// khách vãng lai bấm suất → sang đăng nhập, sau đăng nhập đi thẳng chọn ghế
+await ev("document.querySelector('[data-act=pick-show]:not([disabled])').click()"); await sleep(800);
+console.log("về đăng nhập:", location => true, await ev("location.hash"), "after=", await ev("S.view.after"));
+await ev("document.querySelector('#li-user').value='khach';document.querySelector('#li-pass').value='khach123';document.querySelector('[data-form]').requestSubmit()"); await wait("!!Auth.user && location.hash.startsWith('#/ghe')", 10000); await sleep(800);
+console.log("sau đăng nhập:", await ev("location.hash"));
+await shot("home_07_ghe_sau_dangnhap", false);
+await ev("A['cancel-draft'](); location.hash='#/home'"); await sleep(1200); await shot("home_08_trang_chu_dangnhap", false);
+await size(390, 844); await sleep(600); await shot("home_09_mobile");
+console.log("cuộn ngang mobile:", await ev("document.documentElement.scrollWidth > document.documentElement.clientWidth"));
+await ev("location.hash='#/lich'"); await sleep(900); await shot("home_10_mobile_lich", false);
+if (errs.length) console.log("LỖI JS:", errs.slice(0, 5));
+edge.kill(); process.exit(0);

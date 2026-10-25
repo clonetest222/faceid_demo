@@ -42,7 +42,7 @@ const png = async (T, expr, name) => { const d = await T.ev(`qrPng(${expr})`); c
     await T.ev(`location.hash='#/taikhoan'`); await sleep(600); await T.ev(H);
     if (await T.ev(`S.user.linked`)) { await T.ev(`$c('[data-act="unlink"]')`); await sleep(400); }
     await T.ev(`location.hash='#/lich'`); await sleep(800); await T.ev(H);
-    await T.waitFor(`document.querySelectorAll('[data-act="pick-show"]').length > 0`, 15000);
+    await T.ev(`if(!location.hash.startsWith('#/lich'))location.hash='#/lich'`); await sleep(700); await T.waitFor(`document.querySelectorAll('[data-act="pick-show"]').length > 0`, 15000);
     const nDays = await T.ev(`document.querySelectorAll('[data-act="lich-day"]').length`); let ok = false;
     for (let d = 0; d < Math.max(1, nDays) && !ok; d++) { if (d) { await T.ev(`$c('[data-act="lich-day"]',${d})`); await sleep(500); }
       ok = await T.ev(`(()=>{const b=[...document.querySelectorAll('[data-act="pick-show"]:not([disabled])')].find(b=>S.shows.find(s=>s.id===b.dataset.show&&s.filmId==='f4'));if(!b)return false;b.click();return true})()`); }

@@ -49,3 +49,11 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 
 /* ô chọn tệp kéo thả */
 .drop[data-over] { border-color: var(--primary); background: var(--primary-light); }
+
+/* glassmorphism: thanh đầu/đáy trang và khối đặt vé nhanh (mờ nền, viền sáng); khối chữ trên ảnh hero dùng bản tối */
+.glass-bar { background: color-mix(in srgb, var(--surface) 78%, transparent); -webkit-backdrop-filter: saturate(160%) blur(14px); backdrop-filter: saturate(160%) blur(14px); }
+.glass { background: color-mix(in srgb, var(--surface) 72%, transparent); -webkit-backdrop-filter: saturate(160%) blur(18px); backdrop-filter: saturate(160%) blur(18px); border: 1px solid color-mix(in srgb, #fff 70%, transparent); box-shadow: 0 10px 30px -12px rgb(0 0 0 / .18); }
+.glass-dark { background: rgb(18 18 22 / .42); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid rgb(255 255 255 / .18); }
+.hero-slide img { transform: scale(1.02); transition: transform 7s ease-out; }
+.hero-slide:not(.opacity-0) img { transform: scale(1.08); }
+@media (prefers-reduced-motion: reduce) { .hero-slide img, .hero-slide { transition: none; } }

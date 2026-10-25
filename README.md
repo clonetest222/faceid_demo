@@ -15,6 +15,9 @@ Demo đồ án PTTKHTTT – Nhóm 05, ĐH Vinh. Đề tài 20: lịch chiếu, c
 
 Bản HTML để sửa: `docs/nghiep-vu.html` → xuất lại ảnh bằng `node tools/render-png.mjs docs/nghiep-vu.html docs/nghiep-vu.png`.
 
+## Trang chủ công khai (khách vãng lai)
+Vào `/` không cần đăng nhập, giống trang chủ cgv.vn: hero xoay 5 slide (phim hot, combo bắp nước, mã CHAONHOM05), **đặt vé nhanh** (rạp → phim → ngày → suất) trên nền glass, tab **Đang chiếu / Sắp chiếu** (phim sắp chiếu có ngày khởi chiếu, nút Nhắc tôi), ưu đãi & tiện ích, "ba bước là có vé", footer có địa chỉ rạp. Popup khuyến mại hiện một lần mỗi phiên (đóng khi chuyển trang). Trang **chi tiết phim** (`#/chitiet`) có mô tả, lịch 10 ngày theo từng cơ sở. Khách vãng lai xem được lịch chiếu; bấm suất → đăng nhập → vào thẳng chọn ghế của suất đó. Lịch mẫu sinh **10 ngày** (trước là 3). SEO: title/description/OG/JSON-LD MovieTheater trong `index.html`, `<h1>` và heading theo mục. Chụp lại màn: `node tools/shots-home.mjs`.
+
 ## Đăng nhập & phân quyền
 | Tài khoản demo | Mật khẩu | Vai trò | Vào được |
 |---|---|---|---|
