@@ -157,7 +157,7 @@ const Auth = (() => {
   /** Bước 2 – nhập mã: 'auth' → Supabase verifyOtp rồi guest_verify_auth; 'demo' → guest_verify; sai mã trả ok=false (còn n lần) */
   async function guestVerify(email, code, mode = "demo", offline = null) {
     const em = norm(email).toLowerCase(), c = String(code || "").replace(/\D/g, "");
-    if (c.length !== 6) return { ok: false, message: "Nhập đủ 6 số trong email." };
+    if (c.length < 6 || c.length > 10) return { ok: false, message: "Nhập đủ mã trong email (6–8 số)." };
     if (mode === "offline" || !(await Remote.hasV4())) {
       if (c !== "000000") return { ok: false, message: "Mã không đúng (ngoại tuyến: 000000)." };
       store({ token: null, username: "g_" + em.replace(/[^a-z0-9]/g, "").slice(0, 12).padEnd(3, "x"), role: "khach", name: (offline || {}).name || "Khách", email: em, phone: (offline || {}).phone || null, points: 0, guest: true, offline: true });

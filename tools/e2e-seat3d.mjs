@@ -26,6 +26,12 @@ console.log("đứng dậy: avatar + khán giả =", await ev("(()=>{const sc=Se
 await ev("document.querySelector('[data-act=seat-best]').click(); 1"); await sleep(2500);
 console.log("gợi ý:", await ev("S.draft.seats.join(',')"), "|", await ev("document.body.innerText.includes('Gợi ý ghế')"));
 await shot("s3d_04_goi_y");
+await ev("[...document.querySelectorAll('[data-act=seat3d-mode]')].find(b=>b.dataset.v==='arrive').click(); 1"); await sleep(1500);
+const a0 = await ev("JSON.stringify(Seat3D.arriveState())"); await sleep(22000);
+const a1 = await ev("JSON.stringify(Seat3D.arriveState())"); await shot("s3d_05_di_toi_ghe");
+console.log("đi tới ghế: lúc đầu", a0, "→ sau 22 s", a1, "| nhân vật = số ghế:", await ev("Seat3D.arriveState().walkers===S.draft.seats.length"), "| đã ngồi hết:", await ev("Seat3D.arriveState().done"));
+await ev("document.querySelector('[data-act=seat3d-replay]').click(); 1"); await sleep(600);
+console.log("phát lại: đã ngồi =", await ev("Seat3D.arriveState().seated"), "(0 = bắt đầu lại)");
 await ev("A['cancel-draft'](); 1"); await sleep(800);
 console.log("rời trang: active =", await ev("Seat3D.active"));
 console.log("errs:", errs.filter(e => !/favicon|net::ERR/.test(e)).slice(0, 3));

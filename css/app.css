@@ -121,6 +121,10 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 [data-act="toggle-seat"] { position: relative; }
 .seat-rate { position: absolute; left: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 9999px; display: inline-block; }
 .seat-rate-great { background: #22c55e; } .seat-rate-good { background: #3b82f6; } .seat-rate-less { background: #9ca3af; }
+/* trình thiết kế phòng: kéo thả */
+[data-rd-grid], [data-rd-palette] { touch-action: none; user-select: none; -webkit-user-select: none; }
+.rd-seat.rd-over, [data-rd-row].rd-over { outline: 2px solid var(--primary); outline-offset: 1px; }
+.rd-ghost { position: fixed; z-index: 80; transform: translate(-50%, -120%); padding: 4px 10px; border-radius: 8px; border: 1px solid; font-size: 12px; font-weight: 600; pointer-events: none; box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
 /* màn Vào rạp */
 body.theatre-open { overflow: hidden; }
 .theatre [data-seat3d] canvas { touch-action: none; }

@@ -24,13 +24,14 @@ const Seat3D = (() => {
   /* ---------- hình học phòng từ sơ đồ 2D ---------- */
   const CACHE = new Map();
   function theatreOf(room) {
-    const key = room.id + "|" + room.rows + "x" + room.cols; if (CACHE.has(key)) return CACHE.get(key);
-    const half = Math.ceil(room.cols / 2), blocks = [half, room.cols - half].filter(b => b > 0);
-    const seating = { rows: room.rows, blocks, pitch: .58, aisle: 1.1, rowSpacing: 1, rise: .25, firstZ: 6, rowCurve: .006, faceCenter: .6, eyeHeight: 1.18 };
+    const key = room.id + "|" + room.rows + "x" + room.cols + "|" + JSON.stringify(room.layout || null); if (CACHE.has(key)) return CACHE.get(key);
+    // layout = mẫu phòng (IMAX, Dolby, 4DX…) + tuỳ chỉnh đã lưu; không có hàm roomLayout (trang độc lập) thì dùng mẫu tiêu chuẩn
+    const L = typeof roomLayout === "function" ? roomLayout(room) : { blocks: [Math.ceil(room.cols / 2), room.cols - Math.ceil(room.cols / 2)].filter(b => b > 0), pitch: .58, aisle: 1.1, rowSpacing: 1, rise: .25, firstZ: 6, rowCurve: .006, faceCenter: .6, eyeHeight: 1.18, screen: { width: 12, height: 6.49, bottom: 1.6, curveRadius: 0 }, room: {}, materials: {}, lighting: {}, fovTarget: 40, seatStyle: "standard" };
+    const blocks = L.blocks, seating = { rows: room.rows, blocks, pitch: L.pitch, aisle: L.aisle, rowSpacing: L.rowSpacing, rise: L.rise, firstZ: L.firstZ, rowCurve: L.rowCurve, faceCenter: L.faceCenter, eyeHeight: L.eyeHeight, style: L.seatStyle || "standard" };
     const seatW = blocks.reduce((a, b) => a + b * seating.pitch, 0) + seating.aisle * (blocks.length - 1);
-    const sw = Math.min(14, Math.max(6.5, seatW * 1.05)), screen = { width: sw, height: sw / 1.85, bottom: 1.6 };
-    const t = { seating, screen, screenCenter: [0, screen.bottom + screen.height / 2, 0], fovTarget: 40, seatW,
-      room: { width: Math.max(seatW + 4.5, 10), depth: seating.firstZ + room.rows * seating.rowSpacing + 3, height: Math.max(7, (room.rows - 1) * seating.rise + 5.5) }, seats: [], byId: new Map() };
+    const roomW = Math.max(seatW + 3, +L.room.width || 0, 6), sw = Math.min(roomW - 1.5, Math.max(4, +L.screen.width || 12)), screen = { width: sw, height: sw * ((+L.screen.height || 6.49) / (+L.screen.width || 12)), bottom: +L.screen.bottom || 1.6, curveRadius: Math.max(0, +L.screen.curveRadius || 0) };
+    const t = { seating, screen, screenCenter: [0, screen.bottom + screen.height / 2, 0], fovTarget: +L.fovTarget || 40, seatW, layout: L,
+      room: { width: roomW, depth: seating.firstZ + room.rows * seating.rowSpacing + 3, height: Math.max(+L.room.height || 0, (room.rows - 1) * seating.rise + 5.5, screen.bottom + screen.height + 1.2) }, seats: [], byId: new Map() };
     for (let i = 0; i < room.rows; i++) { const L = String.fromCharCode(65 + i); let a = -seatW / 2, o = 1; const z0 = seating.firstZ + i * seating.rowSpacing, y = i * seating.rise;
       blocks.forEach(c => { for (let d = 0; d < c; d++) { const x = a + seating.pitch * (d + .5), z = z0 + x * x * seating.rowCurve, yaw = Math.atan2(x, z) * seating.faceCenter;
         const eye = [x - .02 * Math.sin(yaw), y + seating.eyeHeight, z + .06 * Math.cos(yaw)], s = { id: L + o, row: L, number: o, rowIndex: i, position: [x, y, z], yaw, eye, metrics: metricsOf(t, eye) };
@@ -39,7 +40,8 @@ const Seat3D = (() => {
   }
   /** Số đo góc nhìn từ vị trí mắt tới màn hình (tâm + 4 cạnh) */
   function metricsOf(t, e) {
-    const n = t.screen, r = t.screenCenter, mid = n.bottom + n.height / 2, edge = { left: [-n.width / 2, mid, 0], right: [n.width / 2, mid, 0], top: [0, n.bottom + n.height, 0], bottom: [0, n.bottom, 0] };
+    const n = t.screen, r = t.screenCenter, mid = n.bottom + n.height / 2, ca = n.curveRadius ? n.width / (2 * n.curveRadius) : 0, ex = n.curveRadius ? n.curveRadius * Math.sin(ca) : n.width / 2, ez = n.curveRadius ? n.curveRadius * (1 - Math.cos(ca)) : 0;
+    const edge = { left: [-ex, mid, ez], right: [ex, mid, ez], top: [0, n.bottom + n.height, 0], bottom: [0, n.bottom, 0] };
     const a = e[0] - r[0], o = e[2] - r[2], s = Math.hypot(a, o), l = Math.hypot(a, e[1] - r[1], o), c = deg(Math.atan2(a, o)), u = deg(Math.atan2(r[1] - e[1], s));
     const d = sub(edge.left, e), h = sub(edge.right, e), p = ang([d[0], 0, d[2]], [h[0], 0, h[2]]), f = ang(sub(edge.top, e), sub(edge.bottom, e)), m = deg(Math.atan2(n.bottom + n.height - e[1], s));
     const v = t.fovTarget, y = .45 * v;
@@ -91,27 +93,72 @@ const Seat3D = (() => {
     const arm = X.mergeGeometries([nx(tr(new T.CylinderGeometry(.035, .032, .38, 8), 0, -.19, 0)), nx(tr(new T.SphereGeometry(.038, 8, 6), 0, -.38, 0))]);
     return { torso, lap, head, hair, arm };
   }
-  function avatarGroup() {   // "bạn" đứng dậy tại ghế (áo đỏ) – dùng ở chế độ đứng dậy
-    const T = window.THREE, g = new T.Group(), mk = (geo, color, p, extra = {}) => { const m = new T.Mesh(geo, new T.MeshStandardMaterial({ color, roughness: .7, ...extra })); m.position.set(...p); g.add(m); return m; };
-    mk(new T.SphereGeometry(.16, 16, 16), 0xf0d5be, [0, 1.55, 0], { roughness: .6 }); mk(new T.BoxGeometry(.3, .12, .32), 0x1a1a24, [0, 1.63, -.04], { roughness: .8 });
-    mk(new T.BoxGeometry(.38, .58, .22), 0xb91c1c, [0, 1.05, 0]); mk(new T.BoxGeometry(.09, .44, .1), 0x991b1b, [-.24, 1.03, 0]); mk(new T.BoxGeometry(.09, .44, .1), 0x991b1b, [.24, 1.03, 0]);
-    mk(new T.BoxGeometry(.13, .74, .14), 0x1f2937, [-.11, .38, 0]); mk(new T.BoxGeometry(.13, .74, .14), 0x1f2937, [.11, .38, 0]);
+  function avatarGroup(shirt = 0xb91c1c, skin = 0xf0d5be, hair = 0x1a1a24, pants = 0x1f2937) {   // nhân vật đứng (áo đỏ = "bạn"); chân/tay là nhóm con có khớp để đi
+    const T = window.THREE, g = new T.Group(), mk = (geo, color, p, extra = {}, parent = g) => { const m = new T.Mesh(geo, new T.MeshStandardMaterial({ color, roughness: .7, ...extra })); m.position.set(...p); parent.add(m); return m; };
+    mk(new T.SphereGeometry(.16, 16, 16), skin, [0, 1.55, 0], { roughness: .6 }); mk(new T.BoxGeometry(.3, .12, .32), hair, [0, 1.63, -.04], { roughness: .8 });
+    mk(new T.BoxGeometry(.38, .58, .22), shirt, [0, 1.05, 0]);
+    const dark = new T.Color(shirt).multiplyScalar(.8).getHex(), limb = (w, h, d, color, x, y, ly) => { const j = new T.Group(); j.position.set(x, y, 0); mk(new T.BoxGeometry(w, h, d), color, [0, ly, 0], {}, j); g.add(j); return j; };
+    g.userData.arms = [limb(.09, .44, .1, dark, -.24, 1.25, -.22), limb(.09, .44, .1, dark, .24, 1.25, -.22)];
+    g.userData.legs = [limb(.13, .74, .14, pants, -.11, .75, -.37), limb(.13, .74, .14, pants, .11, .75, -.37)];
     g.visible = false; g.traverse(o => { o.raycast = () => {}; }); return g;
+  }
+  /* ---------- "đi tới ghế": mỗi ghế đã chọn / đã mua một nhân vật vào từ CỬA BÊN PHÍA TRƯỚC (gần màn hình, như rạp thật),
+     đi dọc lối đi trước hàng đầu tới lối đi gần nhất, LEO BẬC lên tới hàng, rẽ vào ghế rồi ngồi ---------- */
+  function arriveBuild() {
+    const T = window.THREE, t = st.t, se = t.seating, R = t.room, ids = (st.opts.arrive || []).filter(id => t.byId.get(id));
+    arriveClear(); st.seated = new Set(); st.walkers = [];
+    // tâm các lối đi giữa khối ghế; không có thì dùng lối đi hai bên tường
+    const aisleX = []; { let a = -t.seatW / 2; se.blocks.slice(0, -1).forEach(b => { a += b * se.pitch; aisleX.push(a + se.aisle / 2); a += se.aisle; }); }
+    if (!aisleX.length) aisleX.push(-t.seatW / 2 - .6, t.seatW / 2 + .6);
+    ids.forEach((id, k) => { const s = t.byId.get(id), h = hash(id + "|arrive"), ax = aisleX.reduce((b, x) => Math.abs(x - s.position[0]) < Math.abs(b - s.position[0]) ? x : b, aisleX[0]);
+      const g = avatarGroup(new T.Color(CLOTH[h % CLOTH.length]).getHex(), new T.Color(SKIN[(h >> 2) % SKIN.length]).getHex(), new T.Color(HAIR[(h >> 4) % HAIR.length]).getHex(), new T.Color(PANTS[(h >> 6) % PANTS.length]).getHex());
+      const zRow = s.position[2] - .42 * se.rowSpacing;   // lối đi phía trước hàng ghế
+      const zFront = Math.max(1.3, se.firstZ - 1.3), doorX = (ax >= 0 ? 1 : -1) * (R.width / 2 - .6);   // cửa bên, sát tường, phía trước hàng A
+      const path = [[doorX, zFront], [ax, zFront], [ax, zRow], [s.position[0], zRow], [s.position[0], s.position[2] + .05]];
+      g.position.set(doorX, 0, zFront); g.visible = false; st.scene.add(g);
+      st.walkers.push({ id, seat: s, g, path, i: 0, t: 0, delay: k * .7 + .2, done: false, dist: 0 }); });
+    st.arriveT = 0; st.arriveKey = ids.join(); st.dirty = true;
+  }
+  function arriveClear() { (st.walkers || []).forEach(w => { st.scene && st.scene.remove(w.g); w.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }); st.walkers = []; if (st.seated && st.seated.size) { st.seated = new Set(); st.audKey = null; } }
+  /** Cao độ sàn tại z (theo bậc hàng) */
+  function floorY(z) { const se = st.t.seating; if (z < se.firstZ - .4) return 0; const i = Math.floor((z - se.firstZ + .45 * se.rowSpacing) / se.rowSpacing); return Math.max(0, Math.min(se.rows - 1, i)) * se.rise; }
+  function arriveStep(dt) {
+    const sp = 1.9; let active = 0; st.arriveT += dt;
+    st.walkers.forEach(w => { if (w.done) return; if (st.arriveT < w.delay) return; active++; w.g.visible = true;
+      const [tx, tz] = w.path[w.i], px = w.g.position.x, pz = w.g.position.z, dx = tx - px, dz = tz - pz, d = Math.hypot(dx, dz);
+      if (d < .04) { w.i++; if (w.i >= w.path.length) { w.done = true; w.g.visible = false; st.seated.add(w.id); st.audKey = null; audience(); return; } }
+      else { const m = Math.min(d, sp * dt); w.g.position.x += dx / d * m; w.g.position.z += dz / d * m; w.g.rotation.y = Math.atan2(dx, dz); w.dist += m; }
+      const y = w.i < 3 ? floorY(w.g.position.z) : w.seat.position[1]; w.g.position.y = y + Math.abs(Math.sin(w.dist * 4)) * .035;
+      const sw = Math.sin(w.dist * 4) * .55; w.g.userData.legs[0].rotation.x = sw; w.g.userData.legs[1].rotation.x = -sw; w.g.userData.arms[0].rotation.x = -sw * .6; w.g.userData.arms[1].rotation.x = sw * .6; });
+    return active > 0 || st.walkers.some(w => !w.done);
+  }
+  /** Máy quay cảnh đi tới ghế: đứng phía trước (gần màn hình), hơi thấp, nhìn lên nhóm đang leo bậc – như góc nhìn từ cửa vào; xong thì nhìn cả cụm ghế */
+  function arrivePose() {
+    const T = window.THREE, R = st.t.room, ws = st.walkers.filter(w => !w.done && w.g.visible), all = st.walkers;
+    const pts = (ws.length ? ws : all).map(w => ws.length ? w.g.position : new T.Vector3(w.seat.position[0], w.seat.position[1], w.seat.position[2]));
+    const c = pts.reduce((a, p) => a.add(p), new T.Vector3()).multiplyScalar(1 / Math.max(1, pts.length));
+    // máy quay được phép lùi ra sau tường sau (tường vẽ một mặt nên không che) để luôn thấy người từ lúc bước vào
+    const cx = Math.max(-R.width / 2 + .8, Math.min(R.width / 2 - .8, c.x - 2.4));
+    if (ws.length) return { eye: new T.Vector3(cx, Math.max(1.4, c.y + 1.2), Math.max(.6, c.z - 4.6)), aim: new T.Vector3(c.x, c.y + 1, c.z + .4), fov: 64 };
+    return { eye: new T.Vector3(cx, Math.max(1.6, c.y + 1.6), Math.max(.6, c.z - 4.2)), aim: new T.Vector3(c.x, c.y + .7, c.z), fov: 58 };
   }
   function build(room, opts) {
     const T = window.THREE, t = theatreOf(room), scene = new T.Scene(), R = t.room, sc = t.screen, se = t.seating;
     scene.background = new T.Color(0x070709); scene.fog = new T.Fog(0x070709, 22, 60);
     // --- ghế (3 lớp vật liệu, instanced) ---
     const geo = seatGeo(), n = t.seats.length, M = new T.Matrix4(), q = new T.Quaternion(), P = new T.Vector3(), S = new T.Vector3(1, 1, 1), E = new T.Euler();
-    const mats = { up: new T.MeshStandardMaterial({ color: 0xffffff, roughness: .65, metalness: .08 }), shell: new T.MeshStandardMaterial({ color: 0x141214, roughness: .38, metalness: .16 }), metal: new T.MeshStandardMaterial({ color: 0x3a3a3d, roughness: .25, metalness: .9 }) };
+    const L = t.layout || { room: {}, materials: {}, lighting: {} }, col = (v, d) => { try { return new T.Color(v || d); } catch (e) { return new T.Color(d); } }, hx = (v, d) => col(v, d).getHex();
+    const wScale = { recliner: 1.35, luxury: 1.55, fx: 1.08 }[se.style] || 1;   // ghế nằm / sofa rộng hơn ghế thường
+    const mats = { up: new T.MeshStandardMaterial({ color: 0xffffff, roughness: se.style === "recliner" || se.style === "luxury" ? .45 : .65, metalness: .08 }), shell: new T.MeshStandardMaterial({ color: hx(L.materials.plastic, "#141214"), roughness: .38, metalness: .16 }), metal: new T.MeshStandardMaterial({ color: hx(L.materials.metal, "#3a3a3d"), roughness: .25, metalness: .9 }) };
     const inst = {}; ["up", "shell", "metal"].forEach(k => { inst[k] = new T.InstancedMesh(geo[k], mats[k], n); inst[k].instanceMatrix.setUsage(T.DynamicDrawUsage); scene.add(inst[k]); });
     t.seats.forEach((s, k) => { const g = opts.groups && opts.groups.get(s.id); let sx = 1, x = s.position[0], show = true;
       if (g) { if (g[0] !== s.id) show = false; else { const last = t.byId.get(g[g.length - 1]); x = (s.position[0] + last.position[0]) / 2; sx = (last.position[0] - s.position[0]) / se.pitch + 1; } }
-      P.set(x, s.position[1], s.position[2]); E.set(0, s.yaw, 0); q.setFromEuler(E); S.set(show ? sx : 1e-4, show ? 1 : 1e-4, show ? 1 : 1e-4); M.compose(P, q, S);
+      P.set(x, s.position[1], s.position[2]); E.set(0, s.yaw, 0); q.setFromEuler(E); S.set(show ? sx * wScale : 1e-4, show ? 1 : 1e-4, show ? (wScale > 1.2 ? 1.25 : 1) : 1e-4); M.compose(P, q, S);
       Object.values(inst).forEach(m => m.setMatrixAt(k, M)); });
     Object.values(inst).forEach(m => { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); });
     // --- phòng: thảm, bậc, tường sọc, tường sau, tường màn hình, trần, sân khấu, lan can sau ---
-    const carpet = carpetTex("#3a1418", "#24090c", [R.width / 2, R.depth / 2]), riserT = carpetTex("#3a1418", "#24090c", [R.width / 2, 1]), wallT = wallTex("#2a1d1c", [R.depth / 3, R.height / 3]), backT = wallTex("#2a1d1c", [R.width / 3, R.height / 3]);
+    const fl = L.room.floor || "#3a1418", fl2 = L.room.floorAlt || "#24090c", wl = L.room.wall || "#2a1d1c";
+    const carpet = carpetTex(fl, fl2, [R.width / 2, R.depth / 2]), riserT = carpetTex(fl, fl2, [R.width / 2, 1]), wallT = wallTex(wl, [R.depth / 3, R.height / 3]), backT = wallTex(wl, [R.width / 3, R.height / 3]);
     const mesh = (g, m, p, rot) => { const o = new T.Mesh(g, m); o.position.set(...p); if (rot) o.rotation.set(...rot); scene.add(o); return o; };
     mesh(new T.PlaneGeometry(R.width, R.depth + 2), new T.MeshStandardMaterial({ map: carpet, roughness: 1 }), [0, 0, R.depth / 2 - 1], [-Math.PI / 2, 0, 0]);
     for (let i = 1; i < se.rows; i++) { const y = i * se.rise, z1 = se.firstZ + (i - .5) * se.rowSpacing, z2 = i === se.rows - 1 ? R.depth : z1 + se.rowSpacing; mesh(new T.BoxGeometry(R.width, y, z2 - z1), new T.MeshStandardMaterial({ map: riserT, roughness: 1 }), [0, y / 2, (z1 + z2) / 2]); }
@@ -120,29 +167,34 @@ const Seat3D = (() => {
     mesh(new T.PlaneGeometry(R.depth + 2, R.height), wallM, [R.width / 2, R.height / 2, R.depth / 2 - 1], [0, -Math.PI / 2, 0]);
     mesh(new T.PlaneGeometry(R.width, R.height), new T.MeshStandardMaterial({ map: backT, roughness: .95 }), [0, R.height / 2, R.depth], [0, Math.PI, 0]);
     mesh(new T.PlaneGeometry(R.width, R.height), new T.MeshStandardMaterial({ color: 0x040404, roughness: 1 }), [0, R.height / 2, -1]);
-    mesh(new T.PlaneGeometry(R.width, R.depth + 2), new T.MeshStandardMaterial({ color: 0x0d0b0b, roughness: 1, side: T.DoubleSide }), [0, R.height, R.depth / 2 - 1], [Math.PI / 2, 0, 0]);
+    mesh(new T.PlaneGeometry(R.width, R.depth + 2), new T.MeshStandardMaterial({ color: hx(L.room.ceiling, "#0d0b0b"), roughness: 1, side: T.DoubleSide }), [0, R.height, R.depth / 2 - 1], [Math.PI / 2, 0, 0]);
     mesh(new T.BoxGeometry(R.width, .5, 1.8), new T.MeshStandardMaterial({ color: 0x0a0a0b, roughness: .9 }), [0, .25, .9]);
     mesh(new T.BoxGeometry(.9 * R.width, .06, .08), new T.MeshStandardMaterial({ color: 0x1a1a1c, metalness: .8, roughness: .3 }), [0, (se.rows - 1) * se.rise + .5, Math.min(R.depth - .05, se.firstZ + (se.rows - 1) * se.rowSpacing + .75 * se.rowSpacing)]);
     // --- màn hình (poster lên sau) + viền + rèm + loa tường ---
-    st.scrM = new T.MeshBasicMaterial({ color: 0xffffff }); mesh(new T.PlaneGeometry(sc.width, sc.height), st.scrM, [0, sc.bottom + sc.height / 2, 0]);
-    mesh(new T.PlaneGeometry(sc.width + .5, sc.height + .5), new T.MeshStandardMaterial({ color: 0x000000, roughness: 1 }), [0, sc.bottom + sc.height / 2, -.03]);
-    const curtM = new T.MeshStandardMaterial({ color: 0x5a1518, roughness: .95 }); [-1, 1].forEach(s => mesh(new T.BoxGeometry(.9, R.height - .4, .35), curtM, [s * (sc.width / 2 + 1), R.height / 2 - .2, .2]));
+    const bend = (g, w) => { if (!sc.curveRadius) return g; const Rc = sc.curveRadius, p = g.attributes.position; for (let i = 0; i < p.count; i++) { const a = p.getX(i) / Rc; p.setXYZ(i, Rc * Math.sin(a), p.getY(i), Rc * (1 - Math.cos(a)) + p.getZ(i)); } g.computeVertexNormals(); return g; };
+    st.scrM = new T.MeshBasicMaterial({ color: 0xffffff }); mesh(bend(new T.PlaneGeometry(sc.width, sc.height, sc.curveRadius ? 48 : 1, 1), sc.width), st.scrM, [0, sc.bottom + sc.height / 2, 0]);
+    mesh(bend(new T.PlaneGeometry(sc.width + .5, sc.height + .5, sc.curveRadius ? 48 : 1, 1), sc.width + .5), new T.MeshStandardMaterial({ color: 0x000000, roughness: 1 }), [0, sc.bottom + sc.height / 2, -.03]);
+    const curtM = new T.MeshStandardMaterial({ color: hx(L.materials.upholstery, "#5a1518"), roughness: .95 }); [-1, 1].forEach(s => mesh(new T.BoxGeometry(.9, R.height - .4, .35), curtM, [s * (sc.width / 2 + 1), R.height / 2 - .2, .2]));
     const spkM = new T.MeshStandardMaterial({ color: 0x111113, roughness: .6 }); for (let i = 0; i < 4; i++) { const z = 3 + i * (R.depth - 6) / 3; [-1, 1].forEach(s => mesh(new T.BoxGeometry(.3, .9, .5), spkM, [s * (R.width / 2 - .2), 3.6, z])); }
     // --- đèn: màn hình hắt sáng, đèn trần ấm, đèn hông (sconce) 4 cặp, đèn lối đi ---
-    scene.add(new T.AmbientLight(0xffd2a8, .55));
+    const lg = L.lighting || {}; scene.add(new T.AmbientLight(hx(lg.ambient, "#ffd2a8"), Math.max(.35, lg.ambientIntensity != null ? +lg.ambientIntensity : .55)));
     const glow = new T.PointLight(0xdbe4ff, 90, 45, 1.5); glow.position.set(0, sc.bottom + sc.height / 2, 1.5); scene.add(glow);
     const topL = new T.DirectionalLight(0xffe4c4, .25); topL.position.set(3, R.height, R.depth / 2); scene.add(topL);
-    const scM = new T.MeshBasicMaterial({ color: 0xffb370 }); for (let i = 0; i < 4; i++) { const z = 4 + i * (R.depth - 7) / 3; [-1, 1].forEach(s => { mesh(new T.BoxGeometry(.12, .5, .25), scM, [s * (R.width / 2 - .06), 2.4, z]); const l = new T.PointLight(0xffb370, 10, 9, 1.6); l.position.set(s * (R.width / 2 - .5), 2.5, z); scene.add(l); }); }
-    const aisleM = new T.MeshBasicMaterial({ color: 0xffb35c }); for (let i = 0; i < se.rows; i++) { const z = se.firstZ + i * se.rowSpacing, y = i * se.rise + .03; mesh(new T.BoxGeometry(.06, .04, .3), aisleM, [-.02, y, z]); mesh(new T.BoxGeometry(.3, .04, .06), aisleM, [-R.width / 2 + .6, y, z]); mesh(new T.BoxGeometry(.3, .04, .06), aisleM, [R.width / 2 - .6, y, z]); }
+    const nSc = lg.sconceCount != null ? Math.max(0, Math.min(12, +lg.sconceCount)) : 4, scHex = hx(lg.sconce, "#ffb370"), scM = new T.MeshBasicMaterial({ color: scHex });
+    for (let i = 0; i < nSc; i++) { const z = 4 + i * (R.depth - 7) / Math.max(1, nSc - 1); [-1, 1].forEach(s => { mesh(new T.BoxGeometry(.12, .5, .25), scM, [s * (R.width / 2 - .06), 2.4, z]); const l = new T.PointLight(scHex, 10, 9, 1.6); l.position.set(s * (R.width / 2 - .5), 2.5, z); scene.add(l); }); }
+    if (!nSc) { const fill = new T.PointLight(hx(lg.aisle, "#ffb35c"), 14, R.depth, 1.4); fill.position.set(0, R.height - .8, R.depth * .55); scene.add(fill); }
+    // đèn lối đi: ở mép mỗi khối ghế (lối đi giữa) + hai bên tường
+    const aisleM = new T.MeshBasicMaterial({ color: hx(lg.aisle, "#ffb35c") }), aisleX = []; { let a = -t.seatW / 2; se.blocks.slice(0, -1).forEach(b => { a += b * se.pitch; aisleX.push(a + se.aisle / 2); a += se.aisle; }); }
+    for (let i = 0; i < se.rows; i++) { const z = se.firstZ + i * se.rowSpacing, y = i * se.rise + .03; aisleX.forEach(x => mesh(new T.BoxGeometry(.06, .04, .3), aisleM, [x, y, z])); mesh(new T.BoxGeometry(.3, .04, .06), aisleM, [-R.width / 2 + .6, y, z]); mesh(new T.BoxGeometry(.3, .04, .06), aisleM, [R.width / 2 - .6, y, z]); }
     // --- khán giả (ghế đã bán) + nhân vật đứng dậy ---
     st.pgeo = personGeo(); st.aud = null; st.audKey = null; st.avatar = avatarGroup(); scene.add(st.avatar);
     const ring = new T.Group(); const r1 = new T.Mesh(new T.RingGeometry(.38, .46, 32), new T.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: .65 })); r1.rotation.x = -Math.PI / 2; ring.add(r1);
     const r2 = new T.Mesh(new T.CircleGeometry(.15, 24), new T.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: .25 })); r2.rotation.x = -Math.PI / 2; r2.position.y = .01; ring.add(r2); ring.visible = false; ring.traverse(o => { o.raycast = () => {}; }); scene.add(ring); st.ring = ring;
-    Object.assign(st, { scene, inst, t, texKey: "" });
+    st.walkers = []; st.seated = null; st.arriveKey = ""; Object.assign(st, { scene, inst, t, texKey: "" });
   }
   /** người ngồi ở ghế đã bán: dựng lại khi danh sách ghế bán đổi */
   function audience() {
-    const T = window.THREE, t = st.t, sold = t.seats.filter(s => st.opts.stateOf && st.opts.stateOf(s.id) === "sold"), key = sold.map(s => s.id).join();
+    const T = window.THREE, t = st.t, seated = st.seated || new Set(), sold = t.seats.filter(s => (st.opts.stateOf && st.opts.stateOf(s.id) === "sold") || seated.has(s.id)), key = sold.map(s => s.id).join();
     if (st.audKey === key) return; st.audKey = key;
     if (st.aud) { st.scene.remove(st.aud); st.aud.children.forEach(m => m.dispose()); st.aud = null; }
     if (!sold.length) { st.dirty = true; return; }
@@ -189,6 +241,11 @@ const Seat3D = (() => {
       const eye = new T.Vector3(c.x, c.y + 1.55 + (c.moving ? .035 * Math.sin(c.bob) : 0), c.z);
       return { eye, aim: eye.clone().add(dir.multiplyScalar(10)), fov: 62 };
     }
+    if (st.mode === "arrive" && st.walkers && st.walkers.length) return arrivePose();
+    if (st.mode === "room") {   // toàn cảnh phòng: máy quay cao phía sau, nhìn về màn hình; kéo xoay quanh tâm phòng, lăn chuột xa/gần
+      const R = st.t.room, cz = (R.depth + 2) / 2, d = (R.depth * .85 + 4) * st.dist, yaw = st.yaw, pitch = Math.max(.2, Math.min(1.25, .55 + st.pitch));
+      return { eye: new T.Vector3(Math.sin(yaw) * d * Math.cos(pitch), 1.5 + Math.sin(pitch) * d, cz + Math.cos(yaw) * d * Math.cos(pitch)), aim: new T.Vector3(0, 1.6, cz - 1), fov: 50 };
+    }
     if (st.mode === "overview") {   // đứng dậy: nhân vật đứng tại ghế, máy quay phía sau trên cao (kéo: xoay quanh nhân vật; lăn: xa/gần)
       const d = 4.2 * st.dist, yaw = st.yaw, pitch = Math.max(.15, Math.min(1.1, .5 + st.pitch));
       return { eye: new T.Vector3(x + Math.sin(yaw) * d * Math.cos(pitch), y + 1.2 + Math.sin(pitch) * d, z + Math.cos(yaw) * d * Math.cos(pitch)), aim: new T.Vector3(x, y + 1.3, z - 2.5), fov: 55 };
@@ -199,7 +256,7 @@ const Seat3D = (() => {
   }
   function placeAvatar() {
     if (st.mode === "walk") { const c = st.ch; st.avatar.visible = c.view === "third"; st.avatar.position.set(c.x, c.y, c.z); st.avatar.rotation.y = c.yaw + Math.PI; return; }
-    const s = focusSeat(); st.avatar.visible = st.mode === "overview"; st.avatar.position.set(s.position[0], s.position[1], s.position[2] - .15); st.avatar.rotation.y = Math.PI + s.yaw; }
+    const s = focusSeat(); st.avatar.visible = st.mode === "overview";  if (st.mode === "arrive") st.avatar.visible = false; st.avatar.position.set(s.position[0], s.position[1], s.position[2] - .15); st.avatar.rotation.y = Math.PI + s.yaw; }
   /** Vật lý đi lại mỗi khung hình: WASD / mũi tên / joystick, Shift chạy; giới hạn trong phòng; y theo bậc hàng; ghế gần nhất < 1,35 m → gợi ý ngồi */
   function walkStep(dt) {
     const c = st.ch, k = st.keys, R = st.t.room, se = st.t.seating;
@@ -218,7 +275,9 @@ const Seat3D = (() => {
   function bindKeys() {
     if (st.keysBound) return; st.keysBound = true;
     const map = { KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b", KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r" };
-    window.addEventListener("keydown", e => { if (st.mode !== "walk" || !st.r) return; const t = e.target.tagName; if (/INPUT|TEXTAREA|SELECT/.test(t) || e.metaKey || e.ctrlKey || e.altKey) return;
+    window.addEventListener("keydown", e => { if (!st.r) return; const t = e.target.tagName; if (/INPUT|TEXTAREA|SELECT/.test(t) || e.metaKey || e.ctrlKey || e.altKey) return;
+      // đang ngồi (Từ ghế) mà bấm E = đứng dậy (chủ trang quyết định đi lại hay nhìn toàn cảnh)
+      if (st.mode !== "walk") { if (e.code === "KeyE" && st.mode === "seat" && st.opts.onStand && st.el && st.el.getClientRects().length) { e.preventDefault(); st.opts.onStand(); } return; }
       if (map[e.code]) { st.keys[map[e.code]] = true; e.preventDefault(); } if (e.shiftKey) st.keys.run = true;
       if (e.code === "KeyE" && st.near && st.opts.onSit) { e.preventDefault(); st.opts.onSit(st.near.id); } if (e.code === "KeyV") { st.ch.view = st.ch.view === "first" ? "third" : "first"; placeAvatar(); st.dirty = true; } loop(); });
     window.addEventListener("keyup", e => { if (map[e.code]) st.keys[map[e.code]] = false; if (!e.shiftKey) st.keys.run = false; });
@@ -229,6 +288,10 @@ const Seat3D = (() => {
   function frame(now) {
     st.raf = 0; if (!st.r) return;
     if (st.mode === "walk") { const dt = Math.min(.1, (now - (st.lastT || now)) / 1000); st.lastT = now; walkStep(dt); st.to = null; st.cam.position.copy(st.eye); st.cam.lookAt(st.aim); st.r.render(st.scene, st.cam); st.dirty = false; if (st.el) loop(); return; }
+    if (st.mode === "arrive" && st.walkers && st.walkers.length) { const dt = Math.min(.1, (now - (st.lastT || now)) / 1000); st.lastT = now; const more = arriveStep(dt), p = arrivePose();
+      if (!st.eye) { st.eye = p.eye.clone(); st.aim = p.aim.clone(); } st.eye.lerp(p.eye, .06); st.aim.lerp(p.aim, .08); st.cam.fov += (p.fov - st.cam.fov) * .05; st.cam.updateProjectionMatrix(); st.to = null;
+      st.cam.position.copy(st.eye); st.cam.lookAt(st.aim); st.r.render(st.scene, st.cam); st.dirty = false;
+      if (more || st.eye.distanceTo(p.eye) > .02) { if (st.el) loop(); } else if (!st.arrivedTold) { st.arrivedTold = true; st.opts.onArrived && st.opts.onArrived(); } return; }
     st.lastT = now;
     if (st.to) { const k = st.t0 ? Math.min(1, (now - st.t0) / 700) : 1, e = 1 - Math.pow(1 - k, 3);
       st.eye.lerpVectors(st.from.eye, st.to.eye, e); st.aim.lerpVectors(st.from.aim, st.to.aim, e); st.cam.fov = st.from.fov + (st.to.fov - st.from.fov) * e; st.cam.updateProjectionMatrix(); if (k >= 1) st.to = null; st.dirty = true; }
@@ -242,14 +305,14 @@ const Seat3D = (() => {
     cv.addEventListener("pointerdown", e => { st.drag = { x: e.clientX, y: e.clientY, yaw: st.yaw, pitch: st.pitch, moved: false }; cv.setPointerCapture(e.pointerId); });
     cv.addEventListener("pointermove", e => { const d = st.drag; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
       if (st.mode === "walk") { const c = st.ch, k = .0032; c.yaw -= (e.clientX - (d.lx ?? d.x)) * k; c.pitch = Math.max(-.75, Math.min(.75, c.pitch - (e.clientY - (d.ly ?? d.y)) * k)); d.lx = e.clientX; d.ly = e.clientY; loop(); return; }
-      const k = st.mode === "overview" ? .006 : .0045; st.yaw = d.yaw - dx * k; st.pitch = Math.max(-.6, Math.min(.6, d.pitch + dy * k * (st.mode === "overview" ? -1 : 1))); live(); });
+      const k = st.mode === "seat" ? .0045 : .006; st.yaw = d.yaw - dx * k; st.pitch = Math.max(-.6, Math.min(.6, d.pitch + dy * k * (st.mode === "seat" ? 1 : -1))); live(); });
     const up = e => { const d = st.drag; st.drag = null; if (!d || d.moved) return;
       if (st.mode === "walk") { if (st.near && st.opts.onSit) st.opts.onSit(st.near.id); return; }
       if (!st.opts.onPick) return; const T = window.THREE, rc = new T.Raycaster(), b = cv.getBoundingClientRect();
       rc.setFromCamera(new T.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1), st.cam);
       const hit = rc.intersectObjects([st.inst.up, st.inst.shell])[0]; if (hit && hit.instanceId != null) st.opts.onPick(st.t.seats[hit.instanceId].id); };
     cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", () => { st.drag = null; });
-    cv.addEventListener("wheel", e => { if (st.mode !== "overview") return; e.preventDefault(); st.dist = Math.max(.45, Math.min(2.2, st.dist * (e.deltaY > 0 ? 1.08 : .92))); live(); }, { passive: false });
+    cv.addEventListener("wheel", e => { if (st.mode !== "overview" && st.mode !== "room") return; e.preventDefault(); st.dist = Math.max(.45, Math.min(2.2, st.dist * (e.deltaY > 0 ? 1.08 : .92))); live(); }, { passive: false });
     cv.addEventListener("dblclick", () => { st.yaw = 0; st.pitch = 0; st.dist = 1; goTo(true); });
   }
   /** Gắn / cập nhật khung 3D vào el (gọi sau mỗi lần vẽ lại trang). opts: room, groups, selected, focus, stateOf, kindOf, poster, title, mode ('seat'|'overview'), onPick */
@@ -257,7 +320,7 @@ const Seat3D = (() => {
     if (!el) return; st.el = el; st.opts = opts || {};
     if (!ready()) { if (!el.querySelector("[data-s3-wait]")) el.insertAdjacentHTML("beforeend", `<div data-s3-wait class="absolute inset-0 grid place-items-center text-xs text-white/60">Đang tải phòng 3D…</div>`); onReady(() => st.el && mount(st.el, st.opts)); return; }
     if (st.unsupported) return;
-    const T = window.THREE, room = st.opts.room, key = room.id + "|" + room.rows + "x" + room.cols + "|" + JSON.stringify(room.seatMap || {}) + (room.couple || []).join() + (room.vip || []).join();
+    const T = window.THREE, room = st.opts.room, key = room.id + "|" + room.rows + "x" + room.cols + "|" + JSON.stringify(room.seatMap || {}) + (room.couple || []).join() + (room.vip || []).join() + "|" + JSON.stringify(room.layout || null);
     if (!st.r) { try { st.r = new T.WebGLRenderer({ antialias: true, powerPreference: "high-performance" }); }
       catch (e) { st.unsupported = true; el.insertAdjacentHTML("beforeend", `<div class="absolute inset-0 grid place-items-center p-4 text-center text-xs text-white/70">Trình duyệt không bật WebGL nên không xem được phòng 3D – vẫn chọn ghế trên sơ đồ 2D bình thường.</div>`); return; }
       st.r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); st.r.outputColorSpace = T.SRGBColorSpace; st.r.toneMapping = T.ACESFilmicToneMapping; st.r.toneMappingExposure = 1.05;
@@ -265,15 +328,23 @@ const Seat3D = (() => {
     if (st.key !== key) { st.key = key; st.eye = null; st.yaw = 0; st.pitch = 0; build(room, st.opts); }
     const wait = el.querySelector("[data-s3-wait]"); if (wait) wait.remove();
     if (st.r.domElement.parentElement !== el) { el.prepend(st.r.domElement); st.ro.disconnect(); st.ro.observe(el); }
-    const mode = st.opts.mode === "overview" ? "overview" : st.opts.mode === "walk" ? "walk" : "seat", modeChanged = st.mode !== mode, f = focusSeat().id, focusChanged = st._focus !== f;
+    const mode = ["overview", "walk", "room", "arrive"].includes(st.opts.mode) ? st.opts.mode : "seat", modeChanged = st.mode !== mode, f = focusSeat().id, focusChanged = st._focus !== f;
     st.mode = mode; st._focus = f; if (modeChanged) { st.yaw = 0; st.pitch = 0; st.dist = 1; }
-    if (mode === "walk") { bindKeys(); if (modeChanged) startWalk(); st.ch.view = st.opts.view === "third" ? "third" : "first"; }
+    if (mode === "arrive") { const k = (st.opts.arrive || []).join(); if (modeChanged || st.arriveKey !== k || st.replayAsk) { st.replayAsk = false; st.arrivedTold = false; arriveBuild(); st.eye = null; } }
+    else if (st.walkers && st.walkers.length) arriveClear();
+    bindKeys(); if (mode === "walk") { if (modeChanged) startWalk(); st.ch.view = st.opts.view === "third" ? "third" : "first"; }
     else if (st.ring) { st.ring.visible = false; st.near = null; }
-    screenTex(); colorize(); audience(); placeAvatar(); resize(); if (mode === "walk") { if (!st.eye) { const p = pose(); st.eye = p.eye.clone(); st.aim = p.aim.clone(); } st.lastT = 0; loop(); } else goTo(modeChanged || focusChanged);
+    screenTex(); colorize(); audience(); placeAvatar(); resize(); if (mode === "walk" || mode === "arrive") { if (!st.eye) { const p = pose(); st.eye = p.eye.clone(); st.aim = p.aim.clone(); } st.lastT = 0; loop(); } else goTo(modeChanged || focusChanged);
   }
-  function destroy() { if (!st.r) return; st.ro && st.ro.disconnect(); st.r.domElement.remove(); st.r.dispose(); Object.assign(st, { r: null, cam: null, scene: null, key: "", el: null, bound: false, eye: null, raf: 0, aud: null, audKey: null }); }
+  function destroy() { if (!st.r) return; arriveClear(); st.ro && st.ro.disconnect(); st.r.domElement.remove(); st.r.dispose(); Object.assign(st, { r: null, cam: null, scene: null, key: "", el: null, bound: false, eye: null, raf: 0, aud: null, audKey: null, walkers: [], seated: null, arriveKey: "" }); }
+  /** Phát lại cảnh đi tới ghế */
+  function replay() { if (!st.r || !st.el) return; st.replayAsk = true; mount(st.el, st.opts); }
+  /** Trạng thái cảnh đi tới ghế (kiểm thử): số nhân vật, số đã ngồi */
+  function arriveState() { return { walkers: (st.walkers || []).length, seated: st.seated ? st.seated.size : 0, done: !!(st.walkers && st.walkers.length && st.walkers.every(w => w.done)) }; }
   /** Joystick cảm ứng (điện thoại): x = -1..1 trái/phải, y = -1..1 lên/xuống (âm = tiến) */
+  /** Toạ độ màn hình (px trong khung) của một ghế – phục vụ kiểm thử / gợi ý */
+  function screenPos(sid) { if (!st.r || !st.t) return null; const s = st.t.byId.get(sid); if (!s) return null; const T = window.THREE, v = new T.Vector3(s.position[0], s.position[1] + 1.05, s.position[2] + .2).project(st.cam), b = st.r.domElement.getBoundingClientRect(); return [b.left + (v.x + 1) / 2 * b.width, b.top + (1 - v.y) / 2 * b.height]; }
   function setJoystick(x, y) { st.joy.x = x || 0; st.joy.y = y || 0; loop(); }
   function setRun(on) { st.keys.run = !!on; }
-  return { mount, destroy, rate, best, theatreOf, PRIO, setJoystick, setRun, get near() { return st.near; }, get active() { return !!st.r; }, get el() { return st.el; } };
+  return { mount, destroy, rate, best, theatreOf, PRIO, setJoystick, setRun, screenPos, replay, arriveState, get near() { return st.near; }, get active() { return !!st.r; }, get el() { return st.el; } };
 })();

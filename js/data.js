@@ -48,7 +48,54 @@ const ROOM_PLAN = {
 };
 const ROOM_KIND_TXT = { "2D": "2D Phụ đề", "3D": "3D Phụ đề", GOLD: "2D Phụ đề · Phòng GOLD", IMAX: "IMAX 2D" };
 const ROOM_KINDS = ["2D", "3D", "GOLD", "IMAX"];
+/* Mẫu phòng chiếu (thông số phòng, màn hình, ghế, màu, đèn tham khảo thông số rạp thực tế): dùng cho trình thiết kế + dựng 3D + chấm góc nhìn.
+   screen.curveRadius = bán kính cong màn (m, 0 = phẳng); góc mở của màn = width / curveRadius (rad) – IMAX 22 m / 30 m ≈ 42°, Grand 24/36 ≈ 38°, Dolby 15/42 ≈ 20°.
+   blocks = số ghế từng khối trong một hàng (giữa các khối là lối đi); pitch = bước ghế; rowSpacing = bước hàng; rise = bậc dốc (m). */
+const ROOM_PRESETS = {
+  standard: { code: "A", name: "Rạp tiêu chuẩn", tagline: "Phòng bậc thang cổ điển, màn phẳng 1.85:1", kind: "2D", rows: 12, blocks: [9, 9], aisle: 1.1, pitch: .58, rowSpacing: 1, rise: .25, firstZ: 6, rowCurve: .006, faceCenter: .6, eyeHeight: 1.18, seatStyle: "standard",
+    screen: { width: 12, height: 6.49, bottom: 1.6, curveRadius: 0 }, room: { width: 16, height: 9, wall: "#2a1d1c", floor: "#3a1418", floorAlt: "#24090c", ceiling: "#0d0b0b" }, materials: { upholstery: "#7a1f24", plastic: "#141214", metal: "#3a3a3d" }, lighting: { ambient: "#ffd2a8", ambientIntensity: .55, sconce: "#ffb370", sconceCount: 4, aisle: "#ffb35c" }, fovTarget: 40 },
+  imax: { code: "B", name: "IMAX", tagline: "Màn cong khổng lồ 1.43:1, bậc dốc cao", kind: "IMAX", rows: 14, blocks: [6, 14, 6], aisle: 1.2, pitch: .58, rowSpacing: 1.05, rise: .42, firstZ: 7, rowCurve: .01, faceCenter: .8, eyeHeight: 1.15, seatStyle: "standard",
+    screen: { width: 22, height: 15.4, bottom: .9, curveRadius: 30 }, room: { width: 26, height: 19, wall: "#161a20", floor: "#14181e", floorAlt: "#0b0e12", ceiling: "#07080a" }, materials: { upholstery: "#2a3442", plastic: "#0f1114", metal: "#45484d" }, lighting: { ambient: "#a9bfd6", ambientIntensity: .45, sconce: "#9fb6d0", sconceCount: 0, aisle: "#8fb3d9" }, fovTarget: 70 },
+  dolby: { code: "C", name: "Dolby / GOLD cao cấp", tagline: "Ghế nằm da, phòng hộp đen, màn 2.39:1", kind: "GOLD", rows: 8, blocks: [3, 8, 3], aisle: 1.3, pitch: .92, rowSpacing: 1.75, rise: .5, firstZ: 7, rowCurve: .004, faceCenter: .7, eyeHeight: 1.05, seatStyle: "recliner",
+    screen: { width: 15, height: 6.28, bottom: 2, curveRadius: 42 }, room: { width: 20, height: 12, wall: "#0b0b0c", floor: "#121012", floorAlt: "#070607", ceiling: "#040404" }, materials: { upholstery: "#1b1718", plastic: "#0c0c0d", metal: "#2b2b2e" }, lighting: { ambient: "#ff8a8a", ambientIntensity: .22, sconce: "#ff3030", sconceCount: 0, aisle: "#e0161e" }, fovTarget: 48 },
+  "4dx": { code: "D", name: "4DX", tagline: "Ghế chuyển động, hiệu ứng gió – nước", kind: "3D", rows: 8, blocks: [4, 4, 4], aisle: .9, pitch: .62, rowSpacing: 1.3, rise: .3, firstZ: 6, rowCurve: 0, faceCenter: 0, eyeHeight: 1.2, seatStyle: "fx",
+    screen: { width: 11, height: 5.95, bottom: 1.8, curveRadius: 0 }, room: { width: 16, height: 9, wall: "#15161a", floor: "#1b1d22", floorAlt: "#101114", ceiling: "#08090a" }, materials: { upholstery: "#2c2f36", plastic: "#0e0f12", metal: "#5a5d63" }, lighting: { ambient: "#cfe3ff", ambientIntensity: .4, sconce: "#e8f2ff", sconceCount: 0, aisle: "#4fb7ff" }, fovTarget: 42 },
+  luxury: { code: "E", name: "Phòng riêng Luxury", tagline: "Phòng chiếu riêng 8 ghế sofa", kind: "GOLD", rows: 2, blocks: [4], aisle: 0, pitch: 1, rowSpacing: 2, rise: .55, firstZ: 4.1, rowCurve: 0, faceCenter: .5, eyeHeight: 1.05, seatStyle: "luxury",
+    screen: { width: 5.4, height: 3.04, bottom: .7, curveRadius: 0 }, room: { width: 8, height: 3.8, wall: "#2a1c14", floor: "#2b1f1a", floorAlt: "#1a120e", ceiling: "#0a0808" }, materials: { upholstery: "#7b4a2b", plastic: "#2b1a12", metal: "#3d3532" }, lighting: { ambient: "#ffcf9e", ambientIntensity: .5, sconce: "#ffb877", sconceCount: 4, aisle: "#ffb066" }, fovTarget: 40 },
+  grand: { code: "G", name: "Đại sảnh Grand", tagline: "Rạp thương mại lớn, màn cong 1.85:1", kind: "2D", rows: 25, blocks: [10, 10, 10], aisle: 1.2, pitch: .58, rowSpacing: 1.15, rise: .36, firstZ: 8, rowCurve: .008, faceCenter: .75, eyeHeight: 1.18, seatStyle: "standard",
+    screen: { width: 24, height: 13, bottom: 1.8, curveRadius: 36 }, room: { width: 28, height: 15, wall: "#18181c", floor: "#1a1618", floorAlt: "#0e0c0d", ceiling: "#0a0a0c" }, materials: { upholstery: "#8b181b", plastic: "#121214", metal: "#36363a" }, lighting: { ambient: "#ffcf99", ambientIntensity: .5, sconce: "#ffa652", sconceCount: 8, aisle: "#ff9940" }, fovTarget: 52 },
+};
+const ROOM_PRESET_IDS = ["standard", "imax", "dolby", "4dx", "luxury", "grand"];
+/** Layout chuẩn hoá của một phòng: layout đã lưu (jsonb) ghi đè lên mẫu; thiếu mẫu → suy từ loại phòng; khối ghế luôn cộng đúng bằng số ghế mỗi hàng */
+function roomLayout(r) {
+  const base = ROOM_PRESETS[(r.layout && r.layout.preset) || ({ IMAX: "imax", GOLD: "dolby", "3D": "standard" }[r.kind]) || "standard"] || ROOM_PRESETS.standard;
+  const L = { preset: base === ROOM_PRESETS.standard && !(r.layout && r.layout.preset) ? "standard" : ((r.layout && r.layout.preset) || Object.keys(ROOM_PRESETS).find(k => ROOM_PRESETS[k] === base)),
+    ...base, screen: { ...base.screen }, room: { ...base.room }, materials: { ...base.materials }, lighting: { ...base.lighting }, ...(r.layout || {}) };
+  if (r.layout) { for (const k of ["screen", "room", "materials", "lighting"]) if (r.layout[k]) L[k] = { ...base[k], ...r.layout[k] }; }
+  // Khối ghế: layout tự ghi (blocks) → dùng, lệch số ghế thì dồn chênh lệch vào khối lớn nhất; khối của mẫu chỉ dùng khi khớp đúng số ghế
+  // (phòng cũ chưa có layout giữ lối đi giữa như trước); còn lại = chia đôi có lối đi giữa.
+  const cols = r.cols | 0, explicit = !!(r.layout && Array.isArray(r.layout.blocks));
+  let blocks = (explicit ? r.layout.blocks : base.blocks).map(b => b | 0).filter(b => b > 0);
+  const sum = blocks.reduce((a, b) => a + b, 0);
+  if (!blocks.length || sum !== cols) {
+    if (explicit && blocks.length && sum > 0) { const i = blocks.indexOf(Math.max(...blocks)); blocks[i] += cols - sum; if (blocks[i] < 1) blocks = null; }
+    else blocks = null;
+    if (!blocks) { const half = Math.ceil(cols / 2); blocks = cols - half > 0 ? [half, cols - half] : [cols]; } }
+  L.blocks = blocks; delete L.rows; return L;
+}
+/** Thanh "Màn hình" trên sơ đồ 2D: cong theo bán kính layout.screen.curveRadius (m, 0 = phẳng); đường gấp 25 điểm x = R·sin(a), y = R·(1 − cos a), a chạy từ −w/2R tới w/2R như màn 3D */
+function screenBarHtml(r, { max = 520, label = "Màn hình", cls = "mb-6" } = {}) {
+  const L = roomLayout(r), R0 = Math.max(0, +L.screen.curveRadius || 0), th = R0 > 0 ? Math.min(1.5, (+L.screen.width || 12) / R0) : 0;
+  let d, h = 6;
+  if (th > .01) { const R = 100 / th, pts = []; for (let t = 0; t <= 24; t++) { const a = (t / 24 - .5) * th; pts.push(`${(50 + R * Math.sin(a)).toFixed(2)},${(2 + R * (1 - Math.cos(a))).toFixed(2)}`); } d = "M" + pts.join(" L"); h = Math.ceil(4 + R * (1 - Math.cos(th / 2))); }
+  else d = "M2,3 L98,3";
+  return `<div class="mx-auto ${cls}" style="max-width:${max}px" data-screen-bar="${th > .01 ? "curved" : "flat"}"><svg viewBox="0 0 100 ${h}" class="block w-full" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="4" vector-effect="non-scaling-stroke" stroke-linecap="round" class="text-foreground/30"/></svg><p class="mt-1 text-center text-xs text-muted">${label}</p></div>`;
+}
+/** Tập chỉ số cột mà SAU nó là lối đi (0-based) */
+function aisleAfter(r) { const L = roomLayout(r), s = new Set(); let acc = 0; L.blocks.slice(0, -1).forEach(b => { acc += b; s.add(acc - 1); }); return s; }
 const ROOMS = [];
+/** Mẫu phòng lưu tạm trên máy khi máy chủ chưa chạy migration 022 (cột rooms.layout chưa có) */
+const ROOMS_LOCAL_LAYOUT = (() => { try { return JSON.parse(localStorage.getItem("cinevin-room-layout") || "{}"); } catch (e) { return {}; } })();
 for (const cid in ROOM_PLAN) ROOM_PLAN[cid].forEach(([r, kind, rows, cols, vip], i) => ROOMS.push({ id: `${cid}-${r}`, cinemaId: cid, name: `Phòng ${i + 1}${kind === "2D" ? "" : " · " + kind}`, kind, rows, cols, vip, vipSeats: [], couple: [], blocked: [], seatMap: {}, active: true, note: "" }));
 /* Lịch chiếu cố định theo ngày (hôm nay + 9 ngày tới): mọi máy sinh ra cùng một lịch với cùng mã suất,
    nên khi nối Supabase chỉ máy đầu tiên tạo, các máy sau dùng chung. Ghế "đã bán sẵn" sinh theo hạt giống cố định. */
@@ -128,7 +175,7 @@ const SEED_ORDER = CINEMAS.map(c => c.id);   // giữ thứ tự hiển thị nh
 const seedRank = id => { const i = SEED_ORDER.indexOf(id); return i < 0 ? 1000 + Number(id) : i; };
 function applyCatalog({ cinemas, rooms, films, cinemaFilms, seatTypes, priceTiers } = {}) {
   if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", prices: c.prices && c.prices.weekday ? c.prices : null, active: c.active !== false })); }
-  if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], seatMap: r.seat_map || {}, active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
+  if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], seatMap: r.seat_map || {}, active: r.active !== false, note: r.note || "", layout: r.layout !== undefined ? r.layout : ((ROOMS_LOCAL_LAYOUT[r.id]) || null) })); S.rooms = ROOMS; }
   if (films && films.length) { FILMS.length = 0; films.forEach(f => { FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false, release: null });
       // migration 020: mô tả, ngày khởi chiếu, trạng thái… lưu trên máy chủ → ghi đè bộ mẫu trong js/films-cgv.js
       if (f.synopsis != null || f.release_at || f.status) CGV_BY_ID[f.id] = { ...(CGV_BY_ID[f.id] || {}), id: f.id, desc: f.synopsis || (CGV_BY_ID[f.id] || {}).desc || "", release: f.release_at || null, soon: f.status === "soon", backdrop: f.backdrop || f.img || null, director: f.director || "", cast: f.cast_names || "", unrated: !!f.unrated, hot: !!f.hot }; }); S.films = FILMS; }
@@ -236,11 +283,11 @@ function seatKind(r, sid) {
 const isBlockedKind = k => seatType(k).sellable === false;
 /** Ghế nhiều chỗ (đôi 2, ghế 3, sofa 4…) chiếm n ghế liền nhau trong hàng: trả về Map ghế → các ghế cùng nhóm (ghế đầu đứng trước) */
 function seatGroups(r) {
-  const key = `${r.rows}x${r.cols}|${JSON.stringify(r.seatMap || {})}|${(r.couple || []).join()}|${Object.keys(SEAT_TYPES).join()}`;
+  const key = `${r.rows}x${r.cols}|${JSON.stringify(r.seatMap || {})}|${(r.couple || []).join()}|${Object.keys(SEAT_TYPES).join()}|${JSON.stringify(r.layout || null)}`;
   if (r._gk === key && r._g instanceof Map) return r._g;
   const g = new Map();
   for (let i = 0; i < r.rows; i++) { let j = 0; while (j < r.cols) { const sid = seatId(i, j), k = seatKind(r, sid), ty = seatType(k);
-    if (ty.persons > 1 && ty.sellable) { const members = [sid]; let jj = j + 1; while (jj < r.cols && members.length < ty.persons && seatKind(r, seatId(i, jj)) === k) { members.push(seatId(i, jj)); jj++; } members.forEach(m => g.set(m, members)); j = jj; }
+    if (ty.persons > 1 && ty.sellable) { const aisles = aisleAfter(r); const members = [sid]; let jj = j + 1; while (jj < r.cols && members.length < ty.persons && !aisles.has(jj - 1) && seatKind(r, seatId(i, jj)) === k) { members.push(seatId(i, jj)); jj++; } members.forEach(m => g.set(m, members)); j = jj; }
     else j++; } }
   r._gk = key; r._g = g; return g;
 }

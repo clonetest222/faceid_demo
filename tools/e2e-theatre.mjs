@@ -36,6 +36,8 @@ try {
   await key("KeyE", true, 100); await key("KeyE", false, 1500);
   check("Bấm E → ngồi vào ghế gần, ghế được giữ trong đơn, về chế độ Từ ghế", !!nearId && await ev(`S.draft.seats.includes('${nearId}') && S.view.seat3dMode==='seat'`), `ghế ${nearId}`);
   await shot("theatre_04_da_ngoi");
+  await key("KeyE", true, 100); await key("KeyE", false, 1200);
+  check("Bấm E lần nữa khi đang ngồi → đứng dậy đi lại", await ev("S.view.seat3dMode==='walk'"));
   // ngôi thứ ba + chạy
   await ev("document.querySelector('[data-act=seat3d-mode][data-v=walk]').click(); 1"); await sleep(800);
   await key("KeyV", true, 50); await key("KeyV", false, 600);
