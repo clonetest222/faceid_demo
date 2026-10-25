@@ -82,7 +82,7 @@ const openShow = (P, id) => P.ev(`(A["pick-show"]({dataset:{show:"${id}"}}), tru
     await openShow(PB, showId); await sleep(1000);
     await PB.ev(`document.querySelector('[data-seat="${s4}"]').click()`); await sleep(1500);
     const holdB = await PB.ev(`S.draft.id`);
-    await PB.ev(`(async()=>{const d=S.draft,u=new Date(Date.now()+3000).toISOString();await Remote.rpc('release_seat',{p_show:d.showId,p_seat:'${s4}',p_hold:d.id});await Remote.rpc('hold_seat',{p_show:d.showId,p_seat:'${s4}',p_hold:d.id,p_until:u});d.until=u;S.seats[d.showId]['${s4}'].until=u;return 1})()`);
+    await PB.ev(`(async()=>{const d=S.draft,u=new Date(Date.now()+3000).toISOString();await Remote.rpc('release_seat',{p_show:d.showId,p_seat:'${s4}',p_hold:d.id});await Remote.rpc('hold_seat',{p_show:d.showId,p_seat:'${s4}',p_hold:d.id,p_until:u});d.until=u;(S.seats[d.showId]['${s4}'] ||= {st:'held',by:d.id}).until=u;return 1})()`);   // realtime có thể vừa xoá mục ghế sau release_seat → tạo lại
     await sleep(3800);
     await PA.waitFor(`!document.querySelector('[data-seat="${s4}"]').disabled`, 15000);
     await PA.ev(`document.querySelector('[data-seat="${s4}"]').click()`); await sleep(1500);
