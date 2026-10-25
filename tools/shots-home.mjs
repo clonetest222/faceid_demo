@@ -20,10 +20,10 @@ console.log("popup:", await ev("!!document.querySelector('#modal-root [data-act=
 await shot("home_01_popup", false);
 await ev("document.querySelector('#modal-root [data-m=close]')?.click()"); await sleep(500);
 await shot("home_02_trang_chu");
-await ev("document.querySelector('[data-act=hero-dot][data-v=\"2\"]').click()"); await sleep(900); await shot("home_03_hero_khuyenmai", false);
+await ev("cfGo('next')"); await sleep(1000); await shot("home_03_coverflow_next", false);
 await ev("document.querySelector('[data-act=home-tab][data-v=sapchieu]').click()"); await sleep(600); await shot("home_04_sap_chieu", false);
 console.log("đang chiếu/sắp chiếu:", await ev("[nowShowing().length, comingSoon().length]"));
-await ev("document.querySelector('[data-act=film-detail][data-v=f4]').click()"); await sleep(900); await shot("home_05_chi_tiet");
+await ev("document.querySelector('[data-act=home-tab][data-v=dangchieu]').click()"); await sleep(500); await ev("document.querySelector('[data-act=film-detail][data-v=f4]').click()"); await sleep(900); await shot("home_05_chi_tiet");
 console.log("số ngày lịch:", await ev("showDays().length"));
 await ev("location.hash='#/lich'"); await sleep(900); await shot("home_06_lich_khach");
 // khách vãng lai bấm suất → sang đăng nhập, sau đăng nhập đi thẳng chọn ghế

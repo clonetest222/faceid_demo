@@ -33,44 +33,74 @@ const POSTER_CARD = (f, { upcoming = false } = {}) => `<article class="group gri
     : `<div class="flex gap-2"><button type="button" class="${B.primary} min-h-9 flex-1" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé</button><button type="button" class="${B.icon} size-9 border border-border-strong bg-surface" data-act="film-detail" data-v="${f.id}" aria-label="Chi tiết ${esc(f.title)}">${ic("info")}</button></div>`}
 </article>`;
 
-function heroSlides() {
-  const hot = nowShowing().filter(f => fmeta(f).hot).slice(0, 3);
-  const slides = hot.map(f => ({ img: fmeta(f).backdrop, tag: `Đang chiếu · ${esc(f.genre)}`, title: f.title, text: fmeta(f).desc, rating: f.rating, cta: `<button type="button" class="${B.primary} min-h-11 px-5" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé ngay</button><button type="button" class="${BTN} min-h-11 border border-white/40 bg-white/15 text-white backdrop-blur hover:bg-white/25" data-act="film-detail" data-v="${f.id}">Chi tiết</button>` }));
-  slides.push({ img: HOME_IMG("1578849278619-e73505e9610f"), tag: "Ưu đãi tháng này", title: "Combo bắp nước đồng giá 79.000 đ", text: "Bắp rang bơ cỡ lớn + 2 nước ngọt khi mua vé online. Áp dụng tại mọi cơ sở CineVin.", cta: `<a href="#/lich" class="${B.primary} min-h-11 px-5">${ic("popcorn")}Xem lịch chiếu</a>` });
-  slides.push({ img: HOME_IMG("1489599849927-2ee91cede3ba"), tag: "Thành viên mới", title: "Giảm 10% với mã CHAONHOM05", text: "Tạo tài khoản, liên kết VNeID một lần để mua vé trẻ em, U22, người cao tuổi ngay trên web – không cần ra quầy.", cta: `<button type="button" class="${B.primary} min-h-11 px-5" data-act="promo-copy">${ic("copy")}Sao chép mã</button>${Auth.user ? "" : `<a href="#/dangky" class="${BTN} min-h-11 border border-white/40 bg-white/15 text-white backdrop-blur hover:bg-white/25">Tạo tài khoản</a>`}` });
-  return slides;
-}
-function heroHtml() {
-  const slides = heroSlides();
-  return `<section class="relative -mx-4 mb-6 overflow-hidden sm:mx-0 sm:rounded-3xl" data-hero aria-roledescription="carousel" aria-label="Phim nổi bật và ưu đãi">
-    <div class="relative aspect-[4/5] sm:aspect-[21/9] min-h-[380px]">
-      ${slides.map((s, i) => `<div class="hero-slide absolute inset-0 transition-opacity duration-700 ${i ? "opacity-0" : ""}" data-slide="${i}" ${i ? 'aria-hidden="true"' : ""}>
-        <img src="${s.img}" alt="" class="size-full object-cover" ${i ? 'loading="lazy"' : ""}>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/10 sm:bg-gradient-to-r sm:from-black/80 sm:via-black/40 sm:to-transparent"></div>
-        <div class="absolute inset-x-0 bottom-0 p-5 sm:inset-y-0 sm:left-0 sm:flex sm:max-w-[560px] sm:flex-col sm:justify-center sm:p-10">
-          <div class="glass-dark rounded-2xl p-4 sm:p-6 text-white">
-            <p class="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-white/80">${s.rating ? rate(s.rating) : ""}${s.tag}</p>
-            <h2 class="text-balance text-2xl font-bold leading-tight sm:text-3xl">${esc(s.title)}</h2>
-            <p class="mt-2 line-clamp-2 text-pretty text-sm text-white/85 sm:line-clamp-3">${esc(s.text)}</p>
-            <div class="mt-4 flex flex-wrap gap-2">${s.cta}</div>
-          </div>
-        </div></div>`).join("")}
-      <div class="absolute bottom-14 right-4 z-10 flex items-center gap-1.5 sm:bottom-16 sm:right-6" role="tablist" aria-label="Chọn slide">${slides.map((_, i) => `<button type="button" role="tab" aria-selected="${!i}" data-act="hero-dot" data-v="${i}" class="h-2 cursor-pointer rounded-full bg-white/60 transition-all aria-selected:w-6 aria-selected:bg-white w-2" aria-label="Slide ${i + 1}"></button>`).join("")}</div>
-      <button type="button" class="absolute left-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white/20 text-white backdrop-blur hover:bg-white/35 sm:grid" data-act="hero-dot" data-v="prev" aria-label="Slide trước">${ic("chevron-left", "size-5")}</button>
-      <button type="button" class="absolute right-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white/20 text-white backdrop-blur hover:bg-white/35 sm:grid" data-act="hero-dot" data-v="next" aria-label="Slide sau">${ic("chevron-right", "size-5")}</button>
+/* ---------- Coverflow 3D: poster giữa nét, hai bên xoay phối cảnh, xa dần thì mờ + blur; nền tối phát sáng đỏ ---------- */
+const cfFilms = () => [...nowShowing().sort((a, b) => (fmeta(b).hot ? 1 : 0) - (fmeta(a).hot ? 1 : 0)), ...comingSoon()];
+function coverflowHtml() {
+  const films = cfFilms(); if (!films.length) return "";
+  const idx = Math.min(films.length - 1, Math.max(0, S.view.cfIdx || 0));
+  const cardHtml = (f, i) => { const up = isUpcoming(f), m = fmeta(f);
+    return `<button type="button" class="cf-card" data-act="cf-card" data-v="${i}" aria-label="${esc(f.title)}" tabindex="${i === idx ? 0 : -1}">
+      ${f.img ? `<img src="${f.img}" alt="" loading="${Math.abs(i - idx) <= 2 ? "eager" : "lazy"}" draggable="false">` : `<span class="grid size-full place-items-center bg-neutral-800 text-white/40">${ic("film", "size-8")}</span>`}
+      <span class="cf-badge-l">${rate(f.rating)}</span>
+      <span class="cf-badge-r">${up ? `<span class="rounded-md bg-white/20 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">${RELEASE_TXT(f)}</span>` : m.hot ? `<span class="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">${ic("flame", "size-3")}Hot</span>` : ""}</span>
+      <span class="cf-cap"><span class="block truncate text-base font-bold leading-tight sm:text-lg">${esc(f.title)}</span><span class="mt-1 flex flex-wrap gap-1.5 text-xs text-white/80"><span class="rounded-md bg-white/15 px-1.5 py-0.5">${esc(f.genre)}</span><span class="rounded-md bg-white/15 px-1.5 py-0.5">${f.dur} phút</span></span></span>
+    </button>`; };
+  const f = films[idx], up = isUpcoming(f);
+  return `<section class="cf-panel relative -mx-4 mb-6 overflow-hidden sm:mx-0 sm:rounded-3xl" data-cf data-idx="${idx}" data-n="${films.length}" aria-roledescription="carousel" aria-label="Phim nổi bật">
+    <div class="cf-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto flex max-w-[1200px] flex-wrap items-end justify-between gap-2 px-5 pt-5 sm:px-8 sm:pt-7">
+      <div><p class="text-xs font-medium uppercase tracking-wide text-white/60">${nowShowing().length} phim đang chiếu · ${comingSoon().length} sắp chiếu</p><h2 class="text-xl font-bold text-white sm:text-2xl">Phim nổi bật tuần này</h2></div>
+      <div class="flex items-center gap-1.5"><button type="button" class="cf-nav" data-act="cf-prev" aria-label="Phim trước">${ic("chevron-left", "size-5")}</button><button type="button" class="cf-nav" data-act="cf-next" aria-label="Phim sau">${ic("chevron-right", "size-5")}</button></div>
+    </div>
+    <div class="cf-stage" data-cf-stage>${films.map(cardHtml).join("")}</div>
+    <div class="relative mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-5 pb-6 sm:px-8 sm:pb-8" data-cf-info>
+      <div class="min-w-0"><p class="truncate text-lg font-bold text-white" data-cf-title>${esc(f.title)}</p><p class="text-sm text-white/70" data-cf-sub>${esc(f.genre)} · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}${up ? " · " + RELEASE_TXT(f) : ""}</p></div>
+      <div class="flex gap-2" data-cf-cta>${cfCta(f)}</div>
+      <div class="flex w-full justify-center gap-1.5 sm:w-auto" role="tablist" aria-label="Chọn phim">${films.map((_, i) => `<button type="button" role="tab" aria-selected="${i === idx}" data-act="cf-dot" data-v="${i}" class="h-1.5 w-1.5 cursor-pointer rounded-full bg-white/40 transition-all aria-selected:w-5 aria-selected:bg-white" aria-label="Phim ${i + 1}"></button>`).join("")}</div>
     </div></section>`;
 }
-/* chuyển slide bằng DOM, không vẽ lại trang */
-let HERO_TIMER = null;
-function heroGo(v) {
-  const box = $("[data-hero]"); if (!box) return;
-  const slides = $$(".hero-slide", box), dots = $$("[data-act=hero-dot][data-v]", box).filter(d => /^\d+$/.test(d.dataset.v));
-  let cur = slides.findIndex(s => !s.classList.contains("opacity-0")); if (cur < 0) cur = 0;
-  const n = slides.length, next = v === "next" ? (cur + 1) % n : v === "prev" ? (cur - 1 + n) % n : Math.min(n - 1, Math.max(0, +v));
-  slides.forEach((s, i) => { s.classList.toggle("opacity-0", i !== next); s.toggleAttribute("aria-hidden", i !== next); });
-  dots.forEach((d, i) => d.setAttribute("aria-selected", String(i === next)));
+const cfCta = f => (isUpcoming(f) ? `<button type="button" class="${B.primary} min-h-11 px-5" data-act="remind" data-v="${f.id}">${ic("bell")}Nhắc tôi</button>` : `<button type="button" class="${B.primary} min-h-11 px-5" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé</button>`) + `<button type="button" class="${BTN} min-h-11 border border-white/30 bg-white/10 text-white backdrop-blur hover:bg-white/20" data-act="film-detail" data-v="${f.id}">Chi tiết</button>`;
+let CF_TIMER = null, CF_DRAG = null;
+/** Đặt transform cho từng thẻ theo khoảng cách tới thẻ giữa (không vẽ lại trang) */
+function cfLayout(idx, animate = true) {
+  const box = $("[data-cf]"); if (!box) return; const cards = $$(".cf-card", box), n = cards.length; if (!n) return;
+  idx = ((idx % n) + n) % n; box.dataset.idx = idx; S.view.cfIdx = idx;
+  const mobile = innerWidth < 640, step = mobile ? 118 : 232, rot = mobile ? 28 : 32;
+  cards.forEach((c, i) => {
+    let d = i - idx; if (d > n / 2) d -= n; if (d < -n / 2) d += n;   // vòng tròn: luôn đi đường ngắn nhất
+    const a = Math.abs(d), sign = Math.sign(d);
+    c.style.transition = animate ? "" : "none";
+    c.style.transform = `translate(-50%, -50%) translateX(${d * step}px) translateZ(${-a * (mobile ? 90 : 140)}px) rotateY(${-sign * Math.min(a, 1.4) * rot}deg) scale(${Math.max(0.6, 1 - a * 0.1)})`;
+    c.style.filter = a >= 2 ? `blur(${Math.min(6, 2 + a)}px) brightness(.55)` : a === 1 ? "blur(.6px) brightness(.8)" : "none";
+    c.style.opacity = a > 3 ? 0 : a === 3 ? .35 : 1; c.style.zIndex = 20 - a; c.classList.toggle("is-active", a === 0); c.setAttribute("aria-hidden", String(a > 2)); c.tabIndex = a === 0 ? 0 : -1;
+  });
+  const f = cfFilms()[idx]; if (!f) return; const up = isUpcoming(f);
+  const t = $("[data-cf-title]", box), sub = $("[data-cf-sub]", box), cta = $("[data-cf-cta]", box);
+  if (t) t.textContent = f.title; if (sub) sub.textContent = `${f.genre} · ${f.dur} phút · ${RATING_TXT[f.rating] || ""}${up ? " · " + RELEASE_TXT(f) : ""}`;
+  if (cta) cta.innerHTML = cfCta(f);
+  $$("[data-act=cf-dot]", box).forEach((d, i) => d.setAttribute("aria-selected", String(i === idx)));
 }
-function heroAuto() { clearInterval(HERO_TIMER); HERO_TIMER = setInterval(() => { if (!$("[data-hero]")) return clearInterval(HERO_TIMER); if (document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return; heroGo("next"); }, 5500); }
+function cfGo(v) { const box = $("[data-cf]"); if (!box) return; const cur = +box.dataset.idx || 0; cfLayout(v === "next" ? cur + 1 : v === "prev" ? cur - 1 : +v); cfAuto(); }
+const cfSwiped = stage => { stage.dataset.swiped = "1"; setTimeout(() => delete stage.dataset.swiped, 80); };
+function cfAuto() {
+  clearInterval(CF_TIMER); const box = $("[data-cf]"); if (!box) return;
+  cfLayout(+box.dataset.idx || 0, false);
+  if (!box.dataset.bound) { box.dataset.bound = "1";
+    const stage = $("[data-cf-stage]", box);
+    stage.addEventListener("pointerdown", e => { CF_DRAG = { x: e.clientX, moved: false }; });
+    stage.addEventListener("pointermove", e => { if (CF_DRAG && Math.abs(e.clientX - CF_DRAG.x) > 8) CF_DRAG.moved = true; });
+    stage.addEventListener("pointerup", e => { if (!CF_DRAG) return; const dx = e.clientX - CF_DRAG.x, moved = CF_DRAG.moved; CF_DRAG = null; if (Math.abs(dx) > 40) { cfGo(dx < 0 ? "next" : "prev"); cfSwiped(stage); } else if (moved) cfSwiped(stage); });
+    stage.addEventListener("pointercancel", () => { CF_DRAG = null; });
+    stage.addEventListener("wheel", e => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 20) { e.preventDefault(); cfGo(e.deltaX > 0 ? "next" : "prev"); } }, { passive: false });
+    box.addEventListener("keydown", e => { if (e.key === "ArrowRight") cfGo("next"); if (e.key === "ArrowLeft") cfGo("prev"); });
+    box.addEventListener("mouseenter", () => clearInterval(CF_TIMER)); box.addEventListener("mouseleave", cfAuto);
+    addEventListener("resize", () => cfLayout(+box.dataset.idx || 0, false), { passive: true });
+  }
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  CF_TIMER = setInterval(() => { const b = $("[data-cf]"); if (!b) return clearInterval(CF_TIMER); if (!document.hidden) cfLayout((+b.dataset.idx || 0) + 1); }, 4500);
+}
+/* tương thích với app.js cũ */
+const heroAuto = cfAuto, heroGo = cfGo;
 
 /** Đặt vé nhanh: Rạp → Phim → Ngày → Suất → Đặt */
 function quickBookHtml() {
@@ -122,7 +152,7 @@ function vHome() {
     : soon.length ? grid(soon.map(f => POSTER_CARD(f, { upcoming: true }))) : card(emptyState("calendar", "Chưa có phim sắp chiếu", "Theo dõi để nhận thông báo khi có phim mới."));
   const tabs = seg([["dangchieu", `Đang chiếu`], ["sapchieu", `Sắp chiếu`]], tab, "home-tab");
   const body = `<h1 class="sr-only">CineVin – đặt vé xem phim online tại ${esc(c.name)} và 6 cơ sở khác</h1>
-    ${heroHtml()}${quickBookHtml()}
+    ${coverflowHtml()}${quickBookHtml()}
     <section class="mb-10" aria-labelledby="h-phim">${SECTION_HEAD(`<span id="h-phim">${tab === "dangchieu" ? "Phim đang chiếu" : "Phim sắp chiếu"}</span>`, tab === "dangchieu" ? `Tại ${esc(c.name)} và toàn hệ thống · lịch 10 ngày tới` : "Đặt lịch nhắc để không bỏ lỡ suất đầu tiên", tabs)}${films}</section>
     <section class="mb-10" aria-labelledby="h-uudai">${SECTION_HEAD(`<span id="h-uudai">Ưu đãi và tiện ích</span>`, "Những thứ làm CineVin khác rạp thường")}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${PERKS.map(([i, t, d, k]) => `<article class="flex gap-3 rounded-2xl border border-border bg-surface p-4"><span class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-light text-primary">${ic(i, "size-5")}</span><div class="min-w-0"><p class="text-xs font-medium uppercase tracking-wide text-muted">${k}</p><h3 class="mt-0.5 font-semibold">${t}</h3><p class="mt-1 text-pretty text-sm text-muted">${d}</p></div></article>`).join("")}</div></section>
@@ -176,5 +206,7 @@ function maybePromo() {
   let seen = false; try { seen = sessionStorage.getItem("cinevin-promo") === "1"; } catch (e) {}
   if (seen || PROMO_SHEET || $("#modal-root").innerHTML) return;
   try { sessionStorage.setItem("cinevin-promo", "1"); } catch (e) {}
-  setTimeout(() => { if (routeName() !== "home" && routeName() !== "") return; PROMO_SHEET = openSheet(promoHtml(), { label: "Khuyến mại", onClose: () => { PROMO_SHEET = null; } }); }, 900);
+  setTimeout(() => { if (routeName() !== "home" && routeName() !== "") return; PROMO_SHEET = openSheet(promoHtml(), { label: "Khuyến mại", onClose: () => { PROMO_SHEET = null; } });
+    // sheet tự xử lý nút của mình (bộ bắt click toàn cục bỏ qua #modal-root)
+    PROMO_SHEET.el.onclick = e => { const b = e.target.closest("[data-act]"); if (b && A[b.dataset.act]) { A[b.dataset.act](b); return; } if (e.target.closest('[data-m="close"]') && PROMO_SHEET) PROMO_SHEET.close(); }; }, 900);
 }

@@ -57,3 +57,20 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 .hero-slide img { transform: scale(1.02); transition: transform 7s ease-out; }
 .hero-slide:not(.opacity-0) img { transform: scale(1.08); }
 @media (prefers-reduced-motion: reduce) { .hero-slide img, .hero-slide { transition: none; } }
+
+/* coverflow 3D phim nổi bật: nền tối phát sáng đỏ (brand), thẻ giữa nét, thẻ xa blur + tối dần, xoay mượt */
+.cf-panel { background: #0f0f12; color: #fff; }
+.cf-glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(60% 55% at 50% 48%, color-mix(in srgb, var(--primary) 55%, transparent), transparent 70%); filter: blur(10px); }
+.cf-stage { position: relative; height: 420px; perspective: 1100px; perspective-origin: 50% 45%; touch-action: pan-y; user-select: none; cursor: grab; }
+.cf-stage:active { cursor: grabbing; }
+.cf-card { position: absolute; left: 50%; top: 50%; width: 236px; height: 354px; border-radius: 20px; overflow: hidden; background: #1c1c20; box-shadow: 0 30px 60px -20px rgb(0 0 0 / .8); transform-style: preserve-3d; will-change: transform, filter, opacity; transition: transform .75s cubic-bezier(.22,.61,.36,1), filter .75s ease, opacity .75s ease; cursor: pointer; border: 1px solid rgb(255 255 255 / .12); }
+.cf-card img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.cf-card .cf-badge-l { position: absolute; left: 10px; top: 10px; }
+.cf-card .cf-badge-r { position: absolute; right: 10px; top: 10px; }
+.cf-card .cf-cap { position: absolute; inset: auto 0 0 0; padding: 14px 14px 12px; text-align: left; color: #fff; background: linear-gradient(to top, rgb(0 0 0 / .85), rgb(0 0 0 / .35) 70%, transparent); opacity: 0; transition: opacity .4s; }
+.cf-card.is-active .cf-cap { opacity: 1; }
+.cf-card.is-active { box-shadow: 0 0 0 1px rgb(255 255 255 / .25), 0 40px 80px -24px color-mix(in srgb, var(--primary) 70%, transparent); }
+.cf-nav { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 9999px; background: rgb(255 255 255 / .12); color: #fff; cursor: pointer; border: 1px solid rgb(255 255 255 / .15); }
+.cf-nav:hover { background: rgb(255 255 255 / .22); }
+@media (max-width: 639px) { .cf-stage { height: 300px; perspective: 800px; } .cf-card { width: 150px; height: 225px; border-radius: 14px; } .cf-card .cf-cap { padding: 10px; } }
+@media (prefers-reduced-motion: reduce) { .cf-card { transition: none; } }
