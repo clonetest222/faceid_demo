@@ -58,19 +58,47 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 .hero-slide:not(.opacity-0) img { transform: scale(1.08); }
 @media (prefers-reduced-motion: reduce) { .hero-slide img, .hero-slide { transition: none; } }
 
-/* coverflow 3D phim nổi bật: nền tối phát sáng đỏ (brand), thẻ giữa nét, thẻ xa blur + tối dần, xoay mượt */
-.cf-panel { background: #0f0f12; color: #fff; }
-.cf-glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(60% 55% at 50% 48%, color-mix(in srgb, var(--primary) 55%, transparent), transparent 70%); filter: blur(10px); }
-.cf-stage { position: relative; height: 420px; perspective: 1100px; perspective-origin: 50% 45%; touch-action: pan-y; user-select: none; cursor: grab; }
+/* hero coverflow theo mẫu Voyage: nền ảnh phim làm mờ, 5 poster phối cảnh, tiêu đề lớn đè thẻ giữa */
+.hdr-dark { background: rgb(15 15 18 / .82); color: #fff; border-color: rgb(255 255 255 / .1); }
+.hdr-dark nav a { color: rgb(255 255 255 / .72); } .hdr-dark nav a:hover { background: rgb(255 255 255 / .1); color: #fff; }
+.hdr-dark nav a[aria-current] { background: rgb(255 255 255 / .14); color: #fff; }
+.hdr-dark [data-act="cinema-pick"] { color: #fff; } .hdr-dark [data-act="cinema-pick"]:hover { background: rgb(255 255 255 / .1); } .hdr-dark [data-act="cinema-pick"] .text-muted { color: rgb(255 255 255 / .6); }
+.hdr-dark .text-muted { color: rgb(255 255 255 / .6); } .hdr-dark a.hover\:bg-item-hover:hover { background: rgb(255 255 255 / .1); }
+.cf-hero { position: relative; left: 50%; width: 100vw; transform: translateX(-50%); height: min(calc(100svh - 4rem), 760px); min-height: 560px; margin-bottom: 0; overflow: hidden; background: #0d0d10; color: #fff; }
+.cf-bg { position: absolute; inset: 0; }
+.cf-bg-img { position: absolute; inset: -8%; width: 116%; height: 116%; object-fit: cover; filter: blur(28px) brightness(.38) saturate(1.1); opacity: 0; transition: opacity 1s ease; }
+.cf-bg-img.is-on { opacity: 1; }
+.cf-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgb(13 13 16 / .55), transparent 30%, transparent 70%, rgb(13 13 16 / .85)); }
+.cf-stage { position: absolute; inset: 0; perspective: 1500px; perspective-origin: 50% 45%; touch-action: pan-y; user-select: none; cursor: grab; }
 .cf-stage:active { cursor: grabbing; }
-.cf-card { position: absolute; left: 50%; top: 50%; width: 236px; height: 354px; border-radius: 20px; overflow: hidden; background: #1c1c20; box-shadow: 0 30px 60px -20px rgb(0 0 0 / .8); transform-style: preserve-3d; will-change: transform, filter, opacity; transition: transform .75s cubic-bezier(.22,.61,.36,1), filter .75s ease, opacity .75s ease; cursor: pointer; border: 1px solid rgb(255 255 255 / .12); }
+.cf-card { position: absolute; left: 50%; top: 42%; width: 300px; height: 470px; border-radius: 10px; overflow: hidden; background: #1c1c20; box-shadow: 0 40px 80px -24px rgb(0 0 0 / .9); border: 1px solid rgb(255 255 255 / .12); will-change: transform, filter, opacity; cursor: pointer; backface-visibility: hidden; }
 .cf-card img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
-.cf-card .cf-badge-l { position: absolute; left: 10px; top: 10px; }
-.cf-card .cf-badge-r { position: absolute; right: 10px; top: 10px; }
-.cf-card .cf-cap { position: absolute; inset: auto 0 0 0; padding: 14px 14px 12px; text-align: left; color: #fff; background: linear-gradient(to top, rgb(0 0 0 / .85), rgb(0 0 0 / .35) 70%, transparent); opacity: 0; transition: opacity .4s; }
+.cf-card .cf-badge-l { position: absolute; left: 12px; top: 12px; } .cf-card .cf-badge-r { position: absolute; right: 12px; top: 12px; }
+.cf-card.is-active { box-shadow: 0 0 0 1px rgb(255 255 255 / .35), 0 50px 100px -24px rgb(0 0 0 / .95); }
+.cf-card .cf-cap { position: absolute; inset: auto 0 0 0; padding: 16px 14px 14px; text-align: left; color: #fff; background: linear-gradient(to top, rgb(0 0 0 / .88), rgb(0 0 0 / .4) 70%, transparent); opacity: 0; transition: opacity .35s; }
 .cf-card.is-active .cf-cap { opacity: 1; }
-.cf-card.is-active { box-shadow: 0 0 0 1px rgb(255 255 255 / .25), 0 40px 80px -24px color-mix(in srgb, var(--primary) 70%, transparent); }
-.cf-nav { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 9999px; background: rgb(255 255 255 / .12); color: #fff; cursor: pointer; border: 1px solid rgb(255 255 255 / .15); }
-.cf-nav:hover { background: rgb(255 255 255 / .22); }
-@media (max-width: 639px) { .cf-stage { height: 300px; perspective: 800px; } .cf-card { width: 150px; height: 225px; border-radius: 14px; } .cf-card .cf-cap { padding: 10px; } }
-@media (prefers-reduced-motion: reduce) { .cf-card { transition: none; } }
+.cf-overlay { position: absolute; left: 0; right: 0; bottom: 104px; z-index: 40; display: grid; justify-items: center; gap: 12px; padding: 0 16px; text-align: center; pointer-events: none; text-shadow: 0 2px 16px rgb(0 0 0 / .7); }
+.cf-overlay > * { pointer-events: auto; }
+.cf-kicker { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: rgb(255 255 255 / .75); margin-bottom: 10px; }
+.cf-title { font-size: clamp(34px, 5.2vw, 64px); line-height: 1.02; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; text-wrap: balance; }
+.cf-line { display: block; width: 56px; height: 2px; background: #fff; margin: 16px 0 14px; }
+.cf-tag { font-size: 14px; color: rgb(255 255 255 / .85); max-width: 560px; text-wrap: pretty; } .cf-tag b { color: #fff; }
+.cf-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.cf-in > * { animation: cfin .55s cubic-bezier(.22,.61,.36,1) both; }
+.cf-in > *:nth-child(2) { animation-delay: .06s; } .cf-in > *:nth-child(3) { animation-delay: .12s; } .cf-in > *:nth-child(4) { animation-delay: .18s; } .cf-in > *:nth-child(5) { animation-delay: .24s; }
+@keyframes cfin { from { opacity: 0; transform: translateY(14px); } }
+.cf-arrow { position: absolute; top: 42%; z-index: 45; transform: translateY(-50%); display: grid; place-items: center; width: 48px; height: 48px; border-radius: 9999px; color: #fff; background: rgb(255 255 255 / .08); border: 1px solid rgb(255 255 255 / .18); cursor: pointer; backdrop-filter: blur(6px); }
+.cf-arrow:hover { background: rgb(255 255 255 / .2); } .cf-arrow-l { left: max(16px, calc(50vw - 640px)); } .cf-arrow-r { right: max(16px, calc(50vw - 640px)); }
+.cf-dots { position: absolute; left: 0; right: 0; bottom: 78px; z-index: 45; display: flex; justify-content: center; gap: 8px; }
+.cf-dots button { width: 8px; height: 8px; border-radius: 9999px; background: rgb(255 255 255 / .35); cursor: pointer; transition: all .3s; }
+.cf-dots button[aria-selected="true"] { width: 12px; height: 12px; background: #fff; box-shadow: 0 0 0 4px rgb(255 255 255 / .15); }
+.cf-counter { font-size: 12px; color: rgb(255 255 255 / .6); letter-spacing: .1em; } .cf-counter b { color: #fff; font-size: 14px; }
+.cf-hint { position: absolute; left: 0; right: 0; bottom: 58px; z-index: 45; text-align: center; font-size: 11px; color: rgb(255 255 255 / .45); }
+@media (max-width: 639px) { .cf-hero { height: min(calc(100svh - 4rem), 640px); min-height: 520px; } .cf-card { width: 190px; height: 300px; top: 38%; } .cf-overlay { bottom: 92px; } .cf-tag { font-size: 13px; } .cf-arrow { display: none; } }
+@media (prefers-reduced-motion: reduce) { .cf-bg-img, .cf-in > * { transition: none; animation: none; } }
+
+/* nút cuộn dải ngày (chỉ màn có chuột) */
+.strip-nav { position: absolute; top: 50%; z-index: 2; display: none; width: 28px; height: 28px; place-items: center; border-radius: 9999px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--muted); cursor: pointer; transform: translateY(-50%); box-shadow: 0 2px 8px rgb(0 0 0 / .08); }
+.strip-nav.left-0 { left: -12px; } .strip-nav.right-0 { right: -12px; }
+.strip-nav:hover { color: var(--foreground); background: var(--button-hover-surface); }
+@media (hover: hover) and (min-width: 640px) { [data-strip-wrap]:hover .strip-nav { display: grid; } }

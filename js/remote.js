@@ -54,7 +54,7 @@ const Remote = (() => {
       const legacy = r => !String(r.room_id).includes("-"), rowsSh = sh.data.some(r => !legacy(r)) ? sh.data.filter(r => !legacy(r)) : sh.data;
       S.shows = rowsSh.map(mapShow);
       S.seats = {}; S.shows.forEach(s => S.seats[s.id] = {});
-      lk.data.forEach(l => { if (S.seats[l.show_id]) S.seats[l.show_id][l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp }; });
+      lk.data.forEach(l => { if (S.seats[l.show_id]) S.seats[l.show_id][l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp, id: l.id }; });
       S.tickets = tk.data.map(mapTicket).filter(t => S.seats[t.showId]);
       S.groups = gr.data.filter(g => S.seats[g.show_id]).map(g => mapGroup(g, g.group_members || []));
       S.logs = lg.data.map(mapLog);
@@ -76,7 +76,14 @@ const Remote = (() => {
     on("shows", p => { if (p.eventType === "DELETE") { S.shows = S.shows.filter(s => s.id !== p.old.id); return; } const s = mapShow(p.new), i = S.shows.findIndex(x => x.id === s.id); i >= 0 ? S.shows[i] = s : S.shows.push(s); S.seats[s.id] ||= {}; });
     // chỉ đăng ký bảng đã có trên máy chủ: kênh realtime có bảng không tồn tại sẽ lỗi cả kênh (mất cả seat_locks)
     for (const t of [...(v6 ? ["cinemas"] : []), ...(v8 ? ["rooms", "films", "cinema_films"] : []), ...(v11 ? ["seat_types"] : []), ...(v15 ? ["price_tiers"] : [])]) on(t, () => { clearTimeout(catTimer); catTimer = setTimeout(() => reloadCatalog().then(() => onChange(t)).catch(() => {}), 400); });
-    on("seat_locks", p => { if (p.eventType === "DELETE") { if (S.seats[p.old.show_id]) delete S.seats[p.old.show_id][p.old.seat]; return; } const l = p.new; (S.seats[l.show_id] ||= {})[l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp }; });
+    on("seat_locks", p => {
+      if (p.eventType === "DELETE") {
+        // sau 019 khoá chính là id số: sự kiện DELETE có thể chỉ mang id (khi bảng chưa đặt replica identity full) → tìm theo id
+        if (p.old.show_id && S.seats[p.old.show_id]) delete S.seats[p.old.show_id][p.old.seat];
+        else if (p.old.id != null) for (const sid in S.seats) for (const seat in S.seats[sid]) if (S.seats[sid][seat].id === p.old.id) { delete S.seats[sid][seat]; return; }
+        return;
+      }
+      const l = p.new; (S.seats[l.show_id] ||= {})[l.seat] = { st: l.status, by: l.hold_id, until: l.until, grp: l.grp, id: l.id }; });
     on("tickets", p => { if (p.eventType === "DELETE") { S.tickets = S.tickets.filter(t => t.code !== p.old.code); return; } const t = mapTicket(p.new), i = S.tickets.findIndex(x => x.code === t.code); i >= 0 ? S.tickets[i] = { ...t, ownerUser: t.ownerUser || S.tickets[i].ownerUser, viewerUser: t.viewerUser || S.tickets[i].viewerUser } : S.tickets.push(t); });
     on("groups", p => { if (p.eventType === "DELETE") { S.groups = S.groups.filter(g => g.code !== p.old.code); return; } const old = S.groups.find(x => x.code === p.new.code); const g = mapGroup(p.new, []); g.students = old ? old.students : []; old ? Object.assign(old, g) : S.groups.push(g); });
     on("group_members", p => { if (p.eventType === "DELETE") return; const m = mapMember(p.new), g = S.groups.find(x => x.code === p.new.group_code); if (!g) return; const i = g.students.findIndex(x => x.card === m.card); i >= 0 ? Object.assign(g.students[i], m) : (g.students.push(m), g.students.sort((a, b) => a.idx - b.idx)); });

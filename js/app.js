@@ -39,7 +39,7 @@ function render() {
       try { app.innerHTML = ROUTES[r].view(); } catch (e) { console.error(e); app.innerHTML = `<div class="p-6">${banner("bad", "Lỗi hiển thị", esc(e.message), `<button class="${B.outline}" data-act="reset-local">Đặt lại dữ liệu trên máy</button>`)}</div>`; }
       document.title = r === "home" ? "CineVin – Đặt vé xem phim online, lịch chiếu 7 rạp" : r === "chitiet" ? `${(S.films.find(f => f.id === S.view.detailFilm) || {}).title || "Phim"} – Lịch chiếu & đặt vé | CineVin` : "Lịch chiếu – CineVin";
       if (r === "home") { heroAuto(); maybePromo(); }
-      return;
+      stripFocus(); return;
     }
     CUR_ROUTE = r === "dangky" ? "dangky" : "dangnhap"; stopMedia(); app.innerHTML = vLogin(CUR_ROUTE === "dangky"); document.title = "Đăng nhập – CineVin"; return;
   }
@@ -54,9 +54,12 @@ function render() {
   // gỡ khỏi trang thì trình duyệt tự dừng video → gắn lại khung cũ rồi phát tiếp, camera không bị đen
   for (const id in keep) { const n = $("#" + id); if (n && n.dataset.keep !== undefined) { n.replaceWith(keep[id]); keep[id].querySelectorAll("video").forEach(v => v.play().catch(() => {})); } }
   if (r === "home") { heroAuto(); maybePromo(); }
+  stripFocus();
   document.title = ({ home: "CineVin – Đặt vé xem phim online", chitiet: "Chi tiết phim", lich: "Lịch chiếu", ghe: "Chọn ghế", thanhtoan: "Thanh toán", ve: "Vé của tôi", doan: "Vé đoàn", taikhoan: "Tài khoản", tongquan: "Tổng quan", suat: "Suất chiếu", soat: "Soát vé", quay: "Bán tại quầy", kiemthu: "Kiểm thử", quyen: "Tài khoản & quyền" }[r] || "CineVin") + " – CineVin";
   if (r === "soat") gateCamStart();
 }
+/** Dải ngày: đưa ngày đang chọn vào giữa khung cuộn ngang (không cuộn dọc trang) */
+function stripFocus() { $$("[data-strip]").forEach(box => { const on = box.querySelector("[aria-pressed=true]"); if (!on) return; const x = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2; if (Math.abs(box.scrollLeft - x) > 8) box.scrollTo({ left: Math.max(0, x) }); }); }
 function stopMedia(next) {
   if (GATE.stop && next !== "soat") { GATE.stop(); GATE.stop = null; }
   if (LAB.haar.stop && next !== "kiemthu") { LAB.haar.stop(); LAB.haar.stop = null; }
@@ -435,7 +438,8 @@ const A = {
   "film-detail"(el) { S.view.detailFilm = el.dataset.v; save(); go("chitiet"); },
   "film-book"(el) { S.view.lichMode = "phim"; S.view.lichFilm = el.dataset.v; const s0 = firstShowOf(el.dataset.v); if (s0) S.view.day = dayKey(s0.start); save(); go("lich"); },
   "cf-prev"() { cfGo("prev"); }, "cf-next"() { cfGo("next"); }, "cf-dot"(el) { cfGo(el.dataset.v); },
-  "cf-card"(el) { if ($("[data-cf-stage]")?.dataset.swiped) return; const box = $("[data-cf]"); if (+el.dataset.v === +box.dataset.idx) { const f = cfFilms()[+el.dataset.v]; S.view.detailFilm = f.id; save(); go("chitiet"); } else cfGo(el.dataset.v); },
+  // bấm bất kỳ poster nào trong dải xoay → đặt vé phim đó (phim sắp chiếu → trang chi tiết); kéo thì không tính là bấm
+  "cf-card"(el) { if ($("[data-cf-stage]")?.dataset.swiped) return; const f = cfFilms()[+el.dataset.v]; if (!f) return; if (isUpcoming(f)) { S.view.detailFilm = f.id; save(); go("chitiet"); } else A["film-book"]({ dataset: { v: f.id } }); },
   "quick-book"() { const sid = selVal("qb-show"); if (!sid) return toast("Chọn suất trước"); A["pick-show"]({ dataset: { show: sid } }); },
   "promo-copy"() { navigator.clipboard?.writeText("CHAONHOM05").catch(() => {}); toast("Đã sao chép mã CHAONHOM05 – nhập ở bước thanh toán"); },
   "promo-go"() { if (PROMO_SHEET) { PROMO_SHEET.close(); PROMO_SHEET = null; } go("lich"); },
@@ -499,6 +503,7 @@ const A = {
   "add-dep"() { openAddDep(); },
   "del-dep"(el) { const i = S.dependents.findIndex(x => x.id === el.dataset.id); if (i >= 0) S.dependents.splice(i, 1); save(); render(); },
   "lich-day"(el) { S.view.day = el.dataset.v; save(); render(); },
+  "strip-scroll"(el) { const box = el.closest("[data-strip-wrap]")?.querySelector("[data-strip]"); if (box) box.scrollBy({ left: +el.dataset.v * Math.max(240, box.clientWidth * 0.7), behavior: "smooth" }); },
   "buy-more"(el) { const sh = show(el.dataset.show); if (!sh || new Date(sh.start) <= new Date()) return toast("Suất này đã chiếu – chọn suất khác", "bad"); releaseDraft(); S.draft = { id: rid("D"), showId: sh.id, seats: [], until: null, more: true }; save(); go("ghe"); toast("Ghế bạn đã mua hiện màu xanh – chọn thêm ghế cho người đi cùng"); },
   "pick-show"(el) { if (!Auth.user) { S.view.after = el.dataset.show; save(); toast("Đăng nhập để chọn ghế – mất 10 giây"); location.hash = "#/dangnhap"; return; } releaseDraft(); S.draft = { id: rid("D"), showId: el.dataset.show, seats: [], until: null }; save(); go("ghe"); },
   // ghế nhóm (đôi, ghế 3, sofa…): một nút = cả nhóm ghế → giữ / nhả tất cả thành viên, đơn có đủ n ghế

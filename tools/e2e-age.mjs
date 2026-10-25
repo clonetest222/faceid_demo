@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 const EDGE = process.env.EDGE || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const BASE = process.argv[2] || "http://localhost:8767/";
 const OUT = resolve(process.argv[3] || "e2e-shots"); mkdirSync(OUT, { recursive: true });
-const PORT = 9350;
+const PORT = 9402;
 const prof = mkdtempSync(join(tmpdir(), "cinevin-e2e-"));
 const edge = spawn(EDGE, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, "--window-size=1280,1000", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "about:blank"], { stdio: "ignore" });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -24,7 +24,7 @@ class Tab {
   async waitFor(expr, ms = 20000) { const t = Date.now(); while (Date.now() - t < ms) { if (await this.ev(expr).catch(() => false)) return true; await sleep(300); } return false; }
   async setFile(sel, path) { const doc = await this.send("DOM.getDocument", { depth: -1 }); const q = await this.send("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: sel }); return this.send("DOM.setFileInputFiles", { nodeId: q.result.nodeId, files: [path] }); }
 }
-const H = `window.$c=(s,i=0)=>{const e=document.querySelectorAll(s)[i];if(!e)throw new Error("missing "+s);e.click();return true};window.$t=s=>(document.querySelector(s)?.innerText||"");
+const H = `window.confirm=()=>true;window.$c=(s,i=0)=>{const e=document.querySelectorAll(s)[i];if(!e)throw new Error("missing "+s);e.click();return true};window.$t=s=>(document.querySelector(s)?.innerText||"");
 window.$login=(u,p)=>{document.querySelector('#li-user').value=u;document.querySelector('#li-pass').value=p;document.querySelector('[data-form]').requestSubmit();return true};`;
 async function login(T, u, p) { await T.ev(`location.hash='#/dangnhap'`); await sleep(500); await T.ev(H); await T.ev(`$login('${u}','${p}')`); await T.waitFor(`!document.querySelector('[data-form]')`, 15000); await sleep(1200); await T.ev(H); }
 async function logout(T) { if (!(await T.ev(`!!document.querySelector('[data-act="logout"]')`))) { await T.ev(`location.hash='#/taikhoan'`); await sleep(700); await T.ev(H); } await T.ev(`$c('[data-act="logout"]')`); await sleep(800); await T.ev(H); }

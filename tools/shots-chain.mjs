@@ -20,7 +20,7 @@ try {
   await wait("Remote.v4");
   // ---- khách: rạp mặc định, đổi rạp, theo phim
   await login("khach", "khach123"); await ev("location.hash='#/lich'"); await sleep(800);
-  check("Khách: ô tìm kiếm phim trên Lịch chiếu lọc ngay khi gõ", await ev("(()=>{const i=document.querySelector('#lich-q'); if(!i) return false; i.value='Siêu Nhí'; i.dispatchEvent(new Event('input',{bubbles:true})); const n=document.querySelectorAll('article h2').length; document.querySelector('[data-act=\"search-clear\"]')?.click(); return n===1})()"));
+  check("Khách: ô tìm kiếm phim trên Lịch chiếu lọc ngay khi gõ", await ev("(()=>{const i=document.querySelector('#lich-q'); if(!i) return false; i.value='Shaun'; i.dispatchEvent(new Event('input',{bubbles:true})); const n=document.querySelectorAll('article h2').length; document.querySelector('[data-act=\"search-clear\"]')?.click(); return n===1})()"));
   await sleep(300);
   check("Khách: lịch mặc định rạp 086, chỉ hiện suất của rạp này", /CineVin Vinh Centre/.test(await txt()) && await ev("[...document.querySelectorAll('[data-act=\"pick-show\"]')].every(b=>cinemaOf(show(b.dataset.show)).id==='086')"), await ev("document.querySelectorAll('[data-act=\"pick-show\"]').length") + " suất");
   await shot("chain_01_lich_rap");

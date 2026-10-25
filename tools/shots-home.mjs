@@ -20,14 +20,24 @@ console.log("popup:", await ev("!!document.querySelector('#modal-root [data-act=
 await shot("home_01_popup", false);
 await ev("document.querySelector('#modal-root [data-m=close]')?.click()"); await sleep(500);
 await shot("home_02_trang_chu");
-await ev("cfGo('next')"); await sleep(1000); await shot("home_03_coverflow_next", false);
+await ev("cfGo('next')"); await sleep(1000); await shot("home_03_ring_next", false);
+console.log("cf:", await ev("[CF.p.toFixed(2), CF.active, document.querySelectorAll('.cf-card.is-active').length, document.querySelector('.cf-title')?.textContent]"));
 await ev("document.querySelector('[data-act=home-tab][data-v=sapchieu]').click()"); await sleep(600); await shot("home_04_sap_chieu", false);
 console.log("đang chiếu/sắp chiếu:", await ev("[nowShowing().length, comingSoon().length]"));
+// bấm poster trong dải xoay (thẻ bên, chưa ở giữa) → sang lịch theo phim; poster sắp chiếu → chi tiết
+await ev("location.hash='#/home'"); await sleep(1200);
+await ev("document.querySelectorAll('.cf-card')[2].click()"); await sleep(700);
+console.log("bấm thẻ bên:", await ev("location.hash + ' ' + S.view.lichMode + ' ' + S.view.lichFilm"));
+await ev("location.hash='#/home'"); await sleep(1200);
+await ev("(()=>{const i=cfFilms().findIndex(f=>isUpcoming(f)); cfGo(i); return i})()"); await sleep(1500);
+await ev("document.querySelector('.cf-card.is-active').click()"); await sleep(700);
+console.log("bấm thẻ sắp chiếu:", await ev("location.hash + ' ' + S.view.detailFilm"));
+await ev("location.hash='#/home'"); await sleep(1200);
 await ev("document.querySelector('[data-act=home-tab][data-v=dangchieu]').click()"); await sleep(500); await ev("document.querySelector('[data-act=film-detail][data-v=f4]').click()"); await sleep(900); await shot("home_05_chi_tiet");
 console.log("số ngày lịch:", await ev("showDays().length"));
 await ev("location.hash='#/lich'"); await sleep(900); await shot("home_06_lich_khach");
 // khách vãng lai bấm suất → sang đăng nhập, sau đăng nhập đi thẳng chọn ghế
-await ev("document.querySelector('[data-act=pick-show]:not([disabled])').click()"); await sleep(800);
+await ev("(()=>{let b=document.querySelector('[data-act=pick-show]:not([disabled])'); if(!b){document.querySelectorAll('[data-act=lich-day]')[1].click();} return 1})()"); await sleep(700); await ev("document.querySelector('[data-act=pick-show]:not([disabled])').click()"); await sleep(800);
 console.log("về đăng nhập:", location => true, await ev("location.hash"), "after=", await ev("S.view.after"));
 await ev("document.querySelector('#li-user').value='khach';document.querySelector('#li-pass').value='khach123';document.querySelector('[data-form]').requestSubmit()"); await wait("!!Auth.user && location.hash.startsWith('#/ghe')", 10000); await sleep(800);
 console.log("sau đăng nhập:", await ev("location.hash"));

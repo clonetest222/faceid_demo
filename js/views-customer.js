@@ -7,7 +7,7 @@ const cinemaButton = (cls = "") => { const c = curCinema(); return `<button type
 function dayLabel(d) { const x = new Date(d), t = new Date(); t.setHours(0, 0, 0, 0); const diff = Math.round((new Date(x).setHours(0, 0, 0, 0) - t) / 864e5); return (diff === 0 ? "Hôm nay" : diff === 1 ? "Ngày mai" : WEEKDAY[x.getDay()]) + " " + ddmm(x); }
 
 /* ---------- khung app khách ---------- */
-function customerShell(active, body, { bottomNav = true, footer = false } = {}) {
+function customerShell(active, body, { bottomNav = true, footer = false, dark = false } = {}) {
   const u = Auth.user;
   const nav = u ? [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["ve", "Vé của tôi", "ticket"], ["doan", "Vé đoàn", "users"], ["taikhoan", "Tài khoản", "circle-user-round"]]
     : [["home", "Trang chủ", "house"], ["lich", "Lịch chiếu", "calendar-days"], ["dangnhap", "Đăng nhập", "log-in"]];
@@ -17,7 +17,7 @@ function customerShell(active, body, { bottomNav = true, footer = false } = {}) 
       </a>`
     : `<div class="ml-auto flex items-center gap-2"><a href="#/dangky" class="${B.ghost} hidden min-h-9 px-3 sm:inline-flex">Tạo tài khoản</a><a href="#/dangnhap" class="${B.primary} min-h-9 px-4">${ic("log-in")}Đăng nhập</a></div>`;
   return `
-  <header class="glass-bar sticky top-0 z-30 border-b border-border/60">
+  <header class="glass-bar sticky top-0 z-30 border-b border-border/60 ${dark ? "hdr-dark" : ""}">
     <div class="mx-auto flex h-16 max-w-[1200px] items-center gap-6 px-4 sm:px-6">
       <a href="#/home" aria-label="CineVin – trang chủ">${LOGO}</a>
       ${cinemaButton("hidden max-w-[260px] md:flex")}
@@ -25,68 +25,87 @@ function customerShell(active, body, { bottomNav = true, footer = false } = {}) 
       ${who}
     </div>
   </header>
-  <main class="mx-auto max-w-[1200px] p-4 sm:p-6 ${bottomNav ? "pb-24 md:pb-6" : ""}">${body}</main>
+  <main class="mx-auto max-w-[1200px] p-4 sm:p-6 ${bottomNav ? "pb-24 md:pb-6" : ""} ${dark ? "pt-0 sm:pt-0" : ""}">${body}</main>
   ${footer ? footerHtml() : ""}
   ${bottomNav ? `<nav class="glass-bar fixed inset-x-0 bottom-0 z-30 grid h-16 border-t border-border/60 pb-[env(safe-area-inset-bottom)] md:hidden" style="grid-template-columns:repeat(${nav.length},1fr)" aria-label="Điều hướng dưới">${nav.map(([k, l, i]) => `<a href="#/${k}" ${k === active ? 'aria-current="page"' : ""} class="flex flex-col items-center justify-center gap-1 text-xs ${k === active ? "font-medium text-primary" : "text-muted"}">${ic(i, "size-5")}${l}</a>`).join("")}</nav>` : ""}`;
 }
 
 /* ---------- Lịch chiếu ---------- */
 function dateStrip(days, cur, act) {
-  return `<div class="-mx-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2">${days.map(d => { const x = new Date(d), on = d === cur, lab = dayLabel(x).split(" ")[0] === "Hôm" ? "Hôm nay" : dayLabel(x).replace(/ \d\d\/\d\d$/, "");
-    return `<button type="button" data-act="${act}" data-v="${esc(d)}" aria-pressed="${on}" class="grid h-14 w-[84px] shrink-0 cursor-pointer place-content-center rounded-xl border text-center ${on ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}"><span class="text-xs ${on ? "" : "text-muted"}">${lab}</span><span class="text-sm font-semibold tabular-nums">${ddmm(x)}</span></button>`; }).join("")}</div></div>`;
+  // dải ngày cuộn ngang: kéo / vuốt, hai nút mũi tên ở màn rộng; ngày đang chọn tự cuộn vào giữa sau khi vẽ (app.js)
+  return `<div class="relative min-w-0" data-strip-wrap><button type="button" class="strip-nav left-0" data-act="strip-scroll" data-v="-1" aria-label="Ngày trước">${ic("chevron-left", "size-4")}</button><button type="button" class="strip-nav right-0" data-act="strip-scroll" data-v="1" aria-label="Ngày sau">${ic("chevron-right", "size-4")}</button><div class="-mx-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0" data-strip><div class="flex w-max gap-1.5">${days.map(d => { const x = new Date(d), on = d === cur, lab = dayLabel(x).split(" ")[0] === "Hôm" ? "Hôm nay" : dayLabel(x).replace(/ \d\d\/\d\d$/, ""), wk = x.getDay() === 0 || x.getDay() === 6;
+    return `<button type="button" data-act="${act}" data-v="${esc(d)}" aria-pressed="${on}" class="grid h-14 w-[72px] shrink-0 cursor-pointer place-content-center rounded-xl border text-center transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-border-strong bg-surface hover:bg-button-hover"}"><span class="text-[11px] ${on ? "text-primary-foreground/80" : wk ? "text-primary" : "text-muted"}">${lab}</span><span class="text-base font-semibold tabular-nums leading-tight">${ddmm(x).slice(0, 2)}</span><span class="text-[10px] ${on ? "text-primary-foreground/80" : "text-muted"}">th.${ddmm(x).slice(3)}</span></button>`; }).join("")}</div></div></div>`;
 }
 const showDays = () => { const t0 = new Date(); t0.setHours(0, 0, 0, 0); return [...new Set(S.shows.filter(s => new Date(s.start) >= t0).map(s => dayKey(s.start)))].sort((a, b) => new Date(a) - new Date(b)); };
 function timeChip(s) {
-  const left = freeSeats(s), past = new Date(s.start) <= new Date(), full = left === 0;
-  const sub = past ? "Đã chiếu" : full ? "Hết ghế" : left <= 10 ? `Còn ${left} ghế` : room(s.roomId).name;
-  return `<button type="button" data-act="pick-show" data-show="${s.id}" ${past || full ? "disabled" : ""} class="grid h-14 min-w-[92px] cursor-pointer content-center rounded-xl border px-3 text-left disabled:cursor-not-allowed ${past || full ? "border-border bg-background text-muted" : "border-border-strong bg-surface hover:bg-button-hover"}"><span class="text-base font-semibold tabular-nums ${past || full ? "line-through decoration-1" : ""}">${hhmm(s.start)}</span><span class="text-xs ${!past && !full && left <= 10 ? "font-medium text-warning" : "text-muted"}">${sub}</span></button>`;
+  const left = freeSeats(s), past = new Date(s.start) <= new Date(), full = left === 0, r = room(s.roomId);
+  const sub = past ? "Đã chiếu" : full ? "Hết ghế" : left <= 10 ? `Còn ${left} ghế` : `${r.name.replace(" · ", " ")}`;
+  return `<button type="button" data-act="pick-show" data-show="${s.id}" ${past || full ? "disabled" : ""} class="group grid h-[54px] min-w-[84px] cursor-pointer content-center rounded-xl border px-3 text-left transition-colors disabled:cursor-not-allowed ${past || full ? "border-border bg-background text-muted" : "border-border-strong bg-surface hover:border-primary hover:bg-primary-light"}"><span class="text-base font-semibold tabular-nums leading-tight ${past || full ? "line-through decoration-1" : "group-hover:text-primary"}">${hhmm(s.start)}</span><span class="text-[11px] ${!past && !full && left <= 10 ? "font-medium text-warning" : "text-muted"}">${sub}</span></button>`;
 }
 /** Nhóm suất theo phòng/định dạng của một rạp: [["2D Phụ đề", [suất…]], ["3D Phụ đề", [...]]] */
 const byFormat = ss => { const m = new Map(); ss.forEach(s => { const k = formatOf(s); if (!m.has(k)) m.set(k, []); m.get(k).push(s); }); return [...m]; };
-const fmtTag = k => `<span class="mr-1 inline-flex h-6 items-center rounded-md bg-secondary px-1.5 text-xs font-medium">${esc(k)}</span>`;
+const fmtTag = k => `<span class="inline-flex h-6 shrink-0 items-center rounded-md bg-secondary px-1.5 text-xs font-medium">${esc(k)}</span>`;
+/** Dãy suất của một phim tại một rạp trong ngày: ẩn suất đã chiếu khi vẫn còn suất tới, nhóm theo định dạng */
+function showRow(ss) {
+  const now = new Date(), coming = ss.filter(s => new Date(s.start) > now), list = coming.length ? coming : ss;
+  const hidden = ss.length - list.length;
+  return `<div class="grid gap-2">${byFormat(list).map(([k, l]) => `<div class="flex flex-wrap items-center gap-2">${fmtTag(k)}${l.map(timeChip).join("")}</div>`).join("")}${hidden ? `<p class="text-xs text-muted">${hidden} suất trước đó đã chiếu.</p>` : ""}${!coming.length ? `<p class="text-xs text-muted">Hôm nay đã hết suất, chọn ngày khác.</p>` : ""}</div>`;
+}
+/** Hàng phim trong lịch theo rạp */
+function filmRow(f, ss) {
+  const m = typeof fmeta === "function" ? fmeta(f) : {};
+  return `<article class="grid grid-cols-[72px_minmax(0,1fr)] gap-4 rounded-2xl border border-border bg-surface p-4 sm:grid-cols-[96px_minmax(0,1fr)] sm:p-5">
+    <button type="button" data-act="film-detail" data-v="${f.id}" class="group relative block h-[108px] w-[72px] cursor-pointer overflow-hidden rounded-xl bg-secondary sm:h-36 sm:w-24" aria-label="Chi tiết ${esc(f.title)}">${poster(f, "size-full transition-transform duration-300 group-hover:scale-105")}</button>
+    <div class="min-w-0">
+      <div class="flex flex-wrap items-start gap-x-3 gap-y-1"><h2 class="min-w-0 text-base font-semibold leading-snug sm:text-lg"><button type="button" data-act="film-detail" data-v="${f.id}" class="cursor-pointer text-left hover:text-primary">${esc(f.title)}</button></h2>${rate(f.rating)}${m.hot ? badge("Hot", "bg-primary text-primary-foreground") : ""}</div>
+      <p class="mt-0.5 text-sm text-muted">${esc(f.genre)} · ${f.dur} phút${m.desc ? ` · <span class="hidden sm:inline">${esc(m.desc.length > 90 ? m.desc.slice(0, 88).replace(/\s\S*$/, "") + "…" : m.desc)}</span>` : ""}</p>
+      <div class="mt-3">${showRow(ss)}</div>
+    </div></article>`;
+}
 function vLich() {
   const days = showDays(), today = dayKey(new Date());
   const cur = days.includes(S.view.day) ? S.view.day : (days.includes(today) ? today : days[0]);
   const now = new Date(), mode = S.view.lichMode === "phim" ? "phim" : "rap", c = curCinema();
-  const tabs = `<div class="inline-flex rounded-xl border border-border bg-surface p-1" role="tablist">${[["rap", "Theo rạp"], ["phim", "Theo phim"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${mode === k}" data-act="lich-mode" data-v="${k}" class="h-9 cursor-pointer rounded-lg px-3 text-sm ${mode === k ? "bg-foreground text-surface" : "text-foreground/70 hover:bg-item-hover"}">${l}</button>`).join("")}</div>`;
+  const tabs = seg([["rap", "Theo rạp", "map-pin"], ["phim", "Theo phim", "clapperboard"]], mode, "lich-mode");
   const head = pageHead("Lịch chiếu", `${days.length} ngày tới · ${WEEKDAY[now.getDay()]}, ${dmy(now)} · bây giờ ${hhmm(now)}`, tabs);
   const loading = !S.shows.length && Remote.status === "connecting", lq = (S.view.lichQ || "").trim().toLowerCase();
   const matchFilm = f => !lq || [f.title, f.genre, f.rating].some(x => (x || "").toLowerCase().includes(lq));
-  const pickDay = `<div class="mb-5 flex flex-wrap items-center gap-3">${dateStrip(days, cur, "lich-day")}${searchBox("lich-q", "Tìm phim theo tên, thể loại, nhãn tuổi…", S.view.lichQ, "min-w-[220px] flex-1")}</div>`;
-  const chipRow = ss => byFormat(ss).map(([k, list]) => `<div class="flex flex-wrap items-center gap-2">${fmtTag(k)}${list.map(timeChip).join("")}</div>`).join("");
+  // thanh lọc dính: rạp · ngày · tìm kiếm
+  const bar = (left) => `<div class="glass sticky top-[4.25rem] z-20 -mx-4 mb-5 grid grid-cols-[minmax(0,1fr)] gap-3 px-4 py-3 sm:mx-0 sm:rounded-2xl sm:px-4 lg:grid-cols-[auto_minmax(0,1fr)_260px] lg:items-center">${left}${dateStrip(days, cur, "lich-day")}${searchBox("lich-q", "Tìm phim theo tên, thể loại, nhãn tuổi…", S.view.lichQ, "w-full")}</div>`;
   let body;
   if (mode === "rap") {
     // Theo rạp: chọn rạp (nhớ trên máy) → ngày → phim → suất theo định dạng
-    const sub = `<div class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">${cinemaButton("flex-1 min-w-[220px] -m-1")}<span class="hidden text-xs text-muted sm:block">${esc(c.address)} · ${esc(c.hotline)}</span><button type="button" class="${B.outline} min-h-9 px-3" data-act="cinema-pick">${ic("arrow-left-right")}Đổi rạp</button></div>`;
+    const left = `<div class="flex items-center gap-2 rounded-xl border border-border-strong bg-surface p-1 pr-2">${cinemaButton("min-w-[200px] max-w-[260px]")}<button type="button" class="${B.ghost} min-h-8 px-2 text-xs" data-act="cinema-pick">${ic("arrow-left-right", "size-3.5")}Đổi</button></div>`;
     let list;
-    if (loading) list = `<div class="grid gap-3 lg:grid-cols-2">${skelRows(4, "h-40")}</div>`;
+    if (loading) list = `<div class="grid gap-3">${skelRows(4, "h-40")}</div>`;
     else {
       const films = S.films.filter(matchFilm).map(f => [f, showsOf(c.id).filter(s => s.filmId === f.id && dayKey(s.start) === cur).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(x => x[1].length);
+      // phim còn suất tới xếp trước, phim đã chiếu hết trong ngày xuống cuối
+      films.sort((a, b) => (b[1].some(s => new Date(s.start) > now) ? 1 : 0) - (a[1].some(s => new Date(s.start) > now) ? 1 : 0));
       list = !films.length ? card(lq ? emptyState("search-x", "Không có phim khớp", "Thử từ khoá khác hoặc xoá tìm kiếm.") : emptyState("calendar-x", "Chưa có suất chiếu ngày này", `${esc(c.name)} chưa lên lịch cho ngày đã chọn. Xem ngày khác, hoặc đổi sang rạp khác.`, `<button class="${B.outline}" data-act="cinema-pick">Đổi rạp</button>`))
-        : `<div class="grid gap-3 lg:grid-cols-2">${films.map(([f, ss]) => `<article class="flex gap-4 rounded-xl border border-border bg-surface p-4">
-          ${poster(f, "h-[132px] w-[88px] shrink-0")}
-          <div class="min-w-0 flex-1">
-            <div class="flex items-start gap-2"><h2 class="line-clamp-2 min-w-0 flex-1 text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}</div>
-            <p class="mt-0.5 text-sm text-muted">${esc(f.genre)} · ${f.dur} phút</p>
-            <div class="mt-3 grid gap-2">${chipRow(ss)}</div>
-          </div></article>`).join("")}</div>`;
+        : `<p class="mb-3 text-sm text-muted">${films.length} phim · ${films.reduce((n, x) => n + x[1].length, 0)} suất tại <b class="text-foreground">${esc(c.name)}</b> ${dayLabel(cur).toLowerCase()} · ${esc(c.address)}</p><div class="grid gap-3">${films.map(([f, ss]) => filmRow(f, ss)).join("")}</div>`;
     }
-    body = head + sub + pickDay + list;
+    const soon = typeof comingSoon === "function" ? comingSoon().filter(matchFilm).slice(0, 10) : [];
+    const soonBlock = soon.length && !lq ? `<section class="mt-8">${h2("Sắp chiếu", `<a href="#/home" data-act="home-tab" data-v="sapchieu" class="text-sm text-muted hover:text-foreground">Xem tất cả</a>`)}<div class="-mx-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-3">${soon.map(f => `<button type="button" data-act="film-detail" data-v="${f.id}" class="w-[120px] shrink-0 cursor-pointer text-left"><span class="relative block aspect-[2/3] overflow-hidden rounded-xl bg-secondary">${poster(f, "size-full")}<span class="absolute bottom-1.5 left-1.5 rounded-md bg-foreground/80 px-1.5 py-0.5 text-[10px] font-medium text-surface">${f.release ? "Khởi chiếu " + ddmm(new Date(f.release)) : "Sắp chiếu"}</span></span><span class="mt-1.5 line-clamp-2 text-xs font-medium leading-snug">${esc(f.title)}</span></button>`).join("")}</div></div></section>` : "";
+    body = head + bar(left) + list + soonBlock;
   } else {
     // Theo phim: chọn phim → ngày → tỉnh/thành → từng rạp (kể cả nhiều cơ sở cùng thành phố) → suất
-    const filmsQ = S.films.filter(matchFilm), fid = filmsQ.some(f => f.id === S.view.lichFilm) ? S.view.lichFilm : (filmsQ[0] || S.films[0]).id, f = film(fid);
-    const filmRow = `<div class="-mx-4 mb-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2">${filmsQ.map(x => `<button type="button" data-act="lich-film" data-v="${x.id}" aria-pressed="${x.id === fid}" class="flex h-[72px] w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-xl border p-2 text-left ${x.id === fid ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${poster(x, "h-14 w-10 shrink-0")}<span class="min-w-0"><span class="line-clamp-2 text-sm font-medium leading-tight">${esc(x.title)}</span><span class="block text-xs ${x.id === fid ? "text-surface/70" : "text-muted"}">${x.rating} · ${x.dur} phút</span></span></button>`).join("")}</div></div>`;
+    const filmsQ = S.films.filter(matchFilm).filter(f => S.shows.some(s => s.filmId === f.id && s.status !== "cancelled" && new Date(s.start) > now)), fid = filmsQ.some(f => f.id === S.view.lichFilm) ? S.view.lichFilm : (filmsQ[0] || S.films[0]).id, f = film(fid), m = typeof fmeta === "function" ? fmeta(f) : {};
+    const filmRowHtml = `<div class="-mx-4 mb-4 overflow-x-auto px-4 scrollbar-clean sm:mx-0 sm:px-0"><div class="flex w-max gap-2.5 pb-1">${filmsQ.map(x => `<button type="button" data-act="lich-film" data-v="${x.id}" aria-pressed="${x.id === fid}" class="group w-[104px] shrink-0 cursor-pointer text-left"><span class="relative block aspect-[2/3] overflow-hidden rounded-xl bg-secondary ring-offset-2 ring-offset-background transition-all ${x.id === fid ? "ring-2 ring-primary" : "opacity-80 group-hover:opacity-100"}">${poster(x, "size-full")}<span class="absolute left-1.5 top-1.5">${rate(x.rating)}</span></span><span class="mt-1.5 line-clamp-2 text-xs leading-snug ${x.id === fid ? "font-semibold" : "text-foreground/80"}">${esc(x.title)}</span></button>`).join("")}</div></div>`;
+    const banner2 = `<section class="relative mb-5 overflow-hidden rounded-2xl bg-foreground text-surface">${m.backdrop ? `<img src="${m.backdrop}" alt="" class="absolute inset-0 size-full object-cover opacity-35 blur-sm" loading="lazy">` : ""}
+      <div class="relative flex gap-4 p-4 sm:gap-5 sm:p-5">${poster(f, "h-[120px] w-20 shrink-0 shadow-modal sm:h-[150px] sm:w-[100px]")}<div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2">${rate(f.rating)}${m.hot ? badge("Hot", "bg-primary text-primary-foreground") : ""}</div><h2 class="mt-1.5 text-xl font-bold leading-tight sm:text-2xl">${esc(f.title)}</h2><p class="mt-1 text-sm text-surface/70">${esc(f.genre)} · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}</p>${m.desc ? `<p class="mt-2 hidden max-w-prose text-pretty text-sm text-surface/80 sm:line-clamp-2">${esc(m.desc)}</p>` : ""}<div class="mt-3 flex gap-2"><button type="button" class="${BTN} min-h-9 border border-white/30 bg-white/10 text-surface hover:bg-white/20" data-act="film-detail" data-v="${f.id}">${ic("info")}Chi tiết</button></div></div></div></section>`;
     const ss = S.shows.filter(s => s.status !== "cancelled" && s.filmId === fid && dayKey(s.start) === cur);
     const cityList = cities().filter(ct => ss.some(s => cinemaOf(s).city === ct));
     const city = cityList.includes(S.view.lichCity) ? S.view.lichCity : (cityList.includes(c.city) ? c.city : cityList[0]);
-    const cityRow = cityList.length ? `<div class="mb-3 flex flex-wrap gap-2">${cityList.map(ct => `<button type="button" data-act="lich-city" data-v="${esc(ct)}" aria-pressed="${ct === city}" class="h-9 cursor-pointer rounded-full border px-3 text-sm ${ct === city ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(ct)} <span class="${ct === city ? "text-surface/70" : "text-muted"}">${cinemasIn(ct).filter(x => ss.some(s => cinemaOf(s).id === x.id)).length}</span></button>`).join("")}</div>` : "";
+    const cityRow = cityList.length ? `<div class="mb-3 flex flex-wrap gap-2">${cityList.map(ct => `<button type="button" data-act="lich-city" data-v="${esc(ct)}" aria-pressed="${ct === city}" class="h-9 cursor-pointer rounded-full border px-3 text-sm transition-colors ${ct === city ? "border-foreground bg-foreground text-surface" : "border-border-strong bg-surface hover:bg-button-hover"}">${esc(ct)} <span class="${ct === city ? "text-surface/70" : "text-muted"}">${cinemasIn(ct).filter(x => ss.some(s => cinemaOf(s).id === x.id)).length}</span></button>`).join("")}</div>` : "";
     let list;
     if (loading) list = `<div class="grid gap-3">${skelRows(3, "h-28")}</div>`;
     else if (!ss.length) list = card(emptyState("calendar-x", "Không rạp nào chiếu phim này trong ngày", "Chọn ngày khác hoặc phim khác."));
-    else list = `<div class="grid gap-3">${cinemasIn(city).map(x => [x, ss.filter(s => cinemaOf(s).id === x.id).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(z => z[1].length).map(([x, list]) => `<article class="rounded-xl border bg-surface p-4 ${x.id === c.id ? "border-foreground" : "border-border"}">
-        <div class="flex flex-wrap items-start gap-2"><div class="min-w-0 flex-1"><h2 class="text-base font-semibold">${esc(x.name)}${x.id === c.id ? ` <span class="text-xs font-normal text-muted">· rạp đang chọn</span>` : ""}</h2><p class="text-xs text-muted">${esc(x.district)} · ${esc(x.address)}</p></div><button type="button" class="${B.ghost} min-h-8 px-2 text-xs" data-act="cinema-set" data-v="${x.id}">Chọn rạp này</button></div>
-        <div class="mt-3 grid gap-2">${chipRow(list)}</div></article>`).join("")}</div>`;
-    body = head + filmRow + pickDay + `<div class="mb-1 flex items-center gap-2"><h2 class="text-base font-semibold">${esc(f.title)}</h2>${rate(f.rating)}<span class="text-sm text-muted">· ${dayLabel(cur)}</span></div>` + cityRow + list;
+    else list = `<div class="grid gap-3">${cinemasIn(city).map(x => [x, ss.filter(s => cinemaOf(s).id === x.id).sort((a, b) => new Date(a.start) - new Date(b.start))]).filter(z => z[1].length).map(([x, l]) => `<article class="rounded-2xl border bg-surface p-4 sm:p-5 ${x.id === c.id ? "border-primary/60" : "border-border"}">
+        <div class="flex flex-wrap items-start gap-2"><span class="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary font-mono text-xs">${x.id}</span><div class="min-w-0 flex-1"><h2 class="text-base font-semibold">${esc(x.name)}${x.id === c.id ? ` <span class="text-xs font-normal text-primary">· rạp đang chọn</span>` : ""}</h2><p class="text-xs text-muted">${esc(x.district)} · ${esc(x.address)}</p></div>${x.id === c.id ? "" : `<button type="button" class="${B.ghost} min-h-8 px-2 text-xs" data-act="cinema-set" data-v="${x.id}">Chọn rạp này</button>`}</div>
+        <div class="mt-3 sm:pl-[3.25rem]">${showRow(l)}</div></article>`).join("")}</div>`;
+    const left = `<button type="button" class="${B.outline} min-h-10 justify-start gap-2 px-3" data-act="lich-mode" data-v="rap">${ic("map-pin", "size-4 text-muted")}<span class="truncate">Xem theo rạp</span></button>`;
+    body = head + filmRowHtml + banner2 + bar(left) + `<div class="mb-2 flex items-center gap-2 text-sm text-muted">Suất chiếu <b class="text-foreground">${dayLabel(cur).toLowerCase()}</b></div>` + cityRow + list;
   }
   return customerShell("lich", body, { footer: true });
 }

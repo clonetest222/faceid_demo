@@ -12,23 +12,15 @@ const IDENTITIES = [
 ];
 const seatId = (r, c) => String.fromCharCode(65 + r) + (c + 1);
 function seatRows(seats) { const rows = [...new Set(seats.map(s => s[0]))].sort(); return `${seats.length} ghế, hàng ${rows[0]}${rows.length > 1 ? "–" + rows[rows.length - 1] : ""}`; }
-const IMG = id => `https://images.unsplash.com/photo-${id}?w=400&q=70&auto=format&fit=crop`;
-/* Ảnh poster là ảnh mẫu Unsplash – thay bằng poster thật khi triển khai. "Vụ Án Phòng Số 7" cố ý không có ảnh. */
-const FILMS = [
-  { id: "f1", title: "Siêu Nhí Tí Hon", rating: "P", dur: 95, genre: "Hoạt hình", img: IMG("1558060370-d644479cb6f7") },
-  { id: "f2", title: "Chú Mèo Lạc Đường", rating: "K", dur: 100, genre: "Gia đình", img: IMG("1514888286974-6c03e2ca1dba") },
-  { id: "f3", title: "Đỉnh Gió Hồng Lĩnh", rating: "T13", dur: 118, genre: "Phiêu lưu", img: IMG("1506905925346-21bda4d32df4") },
-  { id: "f4", title: "Vụ Án Phòng Số 7", rating: "T16", dur: 112, genre: "Trinh thám", img: null },
-  { id: "f5", title: "Bóng Đêm Phố Cổ", rating: "T18", dur: 106, genre: "Kinh dị", img: IMG("1509248961158-e54f6934749c") },
-  // sắp chiếu: chưa có suất, có ngày khởi chiếu (RELEASES) – quản lý xếp suất khi tới ngày
-  { id: "f6", title: "Hành Tinh Băng", rating: "T13", dur: 128, genre: "Khoa học viễn tưởng", img: IMG("1446776653964-20c1d3a81b06") },
-  { id: "f7", title: "Mùa Hè Của Nấm", rating: "P", dur: 92, genre: "Hoạt hình", img: IMG("1462331940025-496dfbfc7564") },
-  { id: "f8", title: "Kẻ Săn Đêm", rating: "T16", dur: 115, genre: "Hành động", img: IMG("1485846234645-a62644f84728") },
-];
-/* Ngày khởi chiếu (tính từ hôm nay) của phim sắp chiếu; phim có suất từ hôm nay trở đi luôn là "đang chiếu" */
-const RELEASES = { f6: 12, f7: 20, f8: 31 };
-const releaseOf = f => RELEASES[f.id] != null ? new Date(Date.now() + RELEASES[f.id] * 864e5).toISOString().slice(0, 10) : null;
-function isUpcoming(f) { if (!RELEASES[f.id]) return false; const t0 = new Date(); t0.setHours(0, 0, 0, 0); if (S.shows.some(s => s.filmId === f.id && s.status !== "cancelled" && new Date(s.start) >= t0)) return false; f.release = releaseOf(f); return new Date(f.release) > new Date(); }
+/* Phim lấy từ cgv.vn (js/films-cgv.js): f1–f5 giữ đúng nhãn P, K, T13, T16, T18 để bộ kiểm thử dùng; phim sắp chiếu có ngày khởi chiếu, chưa có suất. */
+const FILMS = CGV_FILMS.map(f => ({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre, img: f.img }));
+const releaseOf = f => (CGV_BY_ID[f.id] || {}).release || null;
+function isUpcoming(f) {
+  const m = CGV_BY_ID[f.id]; if (!m || !m.soon) return false;
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  if (S.shows.some(s => s.filmId === f.id && s.status !== "cancelled" && new Date(s.start) >= t0)) return false;
+  f.release = m.release; return true;
+}
 /* Chuỗi rạp: Tỉnh/Thành → Rạp (mã 3 số) → Phòng → Suất. Giá vé theo hạng rạp: A (Hà Nội, TP.HCM), B (Vinh, Đà Nẵng).
    Nghệ An có 2 cơ sở cùng TP Vinh để thử tình huống "một nơi nhiều cơ sở". */
 const PRICE_TIERS = {
@@ -61,25 +53,23 @@ for (const cid in ROOM_PLAN) ROOM_PLAN[cid].forEach(([r, kind, rows, cols, vip],
 /* Lịch chiếu cố định theo ngày (hôm nay + 9 ngày tới): mọi máy sinh ra cùng một lịch với cùng mã suất,
    nên khi nối Supabase chỉ máy đầu tiên tạo, các máy sau dùng chung. Ghế "đã bán sẵn" sinh theo hạt giống cố định. */
 function buildSchedule() {
-  // mỗi rạp 9 suất/ngày xoay vòng qua các phòng; giờ lệch vài phút theo rạp cho khác nhau
-  const plan = [["f1", 9, 30], ["f2", 11, 0], ["f3", 13, 30], ["f4", 15, 0], ["f1", 16, 30], ["f2", 18, 0], ["f4", 19, 30], ["f3", 20, 0], ["f5", 22, 0]];
+  const showing = CGV_FILMS.filter(f => !f.soon), fixed = showing.slice(0, 5), rest = showing.slice(5);
   const rows = [], sold = [];
   for (let day = 0; day < 10; day++) {
     // ngày theo giờ Việt Nam: máy ở múi giờ khác vẫn sinh đúng lịch (cùng mã suất, cùng giờ chiếu)
     const vn = new Date(Date.now() + 7 * 3600000 + day * 864e5), Y = vn.getUTCFullYear(), M = vn.getUTCMonth(), D = vn.getUTCDate();
     const ymd = Y + pad(M + 1) + pad(D);
     CINEMAS.forEach((c, ci) => {
-      const rooms = ROOMS.filter(r => r.cinemaId === c.id);
-      plan.forEach(([fid, h, m], i) => {
-        const r = rooms[(i + ci) % rooms.length], st = new Date(Date.UTC(Y, M, D, h - 7, m + (ci * 5) % 20));
-        const f = FILMS.find(x => x.id === fid), en = new Date(st.getTime() + (f.dur + 15) * 60000), id = `${ymd}-${c.id}-${i + 1}`;
-        rows.push({ id, film_id: fid, room_id: r.id, cinema_id: c.id, format: ROOM_KIND_TXT[r.kind], start_at: st.toISOString(), end_at: en.toISOString() });
-        let seed = [...id].reduce((a, c2) => (a * 31 + c2.charCodeAt(0)) >>> 0, 7);
-        const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-        // không gieo ghế "đã bán" mẫu nữa: mọi suất bắt đầu từ 0, số liệu chỉ đến từ giao dịch thật
-        const seen = new Set(), fill = 0;
-        for (let k = 0; k < r.rows * r.cols * fill; k++) { const sid = seatId(rnd() * r.rows | 0, rnd() * r.cols | 0); if (!seen.has(sid)) { seen.add(sid); sold.push({ show_id: id, seat: sid }); } }
-      });
+      const rooms = ROOMS.filter(r => r.cinemaId === c.id), n = rooms.length;
+      // f1–f5 chiếu mỗi ngày ở mọi rạp, rồi xoay vòng các phim còn lại cho tới ~22:00; xếp tuần tự trong từng phòng từ 9:30 (lệch vài phút theo rạp), nghỉ 15 phút dọn phòng
+      const next = rooms.map(() => Date.UTC(Y, M, D, 9 - 7, 30 + (ci * 5) % 20)), close = Date.UTC(Y, M, D, 22 - 7, 0);
+      let seq = 0, k = 0;
+      const put = f => { const ri = next.indexOf(Math.min(...next)), r = rooms[ri], st = new Date(next[ri]), en = new Date(st.getTime() + (f.dur + 15) * 60000);
+        next[ri] = Math.ceil(en.getTime() / 300000) * 300000; const id = `${ymd}-${c.id}-${++seq}`;
+        rows.push({ id, film_id: f.id, room_id: r.id, cinema_id: c.id, format: ROOM_KIND_TXT[r.kind], start_at: st.toISOString(), end_at: en.toISOString() }); };
+      // mỗi ngày một rạp chiếu f1–f5 + 2 phim xoay vòng (đổi theo ngày và rạp), mỗi phim 2–3 suất như rạp thật; 10 ngày × 7 rạp phủ hết phim đang chiếu
+      const lineup = [...fixed, rest[(day * 2 + ci * 3) % rest.length], rest[(day * 2 + ci * 3 + 1) % rest.length]];
+      while (Math.min(...next) < close && seq < 40) put(lineup[k++ % lineup.length]);
     });
   }
   return { rows, sold };
@@ -139,7 +129,9 @@ const seedRank = id => { const i = SEED_ORDER.indexOf(id); return i < 0 ? 1000 +
 function applyCatalog({ cinemas, rooms, films, cinemaFilms, seatTypes, priceTiers } = {}) {
   if (cinemas && cinemas.length) { CINEMAS.length = 0; [...cinemas].sort((a, b) => seedRank(a.id) - seedRank(b.id)).forEach(c => CINEMAS.push({ id: c.id, name: c.name, city: c.city, district: c.district || "", address: c.address || "", hotline: c.hotline || "", tier: c.tier || "B", prices: c.prices && c.prices.weekday ? c.prices : null, active: c.active !== false })); }
   if (rooms && rooms.length) { ROOMS.length = 0; rooms.forEach(r => ROOMS.push({ id: r.id, cinemaId: r.cinema_id, name: r.name, kind: r.kind || "2D", rows: r.rows, cols: r.cols, vip: r.vip || [], vipSeats: r.vip_seats || [], couple: r.couple || [], blocked: r.blocked || [], seatMap: r.seat_map || {}, active: r.active !== false, note: r.note || "" })); S.rooms = ROOMS; }
-  if (films && films.length) { FILMS.length = 0; films.forEach(f => FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false, release: null })); S.films = FILMS; }
+  if (films && films.length) { FILMS.length = 0; films.forEach(f => { FILMS.push({ id: f.id, title: f.title, rating: f.rating, dur: f.dur, genre: f.genre || "", img: f.img || null, active: f.active !== false, release: null });
+      // migration 020: mô tả, ngày khởi chiếu, trạng thái… lưu trên máy chủ → ghi đè bộ mẫu trong js/films-cgv.js
+      if (f.synopsis != null || f.release_at || f.status) CGV_BY_ID[f.id] = { ...(CGV_BY_ID[f.id] || {}), id: f.id, desc: f.synopsis || (CGV_BY_ID[f.id] || {}).desc || "", release: f.release_at || null, soon: f.status === "soon", backdrop: f.backdrop || f.img || null, director: f.director || "", cast: f.cast_names || "", unrated: !!f.unrated, hot: !!f.hot }; }); S.films = FILMS; }
   if (seatTypes && seatTypes.length) setSeatTypes(seatTypes.map(t => ({ id: t.id, name: t.name, persons: t.persons || 1, surchargeA: Number(t.surcharge_a) || 0, surchargeB: Number(t.surcharge_b) || 0, fixedA: t.fixed_a == null ? null : Number(t.fixed_a), fixedB: t.fixed_b == null ? null : Number(t.fixed_b), color: t.color || "gray", icon: t.icon || null, sellable: t.sellable !== false, sort: t.sort ?? 100, builtin: !!t.builtin, active: t.active !== false })));
   if (priceTiers && priceTiers.length) priceTiers.forEach(t => { if (t.prices && t.prices.weekday) PRICE_TIERS[t.id] = { ...PRICE_TIERS[t.id], ...t.prices }; });
   if (cinemaFilms) { DIST.clear(); cinemaFilms.forEach(x => { if (!x.active) DIST.add(x.cinema_id + "|" + x.film_id); }); }

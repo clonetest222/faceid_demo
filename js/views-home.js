@@ -2,18 +2,8 @@
    Bố cục: hero (phim hot / ưu đãi) → đặt vé nhanh → Đang chiếu | Sắp chiếu → ưu đãi & tiện ích → cách mua vé → footer. */
 "use strict";
 const HOME_IMG = id => `https://images.unsplash.com/photo-${id}?w=1600&q=70&auto=format&fit=crop`;
-/** Dữ liệu mô tả phim, ngày khởi chiếu, ảnh nền – nằm ngoài CSDL (server chỉ lưu id, tên, nhãn, thời lượng, poster) */
-const FILM_META = {
-  f1: { desc: "Cậu bé tí hon Tin cùng nhóm bạn đồ chơi lên đường cứu khu vườn khỏi lũ sâu khổng lồ. Phim hoạt hình gia đình, lồng tiếng Việt.", backdrop: HOME_IMG("1558060370-d644479cb6f7"), hot: true },
-  f2: { desc: "Chú mèo Mướp lạc giữa thành phố lớn và hành trình tìm đường về nhà với sự giúp đỡ của những người bạn bốn chân.", backdrop: HOME_IMG("1514888286974-6c03e2ca1dba") },
-  f3: { desc: "Hai anh em vượt dãy Hồng Lĩnh trong mùa gió chướng để tìm người cha mất tích. Cảnh quay hùng vĩ tại Hà Tĩnh – Nghệ An.", backdrop: HOME_IMG("1506905925346-21bda4d32df4"), hot: true },
-  f4: { desc: "Một vụ án khép kín trong phòng số 7 của khách sạn cổ. Mỗi nhân chứng kể một câu chuyện khác nhau. Ai nói dối?", backdrop: HOME_IMG("1517604931442-7e0c8ed2963c"), hot: true },
-  f5: { desc: "Đêm xuống, phố cổ không còn là nơi của người sống. Phim kinh dị Việt gắn nhãn T18, không dành cho người yếu tim.", backdrop: HOME_IMG("1509248961158-e54f6934749c") },
-  f6: { desc: "Phi hành đoàn Aurora mắc kẹt trên hành tinh băng khi ngôi sao chủ sắp tắt. Bom tấn khoa học viễn tưởng định dạng IMAX.", backdrop: HOME_IMG("1446776653964-20c1d3a81b06") },
-  f7: { desc: "Mùa hè kỳ diệu của cô bé Nấm ở làng chài, nơi những chiếc thuyền biết kể chuyện. Hoạt hình Việt Nam cho cả gia đình.", backdrop: HOME_IMG("1462331940025-496dfbfc7564") },
-  f8: { desc: "Thám tử Lâm lần theo kẻ săn mồi chỉ ra tay trong đêm mưa. Hồi hộp tới phút cuối, nhãn T16.", backdrop: HOME_IMG("1485846234645-a62644f84728") },
-};
-const fmeta = f => FILM_META[f.id] || { desc: "", backdrop: f.img, hot: false };
+/** Mô tả, ảnh nền, phim hot: từ danh mục CGV (js/films-cgv.js) */
+const fmeta = f => { const m = CGV_BY_ID[f.id] || {}; return { desc: m.desc || "", backdrop: m.backdrop || f.img, hot: !!m.hot, director: m.director || "", cast: m.cast || "", unrated: !!m.unrated }; };
 const RELEASE_TXT = f => f.release ? `Khởi chiếu ${ddmm(new Date(f.release))}` : "";
 /** Phim có suất từ hôm nay trở đi (đang chiếu) và phim sắp chiếu (chưa có suất, có ngày khởi chiếu tương lai) */
 /* đang chiếu = có suất từ hôm nay trở đi ở bất kỳ cơ sở nào (phim thử nghiệm không có suất thì không hiện) */
@@ -23,7 +13,7 @@ const firstShowOf = fid => S.shows.filter(s => s.filmId === fid && s.status !== 
 
 /* ---------- các mảnh ---------- */
 const POSTER_CARD = (f, { upcoming = false } = {}) => `<article class="group grid content-start gap-2.5">
-  <button type="button" data-act="film-detail" data-v="${f.id}" class="relative block aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-2xl bg-secondary text-left" aria-label="Chi tiết ${esc(f.title)}">
+  <button type="button" data-act="${upcoming ? "film-detail" : "film-book"}" data-v="${f.id}" class="relative block aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-2xl bg-secondary text-left" aria-label="${upcoming ? "Chi tiết" : "Đặt vé"} ${esc(f.title)}">
     ${f.img ? `<img src="${f.img}" alt="Poster ${esc(f.title)}" loading="lazy" class="size-full object-cover transition-transform duration-500 group-hover:scale-105">` : `<span class="grid size-full place-items-center text-muted">${ic("film", "size-8")}</span>`}
     <span class="absolute left-2 top-2">${rate(f.rating)}</span>
     ${upcoming ? `<span class="absolute bottom-2 left-2 rounded-md bg-foreground/80 px-2 py-0.5 text-xs font-medium text-surface backdrop-blur">${RELEASE_TXT(f)}</span>` : fmeta(f).hot ? `<span class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">${ic("flame", "size-3")}Hot</span>` : ""}
@@ -33,71 +23,74 @@ const POSTER_CARD = (f, { upcoming = false } = {}) => `<article class="group gri
     : `<div class="flex gap-2"><button type="button" class="${B.primary} min-h-9 flex-1" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé</button><button type="button" class="${B.icon} size-9 border border-border-strong bg-surface" data-act="film-detail" data-v="${f.id}" aria-label="Chi tiết ${esc(f.title)}">${ic("info")}</button></div>`}
 </article>`;
 
-/* ---------- Coverflow 3D: poster giữa nét, hai bên xoay phối cảnh, xa dần thì mờ + blur; nền tối phát sáng đỏ ---------- */
+/* ---------- Hero coverflow (theo mẫu "Voyage"): nền = ảnh phim đang chọn làm mờ, 5 poster xếp phối cảnh đối xứng,
+   tiêu đề in hoa lớn đè lên thẻ giữa; kéo / vuốt xoay mượt có quán tính rồi tự hít vào thẻ gần nhất; mũi tên, chấm, phím ← →, tự chuyển 6 giây. ---------- */
+/* hero: mọi phim đang chiếu (hot trước) rồi tới mọi phim sắp chiếu theo ngày khởi chiếu */
 const cfFilms = () => [...nowShowing().sort((a, b) => (fmeta(b).hot ? 1 : 0) - (fmeta(a).hot ? 1 : 0)), ...comingSoon()];
+const CF = { p: 0, target: 0, drag: null, vel: 0, raf: 0, active: -1, pauseUntil: 0, t: 0, bg: 0 };
 function coverflowHtml() {
   const films = cfFilms(); if (!films.length) return "";
-  const idx = Math.min(films.length - 1, Math.max(0, S.view.cfIdx || 0));
-  const cardHtml = (f, i) => { const up = isUpcoming(f), m = fmeta(f);
-    return `<button type="button" class="cf-card" data-act="cf-card" data-v="${i}" aria-label="${esc(f.title)}" tabindex="${i === idx ? 0 : -1}">
-      ${f.img ? `<img src="${f.img}" alt="" loading="${Math.abs(i - idx) <= 2 ? "eager" : "lazy"}" draggable="false">` : `<span class="grid size-full place-items-center bg-neutral-800 text-white/40">${ic("film", "size-8")}</span>`}
-      <span class="cf-badge-l">${rate(f.rating)}</span>
-      <span class="cf-badge-r">${up ? `<span class="rounded-md bg-white/20 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">${RELEASE_TXT(f)}</span>` : m.hot ? `<span class="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">${ic("flame", "size-3")}Hot</span>` : ""}</span>
-      <span class="cf-cap"><span class="block truncate text-base font-bold leading-tight sm:text-lg">${esc(f.title)}</span><span class="mt-1 flex flex-wrap gap-1.5 text-xs text-white/80"><span class="rounded-md bg-white/15 px-1.5 py-0.5">${esc(f.genre)}</span><span class="rounded-md bg-white/15 px-1.5 py-0.5">${f.dur} phút</span></span></span>
+  const idx = Math.min(films.length - 1, Math.max(0, Math.round(S.view.cfIdx || 0))), f = films[idx], m = fmeta(f);
+  const cardHtml = (x, i) => { const up = isUpcoming(x), mx = fmeta(x);
+    return `<button type="button" class="cf-card" data-act="cf-card" data-v="${i}" aria-label="${esc(x.title)}" tabindex="-1">
+      ${x.img ? `<img src="${x.img}" alt="" draggable="false" loading="${Math.abs(i - idx) <= 2 ? "eager" : "lazy"}">` : `<span class="grid size-full place-items-center bg-neutral-800 text-white/40">${ic("film", "size-8")}</span>`}
+      <span class="cf-badge-l">${rate(x.rating)}</span>
+      <span class="cf-badge-r">${up ? `<span class="rounded-md bg-white/20 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">${RELEASE_TXT(x)}</span>` : mx.hot ? `<span class="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">${ic("flame", "size-3")}Hot</span>` : ""}</span>
+      <span class="cf-cap"><span class="block truncate text-lg font-bold leading-tight">${esc(x.title)}</span><span class="mt-1.5 flex flex-wrap gap-1.5 text-xs text-white/85"><span class="rounded-md bg-white/15 px-1.5 py-0.5">${esc(x.genre)}</span><span class="rounded-md bg-white/15 px-1.5 py-0.5">${x.dur} phút</span></span></span>
     </button>`; };
-  const f = films[idx], up = isUpcoming(f);
-  return `<section class="cf-panel relative -mx-4 mb-6 overflow-hidden sm:mx-0 sm:rounded-3xl" data-cf data-idx="${idx}" data-n="${films.length}" aria-roledescription="carousel" aria-label="Phim nổi bật">
-    <div class="cf-glow" aria-hidden="true"></div>
-    <div class="relative mx-auto flex max-w-[1200px] flex-wrap items-end justify-between gap-2 px-5 pt-5 sm:px-8 sm:pt-7">
-      <div><p class="text-xs font-medium uppercase tracking-wide text-white/60">${nowShowing().length} phim đang chiếu · ${comingSoon().length} sắp chiếu</p><h2 class="text-xl font-bold text-white sm:text-2xl">Phim nổi bật tuần này</h2></div>
-      <div class="flex items-center gap-1.5"><button type="button" class="cf-nav" data-act="cf-prev" aria-label="Phim trước">${ic("chevron-left", "size-5")}</button><button type="button" class="cf-nav" data-act="cf-next" aria-label="Phim sau">${ic("chevron-right", "size-5")}</button></div>
-    </div>
+  return `<section class="cf-hero" data-cf data-n="${films.length}" aria-roledescription="carousel" aria-label="Phim nổi bật">
+    <div class="cf-bg" aria-hidden="true"><img class="cf-bg-img is-on" src="${m.backdrop || f.img || ""}" alt=""><img class="cf-bg-img" alt=""></div>
     <div class="cf-stage" data-cf-stage>${films.map(cardHtml).join("")}</div>
-    <div class="relative mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-5 pb-6 sm:px-8 sm:pb-8" data-cf-info>
-      <div class="min-w-0"><p class="truncate text-lg font-bold text-white" data-cf-title>${esc(f.title)}</p><p class="text-sm text-white/70" data-cf-sub>${esc(f.genre)} · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}${up ? " · " + RELEASE_TXT(f) : ""}</p></div>
-      <div class="flex gap-2" data-cf-cta>${cfCta(f)}</div>
-      <div class="flex w-full justify-center gap-1.5 sm:w-auto" role="tablist" aria-label="Chọn phim">${films.map((_, i) => `<button type="button" role="tab" aria-selected="${i === idx}" data-act="cf-dot" data-v="${i}" class="h-1.5 w-1.5 cursor-pointer rounded-full bg-white/40 transition-all aria-selected:w-5 aria-selected:bg-white" aria-label="Phim ${i + 1}"></button>`).join("")}</div>
-    </div></section>`;
+    <div class="cf-overlay" data-cf-overlay>${cfOverlay(f)}</div>
+    <button type="button" class="cf-arrow cf-arrow-l" data-act="cf-prev" aria-label="Phim trước">${ic("chevron-left", "size-6")}</button>
+    <button type="button" class="cf-arrow cf-arrow-r" data-act="cf-next" aria-label="Phim sau">${ic("chevron-right", "size-6")}</button>
+    <div class="cf-dots" role="tablist" aria-label="Chọn phim">${films.length <= 12 ? films.map((_, i) => `<button type="button" role="tab" aria-selected="${i === idx}" data-act="cf-dot" data-v="${i}" aria-label="Phim ${i + 1}"></button>`).join("") : `<span class="cf-counter"><b data-cf-counter>${idx + 1}</b> / ${films.length}</span>`}</div>
+    <p class="cf-hint">${nowShowing().length} phim đang chiếu · ${comingSoon().length} sắp chiếu · kéo để xoay</p>
+  </section>`;
 }
-const cfCta = f => (isUpcoming(f) ? `<button type="button" class="${B.primary} min-h-11 px-5" data-act="remind" data-v="${f.id}">${ic("bell")}Nhắc tôi</button>` : `<button type="button" class="${B.primary} min-h-11 px-5" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé</button>`) + `<button type="button" class="${BTN} min-h-11 border border-white/30 bg-white/10 text-white backdrop-blur hover:bg-white/20" data-act="film-detail" data-v="${f.id}">Chi tiết</button>`;
-let CF_TIMER = null, CF_DRAG = null;
-/** Đặt transform cho từng thẻ theo khoảng cách tới thẻ giữa (không vẽ lại trang) */
-function cfLayout(idx, animate = true) {
-  const box = $("[data-cf]"); if (!box) return; const cards = $$(".cf-card", box), n = cards.length; if (!n) return;
-  idx = ((idx % n) + n) % n; box.dataset.idx = idx; S.view.cfIdx = idx;
-  const mobile = innerWidth < 640, step = mobile ? 118 : 232, rot = mobile ? 28 : 32;
-  cards.forEach((c, i) => {
-    let d = i - idx; if (d > n / 2) d -= n; if (d < -n / 2) d += n;   // vòng tròn: luôn đi đường ngắn nhất
-    const a = Math.abs(d), sign = Math.sign(d);
-    c.style.transition = animate ? "" : "none";
-    c.style.transform = `translate(-50%, -50%) translateX(${d * step}px) translateZ(${-a * (mobile ? 90 : 140)}px) rotateY(${-sign * Math.min(a, 1.4) * rot}deg) scale(${Math.max(0.6, 1 - a * 0.1)})`;
-    c.style.filter = a >= 2 ? `blur(${Math.min(6, 2 + a)}px) brightness(.55)` : a === 1 ? "blur(.6px) brightness(.8)" : "none";
-    c.style.opacity = a > 3 ? 0 : a === 3 ? .35 : 1; c.style.zIndex = 20 - a; c.classList.toggle("is-active", a === 0); c.setAttribute("aria-hidden", String(a > 2)); c.tabIndex = a === 0 ? 0 : -1;
-  });
-  const f = cfFilms()[idx]; if (!f) return; const up = isUpcoming(f);
-  const t = $("[data-cf-title]", box), sub = $("[data-cf-sub]", box), cta = $("[data-cf-cta]", box);
-  if (t) t.textContent = f.title; if (sub) sub.textContent = `${f.genre} · ${f.dur} phút · ${RATING_TXT[f.rating] || ""}${up ? " · " + RELEASE_TXT(f) : ""}`;
-  if (cta) cta.innerHTML = cfCta(f);
-  $$("[data-act=cf-dot]", box).forEach((d, i) => d.setAttribute("aria-selected", String(i === idx)));
+function cfOverlay(f) {
+  const up = isUpcoming(f);
+  const d1 = (fmeta(f).desc || "").split(/(?<=[.!?])\s/)[0] || "", short = d1.length > 150 ? d1.slice(0, 147).replace(/\s\S*$/, "") + "…" : d1;
+  return `<p class="cf-tag"><b>${esc(f.title)}</b> · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}${up ? " · " + RELEASE_TXT(f) : ""}${short ? "<br>" + esc(short) : ""}</p>
+    <div class="cf-cta">${up ? `<button type="button" class="${B.primary} min-h-11 px-5" data-act="remind" data-v="${f.id}">${ic("bell")}Nhắc tôi</button>` : `<button type="button" class="${B.primary} min-h-11 px-5" data-act="film-book" data-v="${f.id}">${ic("ticket")}Đặt vé ngay</button>`}<button type="button" class="${BTN} min-h-11 border border-white/35 bg-white/10 text-white backdrop-blur hover:bg-white/20" data-act="film-detail" data-v="${f.id}">Chi tiết</button></div>`;
 }
-function cfGo(v) { const box = $("[data-cf]"); if (!box) return; const cur = +box.dataset.idx || 0; cfLayout(v === "next" ? cur + 1 : v === "prev" ? cur - 1 : +v); cfAuto(); }
-const cfSwiped = stage => { stage.dataset.swiped = "1"; setTimeout(() => delete stage.dataset.swiped, 80); };
+const cfWrap = (d, n) => ((d % n) + n * 1.5) % n - n / 2;   // khoảng cách ngắn nhất trên vòng
+function cfFrame() {
+  const box = $("[data-cf]"); if (!box) { CF.raf = 0; return; }
+  const n = +box.dataset.n, cards = $$(".cf-card", box), now = performance.now(), dt = Math.min(0.05, (now - (CF.t || now)) / 1000); CF.t = now;
+  const mobile = innerWidth < 640, stepX = mobile ? 150 : 330, rot = mobile ? 24 : 24;
+  if (!CF.drag) {
+    if (Math.abs(CF.vel) > 0.02) { CF.p += CF.vel * dt; CF.vel *= Math.pow(0.05, dt); if (Math.abs(CF.vel) <= 0.3) { CF.target = Math.round(CF.p); CF.vel = 0; } }
+    else { const diff = cfWrap(CF.target - CF.p, n); CF.p += diff * Math.min(1, dt * 7); if (Math.abs(diff) < 0.002) CF.p = CF.target;
+      if (now > CF.pauseUntil && !document.hidden && !matchMedia("(prefers-reduced-motion: reduce)").matches && CF.p === CF.target) { CF.target = CF.target + 1; CF.pauseUntil = now + 6000; } }
+  }
+  cards.forEach((c, i) => { const d = cfWrap(i - CF.p, n), a = Math.abs(d), sg = Math.sign(d);
+    c.style.transform = `translate(-50%, -50%) translateX(${d * stepX}px) translateZ(${-a * 150}px) rotateY(${-sg * Math.min(a, 2.2) * rot}deg) scale(${Math.max(.7, 1 - a * .07)})`;
+    c.style.filter = `brightness(${Math.max(.3, 1 - a * .28)})`; c.style.opacity = a > 2.7 ? 0 : a > 2.2 ? (2.7 - a) / .5 : 1; c.style.zIndex = 30 - Math.round(a * 10);
+    c.classList.toggle("is-active", a < .5); });
+  const act = ((Math.round(CF.p) % n) + n) % n;
+  if (act !== CF.active) { CF.active = act; S.view.cfIdx = act; const f = cfFilms()[act]; if (f) {
+    const ov = $("[data-cf-overlay]", box); if (ov) { ov.innerHTML = cfOverlay(f); ov.classList.remove("cf-in"); void ov.offsetWidth; ov.classList.add("cf-in"); }
+    const imgs = $$(".cf-bg-img", box), nxt = imgs[(CF.bg + 1) % 2]; nxt.src = fmeta(f).backdrop || f.img || ""; imgs.forEach((im, k) => im.classList.toggle("is-on", k === (CF.bg + 1) % 2)); CF.bg = (CF.bg + 1) % 2;
+    $$("[data-act=cf-dot]", box).forEach((d, i) => d.setAttribute("aria-selected", String(i === act))); const ctr = $("[data-cf-counter]", box); if (ctr) ctr.textContent = act + 1; } }
+  CF.raf = requestAnimationFrame(cfFrame);
+}
+function cfGo(v) { const box = $("[data-cf]"); if (!box) return; const n = +box.dataset.n; CF.vel = 0;
+  if (v === "next") CF.target = Math.round(CF.p) + 1; else if (v === "prev") CF.target = Math.round(CF.p) - 1; else CF.target = Math.round(CF.p) + cfWrap(+v - Math.round(CF.p), n);
+  CF.pauseUntil = performance.now() + 7000; }
 function cfAuto() {
-  clearInterval(CF_TIMER); const box = $("[data-cf]"); if (!box) return;
-  cfLayout(+box.dataset.idx || 0, false);
-  if (!box.dataset.bound) { box.dataset.bound = "1";
-    const stage = $("[data-cf-stage]", box);
-    stage.addEventListener("pointerdown", e => { CF_DRAG = { x: e.clientX, moved: false }; });
-    stage.addEventListener("pointermove", e => { if (CF_DRAG && Math.abs(e.clientX - CF_DRAG.x) > 8) CF_DRAG.moved = true; });
-    stage.addEventListener("pointerup", e => { if (!CF_DRAG) return; const dx = e.clientX - CF_DRAG.x, moved = CF_DRAG.moved; CF_DRAG = null; if (Math.abs(dx) > 40) { cfGo(dx < 0 ? "next" : "prev"); cfSwiped(stage); } else if (moved) cfSwiped(stage); });
-    stage.addEventListener("pointercancel", () => { CF_DRAG = null; });
+  const box = $("[data-cf]"); if (!box) return; CF.t = 0; CF.active = -1;
+  if (!box.dataset.bound) { box.dataset.bound = "1"; CF.p = CF.target = Math.round(S.view.cfIdx || 0); CF.vel = 0; CF.pauseUntil = performance.now() + 6000;
+    const stage = $("[data-cf-stage]", box), kpx = () => 1 / (innerWidth < 640 ? 150 : 330);   // thẻ / px kéo
+    stage.addEventListener("pointerdown", e => { if (e.button) return; CF.drag = { x: e.clientX, p: CF.p, moved: false, lastX: e.clientX, lastT: performance.now(), v: 0 }; CF.vel = 0; });
+    stage.addEventListener("pointermove", e => { const d = CF.drag; if (!d) return; const now = performance.now(); CF.p = d.p - (e.clientX - d.x) * kpx(); if (Math.abs(e.clientX - d.x) > 6) d.moved = true; const dt = Math.max(1, now - d.lastT); d.v = -(e.clientX - d.lastX) * kpx() / dt * 1000; d.lastX = e.clientX; d.lastT = now; });
+    const end = () => { const d = CF.drag; if (!d) return; CF.drag = null; CF.vel = Math.max(-6, Math.min(6, d.v)); if (Math.abs(CF.vel) <= 0.3) { CF.vel = 0; CF.target = Math.round(CF.p); } CF.pauseUntil = performance.now() + 7000; if (d.moved) { stage.dataset.swiped = "1"; setTimeout(() => delete stage.dataset.swiped, 80); } };
+    addEventListener("pointerup", end); addEventListener("pointercancel", end);   // thả chuột ngoài khung vẫn kết thúc kéo; không bắt pointer để click vào thẻ còn tới được thẻ
     stage.addEventListener("wheel", e => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 20) { e.preventDefault(); cfGo(e.deltaX > 0 ? "next" : "prev"); } }, { passive: false });
     box.addEventListener("keydown", e => { if (e.key === "ArrowRight") cfGo("next"); if (e.key === "ArrowLeft") cfGo("prev"); });
-    box.addEventListener("mouseenter", () => clearInterval(CF_TIMER)); box.addEventListener("mouseleave", cfAuto);
-    addEventListener("resize", () => cfLayout(+box.dataset.idx || 0, false), { passive: true });
+    box.addEventListener("mouseenter", () => { CF.pauseUntil = Infinity; }); box.addEventListener("mouseleave", () => { CF.pauseUntil = performance.now() + 3000; });
   }
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  CF_TIMER = setInterval(() => { const b = $("[data-cf]"); if (!b) return clearInterval(CF_TIMER); if (!document.hidden) cfLayout((+b.dataset.idx || 0) + 1); }, 4500);
+  if (!CF.raf) CF.raf = requestAnimationFrame(cfFrame);
 }
 /* tương thích với app.js cũ */
 const heroAuto = cfAuto, heroGo = cfGo;
@@ -163,7 +156,7 @@ function vHome() {
           <div class="mt-6 flex flex-wrap gap-2"><a href="#/lich" class="${B.primary} min-h-11 px-5">${ic("calendar-days")}Xem lịch chiếu</a>${Auth.user ? "" : `<a href="#/dangky" class="${BTN} min-h-11 border border-white/30 bg-white/10 text-surface hover:bg-white/20">Tạo tài khoản</a>`}</div></div>
         <img src="${HOME_IMG("1478720568477-152d9b164e26")}" alt="Phòng chiếu CineVin" loading="lazy" class="aspect-[4/3] w-full rounded-2xl object-cover">
       </div></section>`;
-  return customerShell("home", body, { footer: true });
+  return customerShell("home", body, { footer: true, dark: true });
 }
 
 /* ---------- Chi tiết phim ---------- */
@@ -186,6 +179,7 @@ function vChiTiet() {
           <h1 class="mt-2 text-balance text-2xl font-bold sm:text-3xl">${esc(f.title)}</h1>
           <p class="mt-1 text-sm text-surface/70">${esc(f.genre)} · ${f.dur} phút · ${esc(RATING_TXT[f.rating] || "")}</p>
           <p class="mt-4 max-w-prose text-pretty text-sm text-surface/85">${esc(m.desc || "Chưa có mô tả.")}</p>
+          ${m.director || m.cast ? `<dl class="mt-3 grid gap-1 text-sm text-surface/70">${m.director ? `<div><dt class="inline text-surface/50">Đạo diễn: </dt><dd class="inline">${esc(m.director)}</dd></div>` : ""}${m.cast ? `<div><dt class="inline text-surface/50">Diễn viên: </dt><dd class="inline">${esc(m.cast)}</dd></div>` : ""}</dl>` : ""}
           <div class="mt-5 flex flex-wrap gap-2">${up ? `<button type="button" class="${B.primary} min-h-11 px-5" data-act="remind" data-v="${f.id}">${ic("bell")}Nhắc tôi khi mở bán</button>` : `<a href="#suat" class="${B.primary} min-h-11 px-5">${ic("ticket")}Chọn suất</a>`}<button type="button" class="${BTN} min-h-11 border border-white/30 bg-white/10 text-surface hover:bg-white/20" data-act="share-film" data-v="${f.id}">${ic("share-2")}Chia sẻ</button></div></div>
       </div></section>
     <section id="suat" aria-labelledby="h-suat">${SECTION_HEAD(`<span id="h-suat">Lịch chiếu</span>`, up ? "" : "Chọn ngày rồi bấm giờ chiếu; đăng nhập khi chọn ghế.")}${sched}</section>`;
