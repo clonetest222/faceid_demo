@@ -125,8 +125,8 @@ function cinemaSheetHtml(city) {
 /** opts.mine: ghế khách này đã mua (Set) · opts.inspect: nhân viên bấm ghế đã bán / đang giữ để tra cứu */
 function seatMap(sh, selected, act, opts = {}) {
   const r = room(sh.roomId), aisles = aisleAfter(r), mine = opts.mine || new Set(), groups = seatGroups(r);
-  const Lr = roomLayout(r), curveTxt = Lr.screen.curveRadius ? " · màn cong" : "";
-  let h = `${screenBarHtml(r, { max: 520, cls: "mb-5", label: "Màn hình" + curveTxt })}<div class="seat-zoom-outer" data-seat-zoom><div class="seat-zoom-inner mx-auto grid w-max gap-1.5" data-seat-zoom-inner>`;
+  const Lr = roomLayout(r);
+  let h = `<div class="seat-zoom-outer" data-seat-zoom>${screenBarHtml(r, { seat: 36, gap: 6, aisle: 12, cls: "mb-5", label: `Màn hình · ${Lr.screen.width} m${Lr.screen.curveRadius ? " · cong" : ""}` })}<div class="seat-zoom-inner mx-auto grid w-max gap-1.5" data-seat-zoom-inner>`;
   for (let i = 0; i < r.rows; i++) {
     const L = String.fromCharCode(65 + i);
     h += `<div class="flex items-center gap-1.5 [--seat:2.25rem] [--gap:0.375rem]"><span class="w-4 text-center text-xs text-muted">${L}</span>`;

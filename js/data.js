@@ -83,13 +83,18 @@ function roomLayout(r) {
     if (!blocks) { const half = Math.ceil(cols / 2); blocks = cols - half > 0 ? [half, cols - half] : [cols]; } }
   L.blocks = blocks; delete L.rows; return L;
 }
-/** Thanh "Màn hình" trên sơ đồ 2D: cong theo bán kính layout.screen.curveRadius (m, 0 = phẳng); đường gấp 25 điểm x = R·sin(a), y = R·(1 − cos a), a chạy từ −w/2R tới w/2R như màn 3D */
-function screenBarHtml(r, { max = 520, label = "Màn hình", cls = "mb-6" } = {}) {
-  const L = roomLayout(r), R0 = Math.max(0, +L.screen.curveRadius || 0), th = R0 > 0 ? Math.min(1.5, (+L.screen.width || 12) / R0) : 0;
-  let d, h = 6;
-  if (th > .01) { const R = 100 / th, pts = []; for (let t = 0; t <= 24; t++) { const a = (t / 24 - .5) * th; pts.push(`${(50 + R * Math.sin(a)).toFixed(2)},${(2 + R * (1 - Math.cos(a))).toFixed(2)}`); } d = "M" + pts.join(" L"); h = Math.ceil(4 + R * (1 - Math.cos(th / 2))); }
-  else d = "M2,3 L98,3";
-  return `<div class="mx-auto ${cls}" style="max-width:${max}px" data-screen-bar="${th > .01 ? "curved" : "flat"}"><svg viewBox="0 0 100 ${h}" class="block w-full" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="4" vector-effect="non-scaling-stroke" stroke-linecap="round" class="text-foreground/30"/></svg><p class="mt-1 text-center text-xs text-muted">${label}</p></div>`;
+/** Thanh "Màn hình" trên sơ đồ 2D, ĐÚNG TỶ LỆ với dàn ghế: bề rộng = rộng màn (m) / rộng dàn ghế (m) × bề rộng lưới ghế (px);
+    cong theo bán kính layout.screen.curveRadius (đường gấp 25 điểm x = R·sin a, y = R·(1 − cos a), như màn 3D); nhãn kiểu rạp ảo "MÀN HÌNH · 12 M".
+    seat/gap/aisle = kích thước ô ghế, khe, lối đi (px) của lưới đang vẽ, để thanh căn giữa và cùng tỷ lệ với ghế. */
+function screenBarHtml(r, { seat = 36, gap = 6, aisle = 12, label = "", cls = "mb-6" } = {}) {
+  const L = roomLayout(r), cols = r.cols | 0, nA = Math.max(0, L.blocks.length - 1), R0 = Math.max(0, +L.screen.curveRadius || 0), sw = +L.screen.width || 12;
+  const gridPx = cols * seat + Math.max(0, cols - 1) * gap + nA * (aisle + gap), seatW = Math.max(.5, cols * L.pitch + nA * L.aisle);
+  const barPx = Math.round(Math.max(Math.min(90, gridPx), Math.min(gridPx * 1.25, sw / seatW * gridPx))), th = R0 > 0 ? Math.min(1.5, sw / R0) : 0, pad = 8;
+  let d, sag = 0;
+  if (th > .01) { const R = barPx / th, pts = []; sag = R * (1 - Math.cos(th / 2)); for (let t = 0; t <= 24; t++) { const a = (t / 24 - .5) * th; pts.push(`${(pad + barPx / 2 + R * Math.sin(a)).toFixed(1)},${(3 + R * (1 - Math.cos(a))).toFixed(1)}`); } d = "M" + pts.join(" L"); }
+  else d = `M${pad},3 L${pad + barPx},3`;
+  const h = Math.ceil(sag + 8), txt = label || `Màn hình · ${sw} m`;
+  return `<div class="mx-auto flex flex-col items-center ${cls}" style="width:${gridPx}px" data-screen-bar="${th > .01 ? "curved" : "flat"}" data-screen-px="${barPx}"><p class="mb-1 whitespace-nowrap text-center text-[10px] font-medium uppercase tracking-[.25em] text-muted">${txt}</p><svg viewBox="0 0 ${barPx + 2 * pad} ${h}" class="screen-bar block shrink-0" style="width:${barPx + 2 * pad}px;height:auto" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round" class="text-foreground/70"/></svg></div>`;
 }
 /** Tập chỉ số cột mà SAU nó là lối đi (0-based) */
 function aisleAfter(r) { const L = roomLayout(r), s = new Set(); let acc = 0; L.blocks.slice(0, -1).forEach(b => { acc += b; s.add(acc - 1); }); return s; }
