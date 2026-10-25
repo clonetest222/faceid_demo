@@ -97,8 +97,10 @@ body[data-menu-open] .drawer-scrim { opacity: 1; pointer-events: auto; }
 @media (max-width: 639px) { .cf-hero { height: min(calc(100svh - 4rem), 640px); min-height: 520px; } .cf-card { width: 190px; height: 300px; top: 38%; } .cf-overlay { bottom: 92px; } .cf-tag { font-size: 13px; } .cf-arrow { display: none; } }
 @media (prefers-reduced-motion: reduce) { .cf-bg-img, .cf-in > * { transition: none; animation: none; } }
 
-/* nút cuộn dải ngày (chỉ màn có chuột) */
-.strip-nav { position: absolute; top: 50%; z-index: 2; display: none; width: 28px; height: 28px; place-items: center; border-radius: 9999px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--muted); cursor: pointer; transform: translateY(-50%); box-shadow: 0 2px 8px rgb(0 0 0 / .08); }
-.strip-nav.left-0 { left: -12px; } .strip-nav.right-0 { right: -12px; }
-.strip-nav:hover { color: var(--foreground); background: var(--button-hover-surface); }
-@media (hover: hover) and (min-width: 640px) { [data-strip-wrap]:hover .strip-nav { display: grid; } }
+/* nút cuộn ‹ › cho dải ngày / dải poster: tròn, nền tối mờ như nút của hero, luôn hiện từ màn sm; điện thoại vuốt */
+.strip-nav { position: absolute; top: 50%; z-index: 3; display: none; width: 34px; height: 34px; place-items: center; border-radius: 9999px; background: rgb(20 20 24 / .72); color: #fff; border: 1px solid rgb(255 255 255 / .22); cursor: pointer; transform: translateY(-50%); box-shadow: 0 4px 14px rgb(0 0 0 / .25); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: background .15s, opacity .2s; }
+.strip-nav:hover { background: rgb(20 20 24 / .9); }
+.strip-nav-l { left: -10px; } .strip-nav-r { right: -10px; }
+.strip-posters .strip-nav { top: 72px; }
+[data-strip-wrap][data-at-start] .strip-nav-l, [data-strip-wrap][data-at-end] .strip-nav-r { opacity: .25; pointer-events: none; }
+@media (min-width: 640px) { .strip-nav { display: grid; } }

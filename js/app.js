@@ -59,7 +59,14 @@ function render() {
   if (r === "soat") gateCamStart();
 }
 /** Dải ngày: đưa ngày đang chọn vào giữa khung cuộn ngang (không cuộn dọc trang) */
-function stripFocus() { $$("[data-strip]").forEach(box => { const on = box.querySelector("[aria-pressed=true]"); if (!on) return; const x = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2; if (Math.abs(box.scrollLeft - x) > 8) box.scrollTo({ left: Math.max(0, x) }); }); }
+function stripFocus() {
+  $$("[data-strip]").forEach(box => {
+    const wrap = box.parentElement, mark = () => { wrap.toggleAttribute("data-at-start", box.scrollLeft <= 2); wrap.toggleAttribute("data-at-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 2); };
+    if (!box.dataset.bound) { box.dataset.bound = "1"; box.addEventListener("scroll", mark, { passive: true }); }
+    const on = box.querySelector("[aria-pressed=true]"); if (on) { const x = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2; if (Math.abs(box.scrollLeft - x) > 8) box.scrollTo({ left: Math.max(0, x) }); }
+    mark();
+  });
+}
 function stopMedia(next) {
   if (GATE.stop && next !== "soat") { GATE.stop(); GATE.stop = null; }
   if (LAB.haar.stop && next !== "kiemthu") { LAB.haar.stop(); LAB.haar.stop = null; }
