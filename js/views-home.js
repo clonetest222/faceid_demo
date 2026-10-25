@@ -70,7 +70,7 @@ function cfFrame() {
     c.classList.toggle("is-active", a < .5); });
   const act = ((Math.round(CF.p) % n) + n) % n;
   if (act !== CF.active) { CF.active = act; S.view.cfIdx = act; const f = cfFilms()[act]; if (f) {
-    const ov = $("[data-cf-overlay]", box); if (ov) { ov.innerHTML = cfOverlay(f); ov.classList.remove("cf-in"); void ov.offsetWidth; ov.classList.add("cf-in"); }
+    const ov = $("[data-cf-overlay]", box); if (ov) { ov.style.minHeight = ov.offsetHeight + "px"; ov.innerHTML = cfOverlay(f); ov.classList.remove("cf-in"); void ov.offsetWidth; ov.classList.add("cf-in"); requestAnimationFrame(() => { ov.style.minHeight = ""; }); }
     const imgs = $$(".cf-bg-img", box), nxt = imgs[(CF.bg + 1) % 2]; nxt.src = fmeta(f).backdrop || f.img || ""; imgs.forEach((im, k) => im.classList.toggle("is-on", k === (CF.bg + 1) % 2)); CF.bg = (CF.bg + 1) % 2;
     $$("[data-act=cf-dot]", box).forEach((d, i) => d.setAttribute("aria-selected", String(i === act))); const ctr = $("[data-cf-counter]", box); if (ctr) ctr.textContent = act + 1; } }
   CF.raf = requestAnimationFrame(cfFrame);
