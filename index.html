@@ -67,6 +67,8 @@
 </head>
 <body class="bg-background font-sans text-sm text-foreground">
 <div id="app"></div>
+<script>/* vào trang chủ: vẽ sẵn thanh đầu + khối hero tối để không loé trắng trước khi JS dựng trang */
+if (!location.hash || location.hash.indexOf("#/home") === 0) document.getElementById("app").innerHTML = '<div style="height:4rem;background:rgb(15 15 18 / .95)"></div><div style="height:min(calc(100svh - 4rem),760px);min-height:560px;background:#0d0d10"></div>';</script>
 <div id="modal-root"></div>
 <div id="toast-root" aria-live="polite"></div>
 <noscript><p style="padding:16px">Trang cần bật JavaScript.</p></noscript>

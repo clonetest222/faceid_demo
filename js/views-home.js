@@ -69,10 +69,14 @@ function cfFrame() {
     c.style.filter = `brightness(${Math.max(.3, 1 - a * .28)})`; c.style.opacity = a > 2.7 ? 0 : a > 2.2 ? (2.7 - a) / .5 : 1; c.style.zIndex = 30 - Math.round(a * 10);
     c.classList.toggle("is-active", a < .5); });
   const act = ((Math.round(CF.p) % n) + n) % n;
-  if (act !== CF.active) { CF.active = act; S.view.cfIdx = act; const f = cfFilms()[act]; if (f) {
-    const ov = $("[data-cf-overlay]", box); if (ov) { ov.style.minHeight = ov.offsetHeight + "px"; ov.innerHTML = cfOverlay(f); ov.classList.remove("cf-in"); void ov.offsetWidth; ov.classList.add("cf-in"); requestAnimationFrame(() => { ov.style.minHeight = ""; }); }
-    const imgs = $$(".cf-bg-img", box), nxt = imgs[(CF.bg + 1) % 2]; nxt.src = fmeta(f).backdrop || f.img || ""; imgs.forEach((im, k) => im.classList.toggle("is-on", k === (CF.bg + 1) % 2)); CF.bg = (CF.bg + 1) % 2;
-    $$("[data-act=cf-dot]", box).forEach((d, i) => d.setAttribute("aria-selected", String(i === act))); const ctr = $("[data-cf-counter]", box); if (ctr) ctr.textContent = act + 1; } }
+  if (act !== CF.active) { const f = cfFilms()[act]; if (f) {
+    const first = CF.active === -1 || CF.active == null, ov = $("[data-cf-overlay]", box);
+    if (ov && !first) { ov.style.minHeight = ov.offsetHeight + "px"; ov.innerHTML = cfOverlay(f); ov.classList.remove("cf-in"); void ov.offsetWidth; ov.classList.add("cf-in"); requestAnimationFrame(() => { ov.style.minHeight = ""; }); }
+    else if (ov && ov.dataset.for !== f.id) ov.innerHTML = cfOverlay(f);
+    if (ov) ov.dataset.for = f.id;
+    const imgs = $$(".cf-bg-img", box), want = fmeta(f).backdrop || f.img || ""; if (!first && imgs[CF.bg] && imgs[CF.bg].getAttribute("src") !== want) { const nxt = imgs[(CF.bg + 1) % 2]; nxt.src = want; imgs.forEach((im, k) => im.classList.toggle("is-on", k === (CF.bg + 1) % 2)); CF.bg = (CF.bg + 1) % 2; } else if (first) { CF.bg = imgs.findIndex(im => im.classList.contains("is-on")); if (CF.bg < 0) CF.bg = 0; if (imgs[CF.bg] && imgs[CF.bg].getAttribute("src") !== want) imgs[CF.bg].src = want; }
+    $$("[data-act=cf-dot]", box).forEach((d, i) => d.setAttribute("aria-selected", String(i === act))); const ctr = $("[data-cf-counter]", box); if (ctr) ctr.textContent = act + 1; } CF.active = act; S.view.cfIdx = act; }
+  if (!box.dataset.ready) { box.dataset.ready = "1"; requestAnimationFrame(() => box.classList.add("is-ready")); }   // khung đầu đặt vị trí không hiệu ứng, từ khung sau mới chuyển động
   CF.raf = requestAnimationFrame(cfFrame);
 }
 function cfGo(v) { const box = $("[data-cf]"); if (!box) return; const n = +box.dataset.n; CF.vel = 0;
@@ -80,7 +84,9 @@ function cfGo(v) { const box = $("[data-cf]"); if (!box) return; const n = +box.
   CF.pauseUntil = performance.now() + 7000; }
 function cfAuto() {
   const box = $("[data-cf]"); if (!box) return; CF.t = 0; CF.active = -1;
-  if (!box.dataset.bound) { box.dataset.bound = "1"; CF.p = CF.target = Math.round(S.view.cfIdx || 0); CF.vel = 0; CF.pauseUntil = performance.now() + 6000;
+  if (!box.dataset.bound) {
+    // DOM mới (vẽ lại trang khi dữ liệu về): gắn sự kiện, đặt vị trí theo phim đang chọn, tạm dừng tự chuyển 6 giây
+    box.dataset.bound = "1"; CF.p = CF.target = Math.round(S.view.cfIdx || 0); CF.vel = 0; CF.pauseUntil = performance.now() + 6000;
     const stage = $("[data-cf-stage]", box), kpx = () => 1 / (innerWidth < 640 ? 150 : 330);   // thẻ / px kéo
     stage.addEventListener("pointerdown", e => { if (e.button) return; CF.drag = { x: e.clientX, p: CF.p, moved: false, lastX: e.clientX, lastT: performance.now(), v: 0 }; CF.vel = 0; });
     stage.addEventListener("pointermove", e => { const d = CF.drag; if (!d) return; const now = performance.now(); CF.p = d.p - (e.clientX - d.x) * kpx(); if (Math.abs(e.clientX - d.x) > 6) d.moved = true; const dt = Math.max(1, now - d.lastT); d.v = -(e.clientX - d.lastX) * kpx() / dt * 1000; d.lastX = e.clientX; d.lastT = now; });
