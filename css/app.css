@@ -134,8 +134,18 @@ body.theatre-open { overflow: hidden; }
 .joy-btn.is-on { background: #e11d48; }
 /* điện thoại xoay ngang (chiều cao thấp): thanh trên gọn, joystick nhỏ */
 @media (max-height: 480px) { .theatre-top { padding: 6px; } .theatre-top .size-10 { width: 34px; height: 34px; } .theatre-bottom { padding: 6px; } .joy-base { width: 90px; height: 90px; } .joy-knob { width: 40px; height: 40px; margin: -20px 0 0 -20px; } .theatre-joy { bottom: 10px; left: 10px; } }
-.seat-zoom-outer { overflow: auto; max-height: 70vh; padding: 4px 2px 8px; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+.seat-zoom-outer { overflow: auto; max-height: 70vh; padding: 4px 2px 8px; touch-action: pan-x pan-y; overscroll-behavior: contain; cursor: grab; }
+.seat-zoom-outer.is-dragging { cursor: grabbing; user-select: none; } .seat-zoom-outer.is-dragging * { pointer-events: none; }
 .seat-zoom-inner { transform-origin: 0 0; }
 
 /* thanh màn hình trên sơ đồ 2D: vệt sáng nhẹ như rạp ảo */
 .screen-bar path { filter: drop-shadow(0 0 2px rgba(0,0,0,.25)); }
+
+/* Rạp 3D: joystick / nút cảm ứng hiện theo LOẠI CON TRỎ (màn cảm ứng), không theo bề rộng → điện thoại xoay ngang vẫn có joystick; PC có chuột thì ẩn */
+.touch-only { display: none !important; } .touch-only-inline { display: none; } .mouse-only { display: inline; }
+html.touch .touch-only { display: flex !important; } html.touch .touch-only-inline { display: inline; } html.touch .mouse-only { display: none !important; } html.touch .near-prompt { bottom: 150px; }
+@media (max-height: 480px) { html.touch .near-prompt { bottom: 112px; } html.touch .touch-only.absolute.bottom-6.right-6 { bottom: 10px; right: 10px; } }
+
+/* Bảng Thanh toán trong rạp: nút "Tự động chọn ghế đẹp" sáng nhấp nháy khi chưa có ghế */
+.theatre-best-btn { animation: best-glow 1.4s ease-in-out infinite; }
+@keyframes best-glow { 0% { box-shadow: 0 0 0 0 rgb(251 191 36 / .75); } 70% { box-shadow: 0 0 0 14px rgb(251 191 36 / 0); } 100% { box-shadow: 0 0 0 0 rgb(251 191 36 / 0); } }

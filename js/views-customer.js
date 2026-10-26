@@ -126,7 +126,7 @@ function cinemaSheetHtml(city) {
 function seatMap(sh, selected, act, opts = {}) {
   const r = room(sh.roomId), aisles = aisleAfter(r), mine = opts.mine || new Set(), groups = seatGroups(r);
   const Lr = roomLayout(r);
-  let h = `<div class="seat-zoom-outer" data-seat-zoom>${screenBarHtml(r, { seat: 36, gap: 6, aisle: 12, cls: "mb-5", label: `Màn hình · ${Lr.screen.width} m${Lr.screen.curveRadius ? " · cong" : ""}` })}<div class="seat-zoom-inner mx-auto grid w-max gap-1.5" data-seat-zoom-inner>`;
+  let h = `<div data-seat-wrap><div class="seat-zoom-outer" data-seat-zoom data-zoom-key="${esc(sh.id)}|${act}"><div class="seat-zoom-inner mx-auto grid w-max gap-1.5" data-seat-zoom-inner>${screenBarHtml(r, { seat: 36, gap: 6, aisle: 12, cls: "mb-3", label: `Màn hình · ${Lr.screen.width} m${Lr.screen.curveRadius ? " · cong" : ""}` })}`;
   for (let i = 0; i < r.rows; i++) {
     const L = String.fromCharCode(65 + i);
     h += `<div class="flex items-center gap-1.5 [--seat:2.25rem] [--gap:0.375rem]"><span class="w-4 text-center text-xs text-muted">${L}</span>`;
@@ -149,14 +149,14 @@ function seatMap(sh, selected, act, opts = {}) {
     }
     h += `</div>`;
   }
-  return h + `</div></div><div class="mt-2 flex items-center justify-center gap-1 text-xs text-muted"><button type="button" class="${B.icon} size-8" data-act="seat-zoom" data-v="out" aria-label="Thu nhỏ">${ic("minus")}</button><button type="button" class="min-w-[52px] cursor-pointer rounded-lg px-2 py-1 tabular-nums hover:bg-item-hover" data-act="seat-zoom" data-v="fit" title="Vừa khung"><span data-seat-zoom-pct>100%</span></button><button type="button" class="${B.icon} size-8" data-act="seat-zoom" data-v="in" aria-label="Phóng to">${ic("plus")}</button><span class="ml-2 hidden sm:inline">Lăn chuột giữ Ctrl để phóng</span><span class="ml-2 sm:hidden">Chụm hai ngón để phóng</span></div><div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted sm:flex sm:flex-wrap sm:justify-center sm:gap-x-5">
+  return h + `</div></div><div class="mt-2 flex items-center justify-center gap-1 text-xs text-muted"><button type="button" class="${B.icon} size-8" data-act="seat-zoom" data-v="out" aria-label="Thu nhỏ">${ic("minus")}</button><button type="button" class="min-w-[52px] cursor-pointer rounded-lg px-2 py-1 tabular-nums hover:bg-item-hover" data-act="seat-zoom" data-v="fit" title="Vừa khung"><span data-seat-zoom-pct>100%</span></button><button type="button" class="${B.icon} size-8" data-act="seat-zoom" data-v="in" aria-label="Phóng to">${ic("plus")}</button><span class="ml-2 hidden sm:inline">Lăn chuột giữ Ctrl để phóng · giữ chuột kéo để rê sang ghế khuất</span><span class="ml-2 sm:hidden">Chụm hai ngón để phóng</span></div><div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted sm:flex sm:flex-wrap sm:justify-center sm:gap-x-5">
     ${priceLegend(sh).types.filter(t => t.sellable).map(t => `<span class="flex items-center gap-1.5"><i class="grid size-4 place-items-center rounded border ${seatColor(t, "dot")}">${t.icon ? ic(t.icon, "size-2.5") : ""}</i>${esc(t.name)}${t.unitSize > 1 ? ` (${t.unitSize} ghế)` : t.persons > 1 ? ` (${t.persons} người)` : ""} ${vnd(t.price)}</span>`).join("")}
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-primary"></i>Bạn chọn</span>
     <span class="flex items-center gap-1.5"><i class="seat-rate seat-rate-great !static"></i>Nhìn rất tốt</span><span class="flex items-center gap-1.5"><i class="seat-rate seat-rate-good !static"></i>Tốt</span><span class="flex items-center gap-1.5"><i class="seat-rate seat-rate-less !static"></i>Kém</span>
     <span class="flex items-center gap-1.5"><i class="size-4 rounded bg-secondary"></i>Đã bán</span>
     ${priceLegend(sh).types.filter(t => !t.sellable).map(t => `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-dashed border-border bg-background"></i>${esc(t.name)} (${t.n})</span>`).join("")}
     ${mine.size ? `<span class="flex items-center gap-1.5"><i class="size-4 rounded border border-success/50 bg-success-bg"></i>Ghế của bạn</span>` : ""}</div>
-    ${opts.inspect ? `<p class="mt-3 text-center text-xs text-muted">Bấm ghế đã bán hoặc đang giữ để xem vé, người mua, đã vào phòng chưa.</p>` : ""}`;
+    ${opts.inspect ? `<p class="mt-3 text-center text-xs text-muted">Bấm ghế đã bán hoặc đang giữ để xem vé, người mua, đã vào phòng chưa.</p>` : ""}</div>`;
 }
 function orderSummary(sh, seats, withNote = true) {
   const f = film(sh.filmId), r = room(sh.roomId), total = seats.reduce((a, s) => a + seatPrice(sh, s), 0);
@@ -429,23 +429,39 @@ function theatreHtml(sh, f, r) {
   const d = S.draft, mode = S.view.seat3dMode === "overview" ? "overview" : S.view.seat3dMode === "walk" ? "walk" : "seat", focus = d.seats[d.seats.length - 1], rt = focus ? Seat3D.rate(r, focus, Seat3D.PRIO[S.view.seatPriority] ? S.view.seatPriority : "balanced") : null;
   const seatTxt = rt ? `Hàng ${rt.seat.row} · Ghế ${rt.seat.number}` : "Chưa chọn ghế";
   const modeSeg = seg([["seat", "Từ ghế", "eye"], ["overview", "Đứng dậy", "person-standing"], ["walk", "Đi lại", "footprints"]], mode, "seat3d-mode");
-  const hint = mode === "walk" ? `<span class="hidden sm:inline">W A S D / mũi tên: đi · Shift: chạy · kéo chuột: nhìn · V: đổi ngôi nhìn · E: ngồi · Esc: thoát</span><span class="sm:hidden">Joystick trái để đi · vuốt phải để nhìn</span>`
+  const hint = mode === "walk" ? `<span class="mouse-only">W A S D / mũi tên: đi · Shift: chạy · kéo chuột: nhìn · V: đổi ngôi nhìn · E: ngồi · Esc: thoát</span><span class="touch-only-inline">Joystick trái để đi · vuốt phải để nhìn · chạm ghế gần để ngồi</span>`
     : mode === "overview" ? "Kéo để xoay quanh bạn · lăn chuột để lùi / tiến · bấm ghế để chọn" : "Kéo để nhìn quanh · bấm đúp để nhìn thẳng màn hình";
   return `<div class="theatre fixed inset-0 z-[70] bg-black text-white" data-theatre>
     <div class="absolute inset-0" data-seat3d data-theatre-stage></div>
     <div class="theatre-top pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-2 sm:p-3">
       <div class="pointer-events-auto flex min-w-0 items-center gap-2"><button type="button" class="grid size-10 shrink-0 cursor-pointer place-items-center rounded-full bg-white/15 backdrop-blur hover:bg-white/25" data-act="exit-theatre" aria-label="Thoát rạp">${ic("arrow-left", "size-5")}</button>
         <div class="hidden min-w-0 rounded-xl bg-black/50 px-3 py-1.5 backdrop-blur sm:block"><p class="truncate text-sm font-semibold">${esc(f.title)}</p><p class="truncate text-[11px] text-white/70">${esc(r.name)} · ${seatTxt}${rt ? ` · ${rt.score100}/100` : ""}</p></div></div>
-      <div class="pointer-events-auto flex shrink-0 items-center gap-2">${modeSeg}${d.seats.length ? `<a href="#/thanhtoan" class="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground sm:hidden" data-act="exit-theatre-pay" aria-label="Thanh toán">${ic("ticket", "size-5")}</a>` : ""}<button type="button" class="grid size-10 cursor-pointer place-items-center rounded-full bg-white/15 backdrop-blur hover:bg-white/25" data-act="theatre-fullscreen" aria-label="Toàn màn hình">${ic("maximize", "size-5")}</button></div>
+      <div class="pointer-events-auto flex shrink-0 items-center gap-2">${modeSeg}<button type="button" class="touch-only size-10 items-center justify-center rounded-full bg-primary text-primary-foreground" data-act="theatre-pay" aria-label="Thanh toán">${ic("ticket", "size-5")}</button><button type="button" class="grid size-10 cursor-pointer place-items-center rounded-full bg-white/15 backdrop-blur hover:bg-white/25" data-act="theatre-fullscreen" aria-label="Toàn màn hình">${ic("maximize", "size-5")}</button></div>
     </div>
-    ${mode === "walk" ? `<div class="theatre-joy absolute bottom-6 left-6 z-10 sm:hidden" data-joystick><div class="joy-base"><div class="joy-knob" data-joy-knob></div></div></div>
-      <div class="absolute bottom-6 right-6 z-10 flex flex-col gap-2 sm:hidden"><button type="button" class="joy-btn" data-act="seat3d-view">${ic("video", "size-5")}</button><button type="button" class="joy-btn" data-run-btn>${ic("zap", "size-5")}</button></div>
-      <div class="pointer-events-none absolute inset-x-0 bottom-[160px] z-10 hidden justify-center sm:bottom-20" data-near-prompt><button type="button" class="pointer-events-auto flex items-center gap-2 rounded-full border border-warning/60 bg-black/85 px-4 py-2 text-sm font-medium text-warning backdrop-blur hover:bg-black" data-act="seat-sit"><kbd class="rounded border border-warning/60 px-1.5 py-0.5 font-mono text-xs">E</kbd><span data-near-text>Ngồi xuống</span></button></div>` : ""}
-    <div class="theatre-bottom pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 p-2 text-[11px] text-white/70 sm:p-3"><span class="rounded-md bg-black/50 px-2 py-1 ${mode === "walk" ? "hidden sm:inline" : ""}">${hint}</span>${d.seats.length ? `<span class="hidden sm:inline"><a href="#/thanhtoan" class="pointer-events-auto ${B.primary} min-h-10 px-4" data-act="exit-theatre-pay">${ic("ticket")}Thanh toán ${d.seats.length} vé</a></span>` : ""}</div>
+    ${mode === "walk" ? `<div class="theatre-joy touch-only absolute bottom-6 left-6 z-10" data-joystick><div class="joy-base"><div class="joy-knob" data-joy-knob></div></div></div>
+      <div class="touch-only absolute bottom-6 right-6 z-10 flex-col gap-2"><button type="button" class="joy-btn" data-act="seat3d-view">${ic("video", "size-5")}</button><button type="button" class="joy-btn" data-run-btn>${ic("zap", "size-5")}</button></div>
+      <div class="pointer-events-none absolute inset-x-0 bottom-20 z-10 hidden justify-center near-prompt" data-near-prompt><button type="button" class="pointer-events-auto flex items-center gap-2 rounded-full border border-warning/60 bg-black/85 px-4 py-2 text-sm font-medium text-warning backdrop-blur hover:bg-black" data-act="seat-sit"><kbd class="rounded border border-warning/60 px-1.5 py-0.5 font-mono text-xs">E</kbd><span data-near-text>Ngồi xuống</span></button></div>` : ""}
+    <div class="theatre-bottom pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 p-2 text-[11px] text-white/70 sm:p-3"><span class="rounded-md bg-black/50 px-2 py-1 ${mode === "walk" ? "mouse-only" : ""}">${hint}</span><span class="mouse-only"><button type="button" class="pointer-events-auto ${B.primary} min-h-10 px-4" data-act="theatre-pay">${ic("ticket")}Thanh toán${d.seats.length ? ` ${d.seats.length} vé` : ""}</button></span></div>
+    ${S.view.theatrePay ? theatrePayHtml(sh, f, r) : ""}
   </div>`;
 }
 
 /* Tra cứu vé mua không tài khoản: mã vé / mã đơn + email/* Tra cứu vé mua không tài khoản: mã vé / mã đơn + email → phiên xem vé 2 giờ (021). Link trong mail: #/tracuu?ma=<mã đơn> */
+/** Bảng Thanh toán ngay trong rạp (không rời rạp): có ghế → đơn + Tiếp tục thanh toán; chưa có ghế → báo và nút Tự động chọn ghế đẹp sáng lên */
+function theatrePayHtml(sh, f, r) {
+  const d = S.draft, n = d.seats.length, total = d.seats.reduce((a, s) => a + seatPrice(sh, s), 0), groups = seatGroups(r);
+  const row = s => { const q = typeof Seat3D !== "undefined" ? Seat3D.rate(r, s) : null, k = seatKind(r, s), g = groups.get(s);
+    return `<div class="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-2"><span class="grid h-9 min-w-10 place-items-center rounded-lg bg-primary px-1.5 font-mono text-sm font-semibold text-primary-foreground">${esc(s)}</span><span class="min-w-0 flex-1 truncate text-sm">${esc(seatType(k).name)}${q ? ` · ${esc(q.text)}` : ""}</span><span class="text-sm font-semibold tabular-nums">${vnd(seatPrice(sh, s))}</span><button type="button" class="grid size-8 cursor-pointer place-items-center rounded-full hover:bg-white/15" data-act="toggle-seat" data-seat="${esc(s)}" ${g && g.length > 1 ? `data-group="${esc(g.join(","))}"` : ""} aria-label="Bỏ ghế ${esc(s)}">${ic("x", "size-4")}</button></div>`; };
+  const body = n ? `<p class="text-sm text-white/70">${esc(f.title)} · ${hhmm(sh.start)} · ${esc(r.name)}</p><div class="mt-3 grid gap-2">${d.seats.map(row).join("")}</div>
+      <div class="mt-3 flex items-center justify-between border-t border-white/15 pt-3"><span class="text-sm text-white/70">${n} vé</span><span class="text-2xl font-bold tabular-nums">${vnd(total)}</span></div>
+      <div class="mt-4 grid grid-cols-2 gap-2"><button type="button" class="${B.outline} min-h-11 border-white/30 bg-white/10 text-white hover:bg-white/20" data-act="theatre-pay-close">${ic("armchair")}Chọn thêm ghế</button><button type="button" class="${B.primary} min-h-11" data-act="exit-theatre-pay">${ic("ticket")}Tiếp tục thanh toán</button></div>`
+    : `<div class="grid justify-items-center gap-3 py-2 text-center"><span class="grid size-14 place-items-center rounded-2xl bg-white/10 text-warning">${ic("armchair", "size-7")}</span><p class="text-base font-semibold">Bạn chưa chọn ghế nào</p><p class="text-sm text-white/70">Bấm một ghế trống trong rạp (hoặc đi tới ghế rồi bấm E), hoặc để hệ thống chọn ghế nhìn đẹp nhất cho bạn.</p>
+      <button type="button" class="${B.primary} theatre-best-btn mt-1 min-h-12 px-5 text-base" data-act="theatre-best">${ic("sparkles")}Tự động chọn ghế đẹp</button><button type="button" class="${B.ghost} min-h-9 text-white/80 hover:bg-white/10" data-act="theatre-pay-close">Để tôi tự chọn</button></div>`;
+  return `<div class="theatre-pay absolute inset-0 z-20 flex items-end justify-center bg-black/55 p-3 sm:items-center" data-theatre-pay>
+    <div class="w-full max-w-md rounded-2xl border border-white/15 bg-[#141214] p-4 text-white shadow-modal sm:p-5" data-theatre-pay-box>
+      <div class="mb-2 flex items-center justify-between gap-2"><h2 class="text-base font-semibold">${n ? "Đơn của bạn" : "Thanh toán"}</h2><button type="button" class="grid size-9 cursor-pointer place-items-center rounded-full hover:bg-white/15" data-act="theatre-pay-close" aria-label="Đóng">${ic("x", "size-5")}</button></div>${body}</div></div>`;
+}
+
 function vTraCuu() {
   const ma = (location.hash.match(/[?&]ma=([^&]+)/) || [])[1] || "";
   const body = pageHead("Tra cứu vé", "Vé mua không cần tài khoản: nhập mã vé hoặc mã đơn (có trong email) và email đã dùng khi mua") + `

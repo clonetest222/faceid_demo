@@ -166,7 +166,7 @@ async function bcShowSheet(s, back) {
     <div class="rounded-xl border border-border p-3" data-show="${s.id}"><p class="mb-1 text-sm font-medium">Sơ đồ ghế</p><p class="mb-2 text-xs text-muted">Bấm ghế đã bán để xem người mua, người xem, đơn, giờ vào phòng.</p>${seatMap(s, [], "seat-none", { inspect: true })}</div>
     <div class="flex flex-wrap gap-2"><button type="button" class="${B.outline}" data-act="bc-back">${ic("chevron-left")}Quay lại phòng, suất</button>${Auth.user.role === "quanly" ? `<button type="button" class="${B.outline}" data-act="bc-edit">${ic("calendar-cog")}Sửa / huỷ suất</button>` : ""}</div>`;
   sheet.set(body);
-  sheet.el.onclick = e => { const b = e.target.closest("[data-act]"); if (!b) { if (e.target.closest('[data-m="close"]')) sheet.close(); return; }
+  sheet.el.onclick = e => { const b = e.target.closest("[data-act]"); if (!b) { if (e.target.closest('[data-m="close"]')) sheet.close(); return; } if (b.dataset.act === "seat-zoom") return A["seat-zoom"](b);
     if (b.dataset.act === "bc-back") { sheet.close(); back && back(); }
     else if (b.dataset.act === "bc-edit") { sheet.close(); showSheet(show(s.id) || s); }
     else if (b.dataset.act === "seat-info") { sheet.close(); seatDetail(s, b.dataset.seat, () => bcShowSheet(show(s.id) || s, back)); }

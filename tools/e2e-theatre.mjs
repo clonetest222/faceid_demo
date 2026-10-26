@@ -13,6 +13,7 @@ const shot = async n => { const r = await send("Page.captureScreenshot", { forma
 const check = (n, c, info = "") => { const l = `${c ? "PASS" : "FAIL"}  ${n}${info ? "  — " + info : ""}`; res.push(l); console.log(l); };
 const key = async (code, down, ms = 0) => { await send("Input.dispatchKeyEvent", { type: down ? "keyDown" : "keyUp", code, key: code.replace("Key", ""), windowsVirtualKeyCode: code === "KeyW" ? 87 : code === "KeyE" ? 69 : code === "KeyA" ? 65 : code === "ShiftLeft" ? 16 : code === "Escape" ? 27 : 0 }); if (ms) await sleep(ms); };
 await send("Runtime.enable"); await send("Page.enable"); await send("Page.navigate", { url: BASE + "#/lich" }); await sleep(6000);
+await ev("document.documentElement.classList.remove('touch'); 1");   // Edge headless tự báo màn cảm ứng → phần đầu giả làm PC có chuột
 await ev("sessionStorage.setItem('cinevin-promo','1'); document.querySelector('#modal-root [data-m=close]')?.click(); 1");
 try {
   await ev("(()=>{const s=S.shows.filter(s=>cinemaOf(s).id==='086'&&film(s.filmId).rating==='P'&&new Date(s.start)>Date.now()+3600e3&&freeSeats(s)>6)[0];A['pick-show']({dataset:{show:s.id}});return s.id})()"); await sleep(1200);
@@ -24,7 +25,7 @@ try {
   await shot("theatre_01_tu_ghe");
   await ev("document.querySelector('[data-act=seat3d-mode][data-v=walk]').click(); 1"); await sleep(1500);
   const p0 = await ev("JSON.stringify([Math.round(Seat3D.near?1:0)])");
-  check("Đi lại: có joystick (ẩn trên PC), gợi ý phím WASD", await ev("!!document.querySelector('[data-joystick]') && /W A S D/.test(document.body.innerText)"));
+  check("Đi lại trên PC (chuột): joystick có nhưng ẩn, gợi ý phím WASD hiện", await ev("!!document.querySelector('[data-joystick]') && getComputedStyle(document.querySelector('[data-joystick]')).display==='none' && /W A S D/.test(document.body.innerText)"));
   await shot("theatre_02_di_lai");
   // đi lên phía màn hình 1,5 giây bằng phím W rồi dừng
   await ev("document.querySelector('[data-theatre-stage] canvas').focus(); 1");
@@ -46,7 +47,7 @@ try {
   await key("Escape", true, 50); await key("Escape", false, 800);
   check("Esc → thoát rạp, về trang chọn ghế, giữ nguyên ghế đã chọn", await ev("!document.querySelector('[data-theatre]') && !document.body.classList.contains('theatre-open') && S.draft.seats.length>=1"));
   // điện thoại dọc
-  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }); await sleep(500);
+  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }); await ev("document.documentElement.classList.add('touch'); 1"); await sleep(500);
   await ev("document.querySelector('[data-act=enter-theatre]').click(); 1"); await sleep(1500);
   await ev("document.querySelector('[data-act=seat3d-mode][data-v=walk]').click(); 1"); await sleep(1200);
   check("Điện thoại dọc: canvas vừa khung, joystick + nút ngôi nhìn / chạy hiện", await ev("(()=>{const c=document.querySelector('[data-theatre-stage] canvas');return Math.abs(c.width-390)<4 && getComputedStyle(document.querySelector('[data-joystick]')).display!=='none' && !!document.querySelector('[data-run-btn]')})()"));
@@ -58,8 +59,19 @@ try {
   check("Joystick kéo lên → nhân vật đi (có ghế gần hoặc đã di chuyển)", true, await ev("document.querySelector('[data-near-text]')?.textContent || 'đã đi'"));
   // xoay ngang
   await send("Emulation.setDeviceMetricsOverride", { width: 844, height: 390, deviceScaleFactor: 1, mobile: true }); await sleep(800);
-  check("Xoay ngang: canvas đổi theo 844×390, thanh trên gọn", await ev("(()=>{const c=document.querySelector('[data-theatre-stage] canvas');return Math.abs(c.width-844)<4 && Math.abs(c.height-390)<4})()"));
+  check("Xoay ngang: canvas đổi theo 844×390, thanh trên gọn, JOYSTICK VẪN HIỆN (theo màn cảm ứng, không theo bề rộng)", await ev("(()=>{const c=document.querySelector('[data-theatre-stage] canvas');return Math.abs(c.width-844)<4 && Math.abs(c.height-390)<4 && getComputedStyle(document.querySelector('[data-joystick]')).display!=='none' && getComputedStyle(document.querySelector('[data-run-btn]')).display!=='none'})()"));
   await shot("theatre_07_mobile_ngang");
+  // Thanh toán trong rạp: bỏ hết ghế → bảng "chưa chọn ghế" + nút tự chọn sáng → bấm → có ghế → đơn → Tiếp tục
+  await ev("S.draft.seats.slice().forEach(s=>A['toggle-seat']({dataset:{seat:s}})); 1"); await sleep(600);
+  await ev("document.querySelector('[data-act=theatre-pay]').click(); 1"); await sleep(600);
+  check("Thanh toán khi chưa có ghế → bảng trong rạp báo 'Bạn chưa chọn ghế nào', nút Tự động chọn ghế đẹp sáng", await ev("!!document.querySelector('[data-theatre-pay]') && /chưa chọn ghế nào/.test(document.querySelector('[data-theatre-pay]').innerText) && !!document.querySelector('[data-act=theatre-best].theatre-best-btn')"));
+  await shot("theatre_08_pay_chua_ghe");
+  await ev("document.querySelector('[data-act=theatre-best]').click(); 1"); await sleep(1200);
+  check("Bấm Tự động chọn ghế đẹp → có ghế, bảng chuyển sang Đơn của bạn với nút Tiếp tục thanh toán", await ev("S.draft.seats.length===1 && !!document.querySelector('[data-theatre-pay] [data-act=exit-theatre-pay]') && /Đơn của bạn/.test(document.querySelector('[data-theatre-pay]').innerText)"), await ev("S.draft.seats.join()"));
+  await shot("theatre_09_pay_don");
+  await ev("document.querySelector('[data-theatre-pay] [data-act=exit-theatre-pay]').click(); 1"); await sleep(1200);
+  check("Tiếp tục thanh toán → rời rạp, sang trang thanh toán, giữ ghế", await ev("!document.querySelector('[data-theatre]') && location.hash==='#/thanhtoan' && S.draft.seats.length===1"));
+  await ev("location.hash='#/ghe'; 1"); await sleep(1000); await ev("document.querySelector('[data-act=enter-theatre]').click(); 1"); await sleep(1500);
   await ev("document.querySelector('[data-act=exit-theatre]').click(); 1"); await sleep(600);
   check("Thoát rạp trên điện thoại", await ev("!document.querySelector('[data-theatre]')"));
   await ev("A['cancel-draft'](); 1");

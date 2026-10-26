@@ -67,7 +67,8 @@ function openSheet(html, { wide = false, label = "Hộp thoại", onClose } = {}
   document.addEventListener("keydown", onKey);
   $("[data-scrim]", root).onclick = close;
   const f = el.querySelector("input,select,textarea"); f && f.focus({ preventScroll: true });
-  return { el, close, set(html2) { el.innerHTML = html2; } };
+  if (typeof seatZoomFit === "function") requestAnimationFrame(() => seatZoomFit(false));
+  return { el, close, set(html2) { el.innerHTML = html2; if (typeof seatZoomFit === "function") requestAnimationFrame(() => seatZoomFit(false)); } };
 }
 /** Địa chỉ gốc của trang (dùng cho link ghép nối điện thoại) */
 function baseUrl() { return location.origin + location.pathname.replace(/index\.html$/, ""); }

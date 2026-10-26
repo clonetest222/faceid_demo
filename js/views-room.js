@@ -148,7 +148,7 @@ function vPhongThietKe() {
 function rdTheatreHtml() {
   const r = rdRoom(), c = cinema(RD.cid), mode = ["overview", "walk"].includes(RD.mode) ? RD.mode : "seat", focus = RD.focus, rt = focus && typeof Seat3D !== "undefined" ? Seat3D.rate(r, focus) : null, L = roomLayout(r), P = ROOM_PRESETS[L.preset];
   const modeSeg = seg([["seat", "Từ ghế", "eye"], ["overview", "Đứng dậy", "person-standing"], ["walk", "Đi lại", "footprints"]], mode, "rd-tmode");
-  const hint = mode === "walk" ? `<span class="hidden sm:inline">W A S D / mũi tên: đi · Shift: chạy · kéo chuột: nhìn · V: đổi ngôi nhìn · E: ngồi thử ghế gần · Esc: thoát</span><span class="sm:hidden">Joystick trái để đi · vuốt phải để nhìn</span>`
+  const hint = mode === "walk" ? `<span class="mouse-only">W A S D / mũi tên: đi · Shift: chạy · kéo chuột: nhìn · V: đổi ngôi nhìn · E: ngồi thử ghế gần · Esc: thoát</span><span class="touch-only-inline">Joystick trái để đi · vuốt phải để nhìn · chạm ghế gần để ngồi</span>`
     : mode === "overview" ? "Kéo để xoay quanh · lăn chuột để lùi / tiến · bấm ghế để ngồi thử" : "Kéo để nhìn quanh · bấm đúp để nhìn thẳng màn hình · E: đứng dậy đi lại";
   return `<div class="theatre fixed inset-0 z-[70] bg-black text-white" data-theatre data-rd-theatre>
     <div class="absolute inset-0" data-seat3d data-theatre-stage data-rd-theatre-stage></div>
@@ -157,10 +157,10 @@ function rdTheatreHtml() {
         <div class="hidden min-w-0 rounded-xl bg-black/50 px-3 py-1.5 backdrop-blur sm:block"><p class="truncate text-sm font-semibold">${esc(RD.meta.name || "Phòng mới")} · ${esc(c ? c.name : "")}</p><p class="truncate text-[11px] text-white/70">${P ? esc(P.name) + " · " : ""}${RD.rows} hàng × ${RD.cols} ghế · ${rt ? `Ghế ${esc(focus)} · ${esc(rt.text)} · ${rt.score100}/100` : "chưa ngồi ghế nào"}</p></div></div>
       <div class="pointer-events-auto flex shrink-0 items-center gap-2">${modeSeg}<button type="button" class="grid size-10 cursor-pointer place-items-center rounded-full bg-white/15 backdrop-blur hover:bg-white/25" data-act="theatre-fullscreen" aria-label="Toàn màn hình">${ic("maximize", "size-5")}</button></div>
     </div>
-    ${mode === "walk" ? `<div class="theatre-joy absolute bottom-6 left-6 z-10 sm:hidden" data-joystick><div class="joy-base"><div class="joy-knob" data-joy-knob></div></div></div>
-      <div class="absolute bottom-6 right-6 z-10 flex flex-col gap-2 sm:hidden"><button type="button" class="joy-btn" data-act="seat3d-view">${ic("video", "size-5")}</button><button type="button" class="joy-btn" data-run-btn>${ic("zap", "size-5")}</button></div>
-      <div class="pointer-events-none absolute inset-x-0 bottom-[160px] z-10 hidden justify-center sm:bottom-20" data-near-prompt><button type="button" class="pointer-events-auto flex items-center gap-2 rounded-full border border-warning/60 bg-black/85 px-4 py-2 text-sm font-medium text-warning backdrop-blur hover:bg-black" data-act="rd-seat-sit"><kbd class="rounded border border-warning/60 px-1.5 py-0.5 font-mono text-xs">E</kbd><span data-near-text>Ngồi xuống</span></button></div>` : ""}
-    <div class="theatre-bottom pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 p-2 text-[11px] text-white/70 sm:p-3"><span class="rounded-md bg-black/50 px-2 py-1 ${mode === "walk" ? "hidden sm:inline" : ""}">${hint}</span></div>
+    ${mode === "walk" ? `<div class="theatre-joy touch-only absolute bottom-6 left-6 z-10" data-joystick><div class="joy-base"><div class="joy-knob" data-joy-knob></div></div></div>
+      <div class="touch-only absolute bottom-6 right-6 z-10 flex-col gap-2"><button type="button" class="joy-btn" data-act="seat3d-view">${ic("video", "size-5")}</button><button type="button" class="joy-btn" data-run-btn>${ic("zap", "size-5")}</button></div>
+      <div class="pointer-events-none absolute inset-x-0 bottom-20 z-10 hidden justify-center near-prompt" data-near-prompt><button type="button" class="pointer-events-auto flex items-center gap-2 rounded-full border border-warning/60 bg-black/85 px-4 py-2 text-sm font-medium text-warning backdrop-blur hover:bg-black" data-act="rd-seat-sit"><kbd class="rounded border border-warning/60 px-1.5 py-0.5 font-mono text-xs">E</kbd><span data-near-text>Ngồi xuống</span></button></div>` : ""}
+    <div class="theatre-bottom pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 p-2 text-[11px] text-white/70 sm:p-3"><span class="rounded-md bg-black/50 px-2 py-1 ${mode === "walk" ? "mouse-only" : ""}">${hint}</span></div>
   </div>`;
 }
 /** Vẽ lại phần sơ đồ + thống kê + 3D mà không vẽ lại cả trang (giữ thao tác kéo mượt) */
